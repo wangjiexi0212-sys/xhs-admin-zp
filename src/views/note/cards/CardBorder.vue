@@ -2,8 +2,8 @@
   <div class="card" :style="{ borderColor: scheme.border, background: scheme.bg }">
     <div
       class="text"
-      :style="{ color: scheme.text, fontSize: fontSize + 'px', fontFamily: fontFamily || undefined, transform: `translate(${textX}px, ${textY}px)` }"
-    ><HighlightText :text="text" :target="highlightText" :style-id="highlightStyle" /></div>
+      :style="{ color: fontColor || scheme.text, fontSize: fontSize + 'px', fontFamily: fontFamily || undefined, transform: `translate(${textX}px, ${textY}px)` }"
+    ><HighlightText :text="text" :target="highlightText" :style-id="highlightStyle" :highlight-color="highlightColor" /></div>
   </div>
 </template>
 
@@ -22,6 +22,8 @@ defineProps({
   fontFamily: { type: String, default: '' },
   highlightText: { type: String, default: '' },
   highlightStyle: { type: String, default: 'underline-red' },
+  fontColor: { type: String, default: '' },
+  highlightColor: { type: String, default: '' },
 })
 </script>
 

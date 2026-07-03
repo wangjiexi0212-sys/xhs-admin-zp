@@ -125,8 +125,120 @@
         </div>
       </a-card>
 
-      <a-card title="记录信息" :bordered="false" style="margin-top: 12px"> <a-descriptions :column="3" bordered
-          size="small">
+      <a-card title="百度网盘目录" :bordered="false" style="margin-top: 12px">
+        <a-row v-if="!data.baidu_path_exam && !data.baidu_path_history && !data.baidu_path_mock">
+          <a-col :span="24" style="color: #999">暂未配置百度网盘目录路径，请在编辑页面填写</a-col>
+        </a-row>
+        <a-row :gutter="24" v-else>
+          <a-col :span="8" v-if="data.baidu_path_exam">
+            <div class="baidu-dir-item">
+              <div class="baidu-dir-label">笔试资料目录</div>
+              <div class="baidu-dir-path">{{ data.baidu_path_exam }}</div>
+              <a-space style="margin-top: 8px">
+                <a-button :loading="dirDrawer.loading && dirDrawer.type === 'exam'" @click="generateDirImage('exam')">
+                  生成目录图
+                </a-button>
+              </a-space>
+            </div>
+          </a-col>
+          <a-col :span="8" v-if="data.baidu_path_history">
+            <div class="baidu-dir-item">
+              <div class="baidu-dir-label">真题目录</div>
+              <div class="baidu-dir-path">{{ data.baidu_path_history }}</div>
+              <a-space style="margin-top: 8px">
+                <a-button :loading="dirDrawer.loading && dirDrawer.type === 'history'" @click="generateDirImage('history')">
+                  生成目录图
+                </a-button>
+              </a-space>
+            </div>
+          </a-col>
+          <a-col :span="8" v-if="data.baidu_path_mock">
+            <div class="baidu-dir-item">
+              <div class="baidu-dir-label">模拟题目录</div>
+              <div class="baidu-dir-path">{{ data.baidu_path_mock }}</div>
+              <a-space style="margin-top: 8px">
+                <a-button :loading="dirDrawer.loading && dirDrawer.type === 'mock'" @click="generateDirImage('mock')">
+                  生成目录图
+                </a-button>
+              </a-space>
+            </div>
+          </a-col>
+        </a-row>
+      </a-card>
+
+      <!-- 目录图画布抽屉 -->
+      <a-drawer
+        v-model:open="dirDrawer.visible"
+        title="目录图编辑"
+        placement="right"
+        :width="'95%'"
+        :body-style="{ padding: '16px', display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }"
+      >
+        <!-- 工具栏 -->
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-shrink:0; flex-wrap:wrap">
+          <span style="font-size:13px;color:#555;white-space:nowrap">标题文案：</span>
+          <a-input v-model:value="dirDrawer.title" style="width:200px" @input="refreshDirPreview" />
+          <span style="font-size:13px;color:#555;white-space:nowrap">边框颜色：</span>
+          <input type="color" v-model="dirDrawer.borderColor" @input="refreshDirPreview" style="width:40px;height:32px;border:1px solid #d9d9d9;border-radius:4px;cursor:pointer;padding:2px" />
+          <a-button @click="downloadCompositeImage" :disabled="!dirDrawer.previewUrl">下载目录图</a-button>
+          <a-button @click="downloadPdfPage" :disabled="!dirDrawer.pdfPreviewUrl">下载PDF首页</a-button>
+        </div>
+
+        <!-- 两栏主区域 -->
+        <div style="flex:1; display:flex; gap:16px; min-height:0; overflow:hidden">
+          <!-- 左栏：目录图预览 -->
+          <div style="width:60%; overflow:auto; display:flex; justify-content:center; align-items:flex-start; background:#f0f0f0; border-radius:8px; padding:20px">
+            <a-spin v-if="dirDrawer.loading" style="margin-top:60px" />
+            <img
+              v-else-if="dirDrawer.previewUrl"
+              :src="dirDrawer.previewUrl"
+              style="max-width:100%; box-shadow:0 4px 20px rgba(0,0,0,0.15); border-radius:4px; display:block"
+            />
+            <div v-else style="color:#999;margin-top:60px">暂无预览</div>
+          </div>
+
+          <!-- 右栏：PDF首页截图 -->
+          <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:10px">
+            <div style="font-size:13px;font-weight:500;color:#333">
+              PDF首页截图
+              <span v-if="dirDrawer.type === 'history'" style="font-size:12px;color:#999;font-weight:400;margin-left:6px">（已自动匹配2025年，点击可切换）</span>
+            </div>
+
+            <!-- PDF 文件列表 -->
+            <div style="flex-shrink:0; max-height:200px; overflow-y:auto; border:1px solid #f0f0f0; border-radius:6px; background:#fafafa">
+              <div
+                v-for="f in dirDrawer.files.filter(f => f.isdir === 0)"
+                :key="f.fs_id"
+                @click="renderPdfFirstPage(f)"
+                style="display:flex; align-items:center; justify-content:space-between; padding:8px 12px; cursor:pointer; border-bottom:1px solid #f0f0f0; font-size:13px; transition:background 0.15s"
+                :style="{ background: dirDrawer.pdfFsid === f.fs_id ? '#fff7e6' : '' }"
+                @mouseenter="$event.currentTarget.style.background = dirDrawer.pdfFsid === f.fs_id ? '#fff7e6' : '#f5f5f5'"
+                @mouseleave="$event.currentTarget.style.background = dirDrawer.pdfFsid === f.fs_id ? '#fff7e6' : ''"
+              >
+                <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;color:#333">📄 {{ f.name }}</span>
+                <a-spin v-if="dirDrawer.pdfLoading && dirDrawer.pdfFsid === f.fs_id" size="small" style="margin-left:8px;flex-shrink:0" />
+              </div>
+              <div v-if="!dirDrawer.files.filter(f => f.isdir === 0).length" style="padding:12px;color:#999;font-size:13px;text-align:center">
+                无文件
+              </div>
+            </div>
+
+            <!-- PDF 预览 -->
+            <div style="flex:1; overflow:auto; background:#f0f0f0; border-radius:8px; padding:12px; display:flex; justify-content:center; align-items:flex-start; min-height:0">
+              <a-spin v-if="dirDrawer.pdfLoading && !dirDrawer.pdfPreviewUrl" style="margin-top:40px" />
+              <img
+                v-else-if="dirDrawer.pdfPreviewUrl"
+                :src="dirDrawer.pdfPreviewUrl"
+                style="max-width:100%; box-shadow:0 2px 12px rgba(0,0,0,0.12); border-radius:4px; display:block"
+              />
+              <div v-else style="color:#999;font-size:13px;margin-top:40px;text-align:center">点击上方文件截取首页</div>
+            </div>
+          </div>
+        </div>
+      </a-drawer>
+
+      <a-card title="记录信息" :bordered="false" style="margin-top: 12px">
+        <a-descriptions :column="3" bordered size="small">
           <a-descriptions-item label="创建人">{{ data.created_by_name || '-' }}</a-descriptions-item>
           <a-descriptions-item label="创建时间">{{ formatTime(data.created_at) }}</a-descriptions-item>
           <a-descriptions-item label="ID">{{ data.id }}</a-descriptions-item>
@@ -302,11 +414,20 @@
               </div>
             </div>
             <div v-if="coverPromptUsed" class="cover-prompt-tip">
-              <a-typography-paragraph
-                :ellipsis="{ rows: 2, expandable: true, symbol: '展开' }"
-                :content="`提示词：${coverPromptUsed}`"
-                style="font-size: 12px; color: #999; margin: 8px 0 0"
+              <div style="font-size: 12px; color: #999; margin: 8px 0 4px">提示词（可编辑后重新生成）：</div>
+              <a-textarea
+                v-model:value="coverPromptUsed"
+                style="font-size: 12px; width: 1048px; height: 500px; resize: none"
               />
+              <a-button
+                type="link"
+                size="small"
+                :loading="coverGenerating"
+                style="padding: 4px 0"
+                @click="generateCoverImage(true)"
+              >
+                用此提示词生成
+              </a-button>
             </div>
           </div>
           <div v-else class="field-placeholder cover-placeholder"></div>
@@ -517,7 +638,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import { LeftOutlined, EditOutlined, FileTextOutlined, DownloadOutlined, BulbOutlined, FileWordOutlined, SyncOutlined, CheckCircleOutlined, CloseCircleOutlined, ClockCircleOutlined, FormOutlined, StopOutlined, CopyOutlined } from '@ant-design/icons-vue'
@@ -532,7 +653,9 @@ import CardEditor from '@/views/note/CardEditor.vue'
 import { getRandomTitleFormula } from '@/api/titleFormulas'
 import { createInterviewJob, getLatestInterviewJob, getInterviewJob, downloadInterviewJob } from '@/api/interviewJobs'
 import { createExamJob, getLatestExamJob, getExamJob, downloadExamJob, downloadExamPart, retryExamPart, cancelExamJob } from '@/api/examJobs'
-import { processImageForDownload, triggerBlobDownload } from '@/utils/imageProcess'
+import { processImageForDownload, processImageForDisplay, buildRandomGradient, triggerBlobDownload } from '@/utils/imageProcess'
+import { getBaiduFiles } from '@/api/baidu'
+import { getToken } from '@/api/request'
 
 const route = useRoute()
 const router = useRouter()
@@ -825,12 +948,6 @@ function revokeGeneratedImages() {
 onBeforeUnmount(revokeGeneratedImages)
 onBeforeUnmount(clearPollTimer)
 
-function randomLightBg() {
-  const h = Math.floor(Math.random() * 360)
-  const s = 35 + Math.floor(Math.random() * 30)
-  const l = 82 + Math.floor(Math.random() * 12)
-  return `hsl(${h}, ${s}%, ${l}%)`
-}
 
 function loadImage(src) {
   return new Promise((resolve, reject) => {
@@ -852,7 +969,7 @@ function renderOne(srcUrl) {
       canvas.width = W
       canvas.height = H
       const ctx = canvas.getContext('2d')
-      ctx.fillStyle = randomLightBg()
+      ctx.fillStyle = buildRandomGradient(ctx, W, H)
       ctx.fillRect(0, 0, W, H)
 
       const img = await loadImage(srcUrl)
@@ -947,7 +1064,7 @@ function openGenerate() {
   generateVisible.value = true
 }
 
-async function generateCoverImage() {
+async function generateCoverImage(useEditedPrompt = false) {
   const text = (cardText.value || '').trim()
   if (!text) {
     message.warning('请先填写卡片文字（可点击「生成标题」自动填充）')
@@ -967,6 +1084,10 @@ async function generateCoverImage() {
   }
 
   const params = { product_id: id.value, card_text: text }
+
+  if (useEditedPrompt && coverPromptUsed.value) {
+    params.prompt = coverPromptUsed.value
+  }
 
   if (activeProvider === 'md2card') {
     const cfg = aiImageStore.activeConfig
@@ -996,8 +1117,13 @@ async function generateCoverImage() {
     const res = await drawCover(params)
     const urls = Array.isArray(res?.urls) ? res.urls.filter(Boolean) : []
     if (!urls.length && !res?.url) throw new Error('未返回图片')
-    coverImageUrls.value = urls.length ? urls : (res?.url ? [res.url] : [])
-    coverImageUrl.value = coverImageUrls.value[0] || ''
+    const rawUrls = urls.length ? urls : (res?.url ? [res.url] : [])
+
+    // 旧 blob URL 释放，防内存泄漏
+    coverImageUrls.value.forEach(u => { if (u.startsWith('blob:')) URL.revokeObjectURL(u) })
+
+    coverImageUrls.value = rawUrls
+    coverImageUrl.value = rawUrls[0] || ''
     coverPromptUsed.value = res.prompt || ''
   } catch (e) {
     message.error(e.message || '封面图生成失败')
@@ -1232,6 +1358,380 @@ async function fetchDetail() {
 }
 
 onMounted(fetchDetail)
+
+// --- 百度网盘目录图生成 ---
+const dirDrawer = reactive({
+  visible: false,
+  type: '',
+  title: '笔试资料完整目录',
+  borderColor: '#F9863B',
+  files: [],
+  loading: false,
+  previewUrl: '',
+  // PDF 首页截图（右侧手动选择面板）
+  pdfFsid: null,
+  pdfFileName: '',
+  pdfLoading: false,
+  pdfPreviewUrl: '',
+  // history 类型合成用：存储已渲染的 PDF 首页 data URL
+  pdfPageDataUrl: '',
+})
+
+function drawFolderIcon(ctx, x, y, size) {
+  const s = size
+  ctx.fillStyle = '#F5A623'
+  ctx.beginPath()
+  ctx.roundRect(x, y, s * 0.45, s * 0.22, 3)
+  ctx.fill()
+  ctx.beginPath()
+  ctx.roundRect(x, y + s * 0.18, s, s * 0.74, 4)
+  ctx.fill()
+}
+
+function drawPdfIcon(ctx, x, y, size) {
+  const s = size
+  ctx.fillStyle = '#FF6B6B'
+  ctx.beginPath()
+  ctx.roundRect(x, y, s, s, 5)
+  ctx.fill()
+  ctx.fillStyle = '#fff'
+  ctx.font = `bold ${Math.round(s * 0.38)}px sans-serif`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText('PDF', x + s / 2, y + s / 2)
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'alphabetic'
+}
+
+function renderCompositeImage(files, title, borderColor) {
+  const DPR = 2
+  const W = 600
+  const BORDER = 10
+  const PADDING = 28
+  const ICON_SIZE = 30
+  const ROW_H = 52
+  const TITLE_H = 88
+  const H = BORDER + TITLE_H + ROW_H * files.length + PADDING + BORDER
+
+  const canvas = document.createElement('canvas')
+  canvas.width = W * DPR
+  canvas.height = H * DPR
+  const ctx = canvas.getContext('2d')
+  ctx.scale(DPR, DPR)
+
+  // 边框背景
+  ctx.fillStyle = borderColor
+  ctx.fillRect(0, 0, W, H)
+
+  // 内部白色区域
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(BORDER, BORDER, W - BORDER * 2, H - BORDER * 2)
+
+  // 标题
+  ctx.fillStyle = '#FF0000'
+  ctx.font = `bold 34px "PingFang SC", "Microsoft YaHei", sans-serif`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(title, W / 2, BORDER + TITLE_H / 2)
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'alphabetic'
+
+  // 标题下分隔线
+  ctx.strokeStyle = '#eeeeee'
+  ctx.lineWidth = 1
+  ctx.beginPath()
+  ctx.moveTo(BORDER + PADDING, BORDER + TITLE_H)
+  ctx.lineTo(W - BORDER - PADDING, BORDER + TITLE_H)
+  ctx.stroke()
+
+  // 文件列表
+  const listTop = BORDER + TITLE_H
+  files.forEach((file, i) => {
+    const y = listTop + i * ROW_H
+    const iconY = y + (ROW_H - ICON_SIZE) / 2
+
+    if (file.isdir === 1) {
+      drawFolderIcon(ctx, BORDER + PADDING, iconY, ICON_SIZE)
+    } else {
+      drawPdfIcon(ctx, BORDER + PADDING, iconY, ICON_SIZE)
+    }
+
+    ctx.fillStyle = '#333333'
+    ctx.font = `15px "PingFang SC", "Microsoft YaHei", sans-serif`
+    const maxWidth = W - BORDER * 2 - PADDING * 2 - ICON_SIZE - 12
+    let name = file.name
+    while (ctx.measureText(name).width > maxWidth && name.length > 1) {
+      name = name.slice(0, -1)
+    }
+    if (name !== file.name) name = name.slice(0, -1) + '...'
+    ctx.fillText(name, BORDER + PADDING + ICON_SIZE + 12, y + ROW_H / 2 + 6)
+
+    if (i < files.length - 1) {
+      ctx.strokeStyle = '#f5f5f5'
+      ctx.lineWidth = 1
+      ctx.beginPath()
+      ctx.moveTo(BORDER + PADDING, y + ROW_H)
+      ctx.lineTo(W - BORDER - PADDING, y + ROW_H)
+      ctx.stroke()
+    }
+  })
+
+  return canvas.toDataURL('image/png')
+}
+
+function refreshDirPreview() {
+  if (!dirDrawer.files.length) return
+  if (dirDrawer.type === 'history' && dirDrawer.pdfPageDataUrl) {
+    buildHistoryComposite(dirDrawer.pdfPageDataUrl, dirDrawer.files, dirDrawer.borderColor, dirDrawer.title)
+      .then(url => { dirDrawer.previewUrl = url })
+  } else {
+    dirDrawer.previewUrl = renderCompositeImage(dirDrawer.files, dirDrawer.title, dirDrawer.borderColor)
+  }
+}
+
+// 新版：整图 1242×1656，外边框，顶部标题 + PDF 铺满 + 右下角目录浮层
+async function buildHistoryComposite(pdfDataUrl, files, borderColor, title) {
+  const pdfImg = await loadImage(pdfDataUrl)
+
+  const CANVAS_W = 1242
+  const CANVAS_H = 1656
+  const BORDER = 12
+  const TITLE_H = 120  // 标题区高度
+
+  const canvas = document.createElement('canvas')
+  canvas.width = CANVAS_W
+  canvas.height = CANVAS_H
+  const ctx = canvas.getContext('2d')
+
+  // === 整图边框（填满后覆盖内部白色）===
+  ctx.fillStyle = borderColor
+  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H)
+
+  // === 白色内部区域 ===
+  const innerX = BORDER
+  const innerY = BORDER
+  const innerW = CANVAS_W - BORDER * 2
+  const innerH = CANVAS_H - BORDER * 2
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(innerX, innerY, innerW, innerH)
+
+  // === 标题（红色加粗，白底，居中）===
+  ctx.fillStyle = '#FF0000'
+  const fontSize = Math.round(TITLE_H * 0.5)
+  ctx.font = `bold ${fontSize}px "PingFang SC", "Microsoft YaHei", sans-serif`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(title, CANVAS_W / 2, innerY + TITLE_H / 2)
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'alphabetic'
+
+  // === PDF 铺满剩余内容区（cover 模式，超出部分裁剪）===
+  const pdfAreaX = innerX
+  const pdfAreaY = innerY + TITLE_H
+  const pdfAreaW = innerW
+  const pdfAreaH = innerH - TITLE_H
+
+  const scaleW = pdfAreaW / pdfImg.width
+  const scaleH = pdfAreaH / pdfImg.height
+  const scale = Math.max(scaleW, scaleH)
+  const pdfDrawW = pdfImg.width * scale
+  const pdfDrawH = pdfImg.height * scale
+  const pdfDrawX = pdfAreaX + (pdfAreaW - pdfDrawW) / 2
+  const pdfDrawY = pdfAreaY + (pdfAreaH - pdfDrawH) / 2
+
+  ctx.save()
+  ctx.beginPath()
+  ctx.rect(pdfAreaX, pdfAreaY, pdfAreaW, pdfAreaH)
+  ctx.clip()
+  ctx.drawImage(pdfImg, pdfDrawX, pdfDrawY, pdfDrawW, pdfDrawH)
+  ctx.restore()
+
+  // === 右下角目录浮层 ===
+  const ICON_SIZE = 36
+  const ROW_H = 72
+  const OVERLAY_PAD = 20
+  const FONT_SIZE = 20
+  const pdfFiles = files.filter(f => f.isdir === 0)
+
+  // 先测量最长文件名，动态计算浮层宽度
+  ctx.font = `${FONT_SIZE}px "PingFang SC", "Microsoft YaHei", sans-serif`
+  const maxTextW = pdfFiles.reduce((max, f) => Math.max(max, ctx.measureText(f.name).width), 0)
+  const OVERLAY_W = Math.max(
+    400,
+    Math.min(
+      CANVAS_W - BORDER * 2 - 40,
+      Math.ceil(maxTextW) + ICON_SIZE + OVERLAY_PAD * 2 + 10
+    )
+  )
+  const OVERLAY_H = pdfFiles.length * ROW_H + OVERLAY_PAD * 2
+
+  const rnd = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min
+  const offsetRight = rnd(30, 80)
+  const offsetBottom = rnd(30, 80)
+  const overlayX = CANVAS_W - BORDER - OVERLAY_W - offsetRight
+  const overlayY = CANVAS_H - BORDER - OVERLAY_H - offsetBottom
+
+  // 阴影 + 白底圆角浮层
+  ctx.shadowColor = 'rgba(0,0,0,0.28)'
+  ctx.shadowBlur = 18
+  ctx.shadowOffsetX = 2
+  ctx.shadowOffsetY = 4
+  ctx.fillStyle = '#ffffff'
+  ctx.beginPath()
+  ctx.roundRect(overlayX, overlayY, OVERLAY_W, OVERLAY_H, 10)
+  ctx.fill()
+  ctx.shadowColor = 'transparent'
+  ctx.shadowBlur = 0
+  ctx.shadowOffsetX = 0
+  ctx.shadowOffsetY = 0
+
+  pdfFiles.forEach((file, i) => {
+    const y = overlayY + OVERLAY_PAD + i * ROW_H
+    drawPdfIcon(ctx, overlayX + OVERLAY_PAD, y + (ROW_H - ICON_SIZE) / 2, ICON_SIZE)
+
+    ctx.fillStyle = '#333333'
+    ctx.font = `${FONT_SIZE}px "PingFang SC", "Microsoft YaHei", sans-serif`
+    ctx.fillText(file.name, overlayX + OVERLAY_PAD + ICON_SIZE + 10, y + ROW_H / 2 + 6)
+
+    if (i < pdfFiles.length - 1) {
+      ctx.strokeStyle = '#eeeeee'
+      ctx.lineWidth = 1
+      ctx.beginPath()
+      ctx.moveTo(overlayX + OVERLAY_PAD, y + ROW_H)
+      ctx.lineTo(overlayX + OVERLAY_W - OVERLAY_PAD, y + ROW_H)
+      ctx.stroke()
+    }
+  })
+
+  return canvas.toDataURL('image/png')
+}
+
+async function generateDirImage(type) {
+  const path = type === 'exam' ? data.value.baidu_path_exam
+    : type === 'history' ? data.value.baidu_path_history
+    : data.value.baidu_path_mock
+  if (!path) return
+
+  const titleMap = {
+    exam: '笔试资料完整目录',
+    history: '历年真题（回忆版）',
+    mock: '刷模拟题，巩固知识点',
+  }
+  dirDrawer.type = type
+  dirDrawer.title = titleMap[type]
+  dirDrawer.borderColor = '#F9863B'
+  dirDrawer.files = []
+  dirDrawer.previewUrl = ''
+  dirDrawer.pdfPageDataUrl = ''
+  dirDrawer.pdfPreviewUrl = ''
+  dirDrawer.pdfFsid = null
+  dirDrawer.loading = true
+  dirDrawer.visible = true
+
+  try {
+    const res = await getBaiduFiles(path)
+    const files = res.files || []
+    if (!files.length) {
+      message.warning('该目录下暂无文件')
+      return
+    }
+    files.sort((a, b) => b.isdir - a.isdir)
+    dirDrawer.files = files
+
+    if (type === 'history' || type === 'mock') {
+      // history 找含「2025」的 PDF，mock 找含「2026」的 PDF
+      const keyword = type === 'mock' ? '2026' : '2025'
+      const targetPdf = files.find(f => f.isdir === 0 && f.name.includes(keyword))
+      if (targetPdf) {
+        const lib = await ensurePdfjs()
+        const pdfDoc = await lib.getDocument({
+          url: `/api/baidu/proxy-pdf?path=${encodeURIComponent(targetPdf.path)}`,
+          httpHeaders: { Authorization: `Bearer ${getToken()}` },
+        }).promise
+        const page = await pdfDoc.getPage(1)
+        const viewport = page.getViewport({ scale: 2 })
+        const pdfCanvas = document.createElement('canvas')
+        pdfCanvas.width = viewport.width
+        pdfCanvas.height = viewport.height
+        await page.render({ canvasContext: pdfCanvas.getContext('2d'), viewport }).promise
+        dirDrawer.pdfPageDataUrl = pdfCanvas.toDataURL('image/png')
+        dirDrawer.previewUrl = await buildHistoryComposite(dirDrawer.pdfPageDataUrl, files, dirDrawer.borderColor, dirDrawer.title)
+      } else {
+        message.warning(`未找到文件名含"${keyword}"的PDF，降级显示目录列表`)
+        dirDrawer.previewUrl = renderCompositeImage(files, dirDrawer.title, dirDrawer.borderColor)
+      }
+    } else {
+      dirDrawer.previewUrl = renderCompositeImage(files, dirDrawer.title, dirDrawer.borderColor)
+    }
+  } catch (e) {
+    message.error(e.message || '生成失败')
+  } finally {
+    dirDrawer.loading = false
+  }
+}
+
+function downloadCompositeImage() {
+  if (!dirDrawer.previewUrl) return
+  const a = document.createElement('a')
+  a.href = dirDrawer.previewUrl
+  const label = dirDrawer.type === 'exam' ? '笔试资料目录' : '真题目录'
+  a.download = `${data.value.company_name || 'product'}-${label}.png`
+  a.click()
+}
+
+let pdfjsLib = null
+async function ensurePdfjs() {
+  if (pdfjsLib) return pdfjsLib
+  await new Promise((resolve, reject) => {
+    const script = document.createElement('script')
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'
+    script.onload = resolve
+    script.onerror = reject
+    document.head.appendChild(script)
+  })
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
+  pdfjsLib = window.pdfjsLib
+  return pdfjsLib
+}
+
+async function renderPdfFirstPage(file) {
+  dirDrawer.pdfFsid = file.fs_id
+  dirDrawer.pdfFileName = file.name
+  dirDrawer.pdfLoading = true
+  dirDrawer.pdfPreviewUrl = ''
+  try {
+    const lib = await ensurePdfjs()
+    const pdf = await lib.getDocument({
+      url: `/api/baidu/proxy-pdf?path=${encodeURIComponent(file.path)}`,
+      httpHeaders: { Authorization: `Bearer ${getToken()}` },
+    }).promise
+    const page = await pdf.getPage(1)
+    const viewport = page.getViewport({ scale: 2 })
+    const canvas = document.createElement('canvas')
+    canvas.width = viewport.width
+    canvas.height = viewport.height
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise
+    dirDrawer.pdfPreviewUrl = canvas.toDataURL('image/png')
+    // history 类型：同步更新合成图
+    if (dirDrawer.type === 'history') {
+      dirDrawer.pdfPageDataUrl = dirDrawer.pdfPreviewUrl
+      dirDrawer.previewUrl = await buildHistoryComposite(dirDrawer.pdfPageDataUrl, dirDrawer.files, dirDrawer.borderColor, dirDrawer.title)
+    }
+  } catch (e) {
+    message.error('PDF渲染失败：' + (e.message || '未知错误'))
+  } finally {
+    dirDrawer.pdfLoading = false
+  }
+}
+
+function downloadPdfPage() {
+  if (!dirDrawer.pdfPreviewUrl) return
+  const a = document.createElement('a')
+  a.href = dirDrawer.pdfPreviewUrl
+  a.download = `${dirDrawer.pdfFileName.replace(/\.pdf$/i, '')}-首页.png`
+  a.click()
+}
 </script>
 
 <style scoped>
@@ -1441,5 +1941,24 @@ onMounted(fetchDetail)
   align-items: center;
   gap: 4px;
   flex-shrink: 0;
+}
+
+.baidu-dir-item {
+  padding: 12px;
+  background: #fafafa;
+  border: 1px solid #f0f0f0;
+  border-radius: 6px;
+}
+.baidu-dir-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #555;
+  margin-bottom: 4px;
+}
+.baidu-dir-path {
+  font-size: 12px;
+  color: #999;
+  margin-bottom: 10px;
+  word-break: break-all;
 }
 </style>

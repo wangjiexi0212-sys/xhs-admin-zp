@@ -32,9 +32,10 @@
         fontSize: fontSize + 'px',
         fontFamily: fontFamily || undefined,
         transform: `translate(${textX}px, ${textY}px)`,
+        color: fontColor || undefined,
       }"
     >
-      <HighlightText :text="text" :target="highlightText" :style-id="highlightStyle" />
+      <HighlightText :text="text" :target="highlightText" :style-id="highlightStyle" :highlight-color="highlightColor" />
     </div>
 
     <svg class="illus" viewBox="0 0 180 140" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -111,6 +112,8 @@ defineProps({
   fontFamily: { type: String, default: '' },
   highlightText: { type: String, default: '' },
   highlightStyle: { type: String, default: 'underline-red' },
+  fontColor: { type: String, default: '' },
+  highlightColor: { type: String, default: '' },
 })
 </script>
 

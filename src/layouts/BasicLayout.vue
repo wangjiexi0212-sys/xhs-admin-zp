@@ -50,6 +50,7 @@
           <template #title>系统设置</template>
           <a-menu-item key="/system/llm">LLM</a-menu-item>
           <a-menu-item key="/system/ai-image">AI绘图</a-menu-item>
+          <a-menu-item key="/system/baidu">百度网盘</a-menu-item>
         </a-sub-menu>
       </a-menu>
     </a-layout-sider>

@@ -110,6 +110,11 @@ const router = createRouter({
           name: 'system-ai-image',
           component: () => import('../views/system/AiImage.vue'),
         },
+        {
+          path: 'system/baidu',
+          name: 'system-baidu',
+          component: () => import('../views/system/BaiduAuth.vue'),
+        },
       ],
     },
     {

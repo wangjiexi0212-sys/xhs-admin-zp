@@ -41,9 +41,24 @@
             style="margin-bottom: 0"
           />
         </template>
+        <template v-else-if="column.key === 'status'">
+          <a-tag :color="record.status === 1 ? 'success' : 'default'">
+            {{ record.status === 1 ? '上架' : '下架' }}
+          </a-tag>
+        </template>
         <template v-else-if="column.key === 'action'">
           <a-space>
             <a-button size="small" @click="openEdit(record)">编辑</a-button>
+            <a-popconfirm
+              :title="record.status === 1 ? '确定下架？' : '确定上架？'"
+              :ok-text="record.status === 1 ? '下架' : '上架'"
+              :ok-type="record.status === 1 ? 'danger' : 'primary'"
+              @confirm="onToggleStatus(record)"
+            >
+              <a-button size="small" :type="record.status === 1 ? 'default' : 'primary'" ghost>
+                {{ record.status === 1 ? '下架' : '上架' }}
+              </a-button>
+            </a-popconfirm>
             <a-popconfirm title="确定删除？" ok-text="删除" ok-type="danger" @confirm="onDelete(record.id)">
               <a-button size="small" danger>删除</a-button>
             </a-popconfirm>
@@ -63,7 +78,7 @@
     >
       <a-form :model="form" :rules="rules" ref="formRef" layout="vertical" style="margin-top: 8px">
         <a-row :gutter="16">
-          <a-col :span="10">
+          <a-col :span="8">
             <a-form-item label="商品类型" name="job_type_id">
               <a-select
                 v-model:value="form.job_type_id"
@@ -72,7 +87,7 @@
               />
             </a-form-item>
           </a-col>
-          <a-col :span="10">
+          <a-col :span="8">
             <a-form-item label="提示词名称" name="name">
               <a-input v-model:value="form.name" placeholder="请输入名称" :maxlength="80" />
             </a-form-item>
@@ -80,6 +95,17 @@
           <a-col :span="4">
             <a-form-item label="排序" name="sort_order">
               <a-input-number v-model:value="form.sort_order" :min="0" style="width: 100%" />
+            </a-form-item>
+          </a-col>
+          <a-col :span="4">
+            <a-form-item label="状态" name="status">
+              <a-switch
+                v-model:checked="form.status"
+                :checked-value="1"
+                :un-checked-value="0"
+                checked-children="上架"
+                un-checked-children="下架"
+              />
             </a-form-item>
           </a-col>
           <a-col :span="24">
@@ -113,6 +139,7 @@ import {
   createCardPrompt,
   updateCardPrompt,
   deleteCardPrompt,
+  toggleCardPromptStatus,
 } from '@/api/cardPrompts'
 
 const jobTypeOptions = ref([])
@@ -139,8 +166,9 @@ const columns = [
   { title: '提示词内容', key: 'content', ellipsis: true },
   { title: '备注', dataIndex: 'description', width: 160, ellipsis: true },
   { title: '排序', dataIndex: 'sort_order', width: 70 },
+  { title: '状态', key: 'status', width: 80 },
   { title: '创建人', dataIndex: 'created_by_name', width: 100 },
-  { title: '操作', key: 'action', width: 130, fixed: 'right' },
+  { title: '操作', key: 'action', width: 180, fixed: 'right' },
 ]
 
 const pagination = computed(() => ({
@@ -188,6 +216,7 @@ const form = reactive({
   content: '',
   description: '',
   sort_order: 0,
+  status: 1,
 })
 
 const rules = {
@@ -202,6 +231,7 @@ function resetForm() {
   form.content = ''
   form.description = ''
   form.sort_order = 0
+  form.status = 1
   editingId.value = null
   formRef.value?.clearValidate()
 }
@@ -219,6 +249,7 @@ function openEdit(record) {
   form.content = record.content
   form.description = record.description ?? ''
   form.sort_order = record.sort_order ?? 0
+  form.status = record.status ?? 1
   modalVisible.value = true
 }
 
@@ -237,6 +268,7 @@ async function onSubmit() {
       content: form.content.trim(),
       description: form.description.trim(),
       sort_order: form.sort_order,
+      status: form.status,
     }
     if (editingId.value) {
       await updateCardPrompt(editingId.value, payload)
@@ -251,6 +283,16 @@ async function onSubmit() {
     message.error(e.message || '操作失败')
   } finally {
     submitting.value = false
+  }
+}
+
+async function onToggleStatus(record) {
+  try {
+    const res = await toggleCardPromptStatus(record.id)
+    record.status = res.status
+    message.success(res.status === 1 ? '已上架' : '已下架')
+  } catch (e) {
+    message.error(e.message || '操作失败')
   }
 }
 

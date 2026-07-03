@@ -1,5 +1,6 @@
 // 极简 fetch 封装
 const TOKEN_KEY = 'xhs_admin_token';
+const API_BASE = import.meta.env.VITE_API_BASE || '';
 
 export function getToken() {
   return localStorage.getItem(TOKEN_KEY) || '';
@@ -14,7 +15,7 @@ export async function request(url, options = {}) {
   const token = getToken();
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const res = await fetch(url, {
+  const res = await fetch(API_BASE + url, {
     ...options,
     headers,
     body: options.body && typeof options.body !== 'string' ? JSON.stringify(options.body) : options.body,

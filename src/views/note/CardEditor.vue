@@ -14,6 +14,8 @@
               :font-family="fontFamily"
               :highlight-text="highlightText"
               :highlight-style="highlightStyle"
+              :font-color="fontColor"
+              :highlight-color="highlightColor"
             />
             <div
               v-if="emoji"
@@ -82,6 +84,17 @@
           <span class="font-size-value">{{ textY }}px</span>
         </div>
         <div class="font-size-row">
+          <span class="font-size-label">字体颜色</span>
+          <a-color-picker
+            :value="fontColor || '#000000'"
+            format="hex"
+            show-text
+            size="small"
+            @change="(c) => fontColor = c.toHexString()"
+          />
+          <a-button v-if="fontColor" size="small" @click="fontColor = ''">重置</a-button>
+        </div>
+        <div class="font-size-row">
           <span class="font-size-label">划重点</span>
           <a-input
             v-model:value="highlightText"
@@ -104,6 +117,17 @@
               <HighlightText text="Abc示例" target="Abc示例" :style-id="s.id" />
             </div>
           </div>
+        </div>
+        <div class="font-size-row">
+          <span class="font-size-label">重点颜色</span>
+          <a-color-picker
+            :value="highlightColor || '#ff4d4f'"
+            format="hex"
+            show-text
+            size="small"
+            @change="(c) => highlightColor = c.toHexString()"
+          />
+          <a-button v-if="highlightColor" size="small" @click="highlightColor = ''">重置</a-button>
         </div>
         <div class="hl-style-row">
           <span class="font-size-label">表情</span>
@@ -215,6 +239,8 @@
             :font-family="fontFamily"
             :highlight-text="highlightText"
             :highlight-style="highlightStyle"
+            :font-color="fontColor"
+            :highlight-color="highlightColor"
           />
           <div
             v-if="emoji"
@@ -484,6 +510,8 @@ const textY = ref(0)
 const fontFamily = ref('')
 const highlightText = ref('')
 const highlightStyle = ref('underline-red')
+const fontColor = ref('')
+const highlightColor = ref('')
 const emoji = ref('')
 const emojiSize = ref(64)
 const emojiX = ref(300)

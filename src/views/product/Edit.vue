@@ -81,6 +81,29 @@
           </a-form-item>
         </a-card>
 
+        <a-card title="百度网盘链接" :bordered="false" style="margin-top: 12px">
+          <a-row :gutter="16">
+            <a-col :span="12">
+              <a-form-item label="笔试资料目录" name="baidu_path_exam">
+                <a-input v-model:value="form.baidu_path_exam" placeholder="如：/我的资源/某单位笔试资料" />
+                <div class="hint">填写网盘文件夹的绝对路径，以 / 开头</div>
+              </a-form-item>
+            </a-col>
+            <a-col :span="12">
+              <a-form-item label="真题目录" name="baidu_path_history">
+                <a-input v-model:value="form.baidu_path_history" placeholder="如：/我的资源/某单位历年真题" />
+                <div class="hint">填写网盘文件夹的绝对路径，以 / 开头</div>
+              </a-form-item>
+            </a-col>
+            <a-col :span="12">
+              <a-form-item label="模拟题目录" name="baidu_path_mock">
+                <a-input v-model:value="form.baidu_path_mock" placeholder="如：/我的资源/某单位模拟题" />
+                <div class="hint">填写网盘文件夹的绝对路径，以 / 开头</div>
+              </a-form-item>
+            </a-col>
+          </a-row>
+        </a-card>
+
         <a-card title="小红书信息" :bordered="false" style="margin-top: 12px">
           <a-form-item label="小红书商品ID" name="xhs_product_id">
             <a-input v-model:value="form.xhs_product_id" placeholder="小红书商品ID" style="max-width: 360px" />
@@ -185,6 +208,9 @@ const form = reactive({
   source_url: '',
   job_type_id: undefined,
   status: 1,
+  baidu_path_exam: '',
+  baidu_path_history: '',
+  baidu_path_mock: '',
   xhs_product_id: '',
   xhs_content: [],
   xhs_tags: '',
@@ -219,6 +245,9 @@ async function fetchDetail() {
       source_url: data.source_url ?? '',
       job_type_id: data.job_type_id ?? undefined,
       status: data.status ?? 1,
+      baidu_path_exam: data.baidu_path_exam ?? '',
+      baidu_path_history: data.baidu_path_history ?? '',
+      baidu_path_mock: data.baidu_path_mock ?? '',
       xhs_product_id: data.xhs_product_id ?? '',
       xhs_content: Array.isArray(data.xhs_content) ? [...data.xhs_content] : [],
       xhs_tags: Array.isArray(data.xhs_tags) ? data.xhs_tags.join(' ') : (data.xhs_tags ?? ''),
@@ -259,6 +288,9 @@ async function onSubmit() {
       source_url: trim(form.source_url) || null,
       job_type_id: form.job_type_id || null,
       status: form.status,
+      baidu_path_exam: trim(form.baidu_path_exam) || null,
+      baidu_path_history: trim(form.baidu_path_history) || null,
+      baidu_path_mock: trim(form.baidu_path_mock) || null,
       xhs_product_id: trim(form.xhs_product_id) || null,
       xhs_content: form.xhs_content.map(trim).filter(Boolean),
       xhs_tags: trim(form.xhs_tags)
