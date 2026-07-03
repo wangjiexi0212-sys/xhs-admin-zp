@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@ant-design/icons-vue':
+        specifier: ^7.0.1
+        version: 7.0.1(vue@3.5.32)
       '@wangeditor/editor':
         specifier: ^5.1.23
         version: 5.1.23
