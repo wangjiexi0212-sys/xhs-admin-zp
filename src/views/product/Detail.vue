@@ -176,6 +176,13 @@
       >
         <!-- 工具栏 -->
         <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-shrink:0; flex-wrap:wrap">
+          <template v-if="dirDrawer.type === 'exam'">
+            <span style="font-size:13px;color:#555;white-space:nowrap">类型：</span>
+            <a-select v-model:value="dirDrawer.dirMode" style="width:140px" @change="changeDirMode">
+              <a-select-option value="dir">笔记资料目录</a-select-option>
+              <a-select-option value="culture">企业文化</a-select-option>
+            </a-select>
+          </template>
           <span style="font-size:13px;color:#555;white-space:nowrap">标题文案：</span>
           <a-input v-model:value="dirDrawer.title" style="width:200px" @input="refreshDirPreview" />
           <span style="font-size:13px;color:#555;white-space:nowrap">边框颜色：</span>
@@ -395,17 +402,17 @@
                 <a-button v-if="coverImageUrls.length === 1 && coverImageUrl" type="link" size="small" @click="downloadCoverImage()">
                   <DownloadOutlined /> 下载
                 </a-button>
-                <a-button type="link" size="small" :loading="coverGenerating" @click="generateCoverImage">
+                <a-button type="link" size="small" :loading="coverGenerating" @click="() => generateCoverImage()">
                   {{ coverImageUrls.length ? '重新生成' : '生成封面图' }}
                 </a-button>
               </a-space>
             </div>
           </template>
           <div v-if="coverGenerating" class="field-placeholder cover-placeholder loading-box">
-            <a-spin /> <span style="margin-left: 8px; color: #999">正在生成封面图...</span>
+            <a-spin /> <span style="margin-left: 8px; color: #999">{{ coverStatusMsg }}</span>
           </div>
-          <div v-else-if="coverImageUrls.length" class="cover-result">
-            <div class="cover-image-list">
+          <div v-else-if="coverImageUrls.length || coverPromptUsed" class="cover-result">
+            <div v-if="coverImageUrls.length" class="cover-image-list">
               <div v-for="(u, idx) in coverImageUrls" :key="idx" class="cover-image-item">
                 <a-image :src="u" :width="135" :height="180" style="border-radius: 6px; object-fit: cover" />
                 <a-button type="link" size="small" @click="downloadCoverImage(u)">
@@ -646,7 +653,7 @@ import { getProductDetail } from '@/api/products'
 import { getContentTemplateList } from '@/api/contentTemplates'
 import { getPromptList } from '@/api/prompts'
 import { chatLlm } from '@/api/llm'
-import { drawCover } from '@/api/draw'
+import { drawCoverStream } from '@/api/draw'
 import { useLlmStore } from '@/stores/llm'
 import { useAiImageStore } from '@/stores/aiImage'
 import CardEditor from '@/views/note/CardEditor.vue'
@@ -675,6 +682,7 @@ const imagesGenerating = ref(false)
 const generatedImages = ref([])
 const generatedTags = ref([])
 const coverGenerating = ref(false)
+const coverStatusMsg = ref('正在生成封面图...')
 const coverImageUrl = ref('')
 const coverImageUrls = ref([])
 const coverPromptUsed = ref('')
@@ -1091,7 +1099,6 @@ async function generateCoverImage(useEditedPrompt = false) {
 
   if (activeProvider === 'md2card') {
     const cfg = aiImageStore.activeConfig
-    // 复用：model 字段存关键词、concurrency 存张数
     if (cfg?.model) params.keywords = cfg.model
     if (cfg?.concurrency) params.count = cfg.concurrency
   } else {
@@ -1113,23 +1120,37 @@ async function generateCoverImage(useEditedPrompt = false) {
   }
 
   coverGenerating.value = true
-  try {
-    const res = await drawCover(params)
-    const urls = Array.isArray(res?.urls) ? res.urls.filter(Boolean) : []
-    if (!urls.length && !res?.url) throw new Error('未返回图片')
-    const rawUrls = urls.length ? urls : (res?.url ? [res.url] : [])
+  coverStatusMsg.value = '正在生成封面图...'
 
-    // 旧 blob URL 释放，防内存泄漏
-    coverImageUrls.value.forEach(u => { if (u.startsWith('blob:')) URL.revokeObjectURL(u) })
+  // quanneng 且非「用此提示词」点击：先只取提示词供审核
+  const promptOnly = activeProvider !== 'md2card' && !useEditedPrompt
+  if (promptOnly) params.prompt_only = true
 
-    coverImageUrls.value = rawUrls
-    coverImageUrl.value = rawUrls[0] || ''
-    coverPromptUsed.value = res.prompt || ''
-  } catch (e) {
-    message.error(e.message || '封面图生成失败')
-  } finally {
-    coverGenerating.value = false
-  }
+  await drawCoverStream(params, {
+    onProgress(event) {
+      if (event.step === 'llm') coverStatusMsg.value = '正在适配提示词...'
+      else if (event.step === 'llm_done') coverStatusMsg.value = '提示词适配完成，正在生成图片...'
+      else if (event.step === 'draw') coverStatusMsg.value = '正在生成图片...'
+    },
+    onDone(data) {
+      if (data?.prompt_only) {
+        // 仅返回提示词：展示供审核，不清除旧图
+        coverPromptUsed.value = data.prompt || ''
+      } else {
+        const urls = Array.isArray(data?.urls) ? data.urls.filter(Boolean) : []
+        const rawUrls = urls.length ? urls : (data?.url ? [data.url] : [])
+        coverImageUrls.value.forEach(u => { if (u.startsWith('blob:')) URL.revokeObjectURL(u) })
+        coverImageUrls.value = rawUrls
+        coverImageUrl.value = rawUrls[0] || ''
+        coverPromptUsed.value = data?.prompt || ''
+      }
+      coverGenerating.value = false
+    },
+    onError(e) {
+      message.error(e.message || '封面图生成失败')
+      coverGenerating.value = false
+    },
+  })
 }
 
 async function downloadCoverImage(url) {
@@ -1363,6 +1384,7 @@ onMounted(fetchDetail)
 const dirDrawer = reactive({
   visible: false,
   type: '',
+  dirMode: 'dir', // 'dir' | 'culture'，仅 exam 类型可切换
   title: '笔试资料完整目录',
   borderColor: '#F9863B',
   files: [],
@@ -1373,7 +1395,7 @@ const dirDrawer = reactive({
   pdfFileName: '',
   pdfLoading: false,
   pdfPreviewUrl: '',
-  // history 类型合成用：存储已渲染的 PDF 首页 data URL
+  // history/culture 类型合成用：存储已渲染的 PDF 首页 data URL
   pdfPageDataUrl: '',
 })
 
@@ -1481,7 +1503,8 @@ function renderCompositeImage(files, title, borderColor) {
 
 function refreshDirPreview() {
   if (!dirDrawer.files.length) return
-  if (dirDrawer.type === 'history' && dirDrawer.pdfPageDataUrl) {
+  const usePdf = (dirDrawer.type === 'history' || dirDrawer.dirMode === 'culture') && dirDrawer.pdfPageDataUrl
+  if (usePdf) {
     buildHistoryComposite(dirDrawer.pdfPageDataUrl, dirDrawer.files, dirDrawer.borderColor, dirDrawer.title)
       .then(url => { dirDrawer.previewUrl = url })
   } else {
@@ -1618,6 +1641,7 @@ async function generateDirImage(type) {
     mock: '刷模拟题，巩固知识点',
   }
   dirDrawer.type = type
+  dirDrawer.dirMode = 'dir'
   dirDrawer.title = titleMap[type]
   dirDrawer.borderColor = '#F9863B'
   dirDrawer.files = []
@@ -1667,6 +1691,47 @@ async function generateDirImage(type) {
     message.error(e.message || '生成失败')
   } finally {
     dirDrawer.loading = false
+  }
+}
+
+async function changeDirMode(mode) {
+  dirDrawer.dirMode = mode
+  if (mode === 'culture') {
+    const culturePdf = dirDrawer.files.find(f => f.isdir === 0 && f.name.includes('企业文化'))
+    if (!culturePdf) {
+      message.warning('未找到文件名含"企业文化"的PDF')
+      dirDrawer.dirMode = 'dir'
+      return
+    }
+    dirDrawer.title = '企业近况及文化'
+    dirDrawer.pdfLoading = true
+    try {
+      const lib = await ensurePdfjs()
+      const pdfDoc = await lib.getDocument({
+        url: `/api/baidu/proxy-pdf?path=${encodeURIComponent(culturePdf.path)}`,
+        httpHeaders: { Authorization: `Bearer ${getToken()}` },
+      }).promise
+      const page = await pdfDoc.getPage(1)
+      const viewport = page.getViewport({ scale: 2 })
+      const pdfCanvas = document.createElement('canvas')
+      pdfCanvas.width = viewport.width
+      pdfCanvas.height = viewport.height
+      await page.render({ canvasContext: pdfCanvas.getContext('2d'), viewport }).promise
+      dirDrawer.pdfPageDataUrl = pdfCanvas.toDataURL('image/png')
+      dirDrawer.pdfPreviewUrl = dirDrawer.pdfPageDataUrl
+      dirDrawer.pdfFsid = culturePdf.fs_id
+      dirDrawer.previewUrl = await buildHistoryComposite(dirDrawer.pdfPageDataUrl, dirDrawer.files, dirDrawer.borderColor, dirDrawer.title)
+    } catch (e) {
+      message.error(e.message || '加载企业文化PDF失败')
+    } finally {
+      dirDrawer.pdfLoading = false
+    }
+  } else {
+    dirDrawer.title = '笔试资料完整目录'
+    dirDrawer.pdfPageDataUrl = ''
+    dirDrawer.pdfPreviewUrl = ''
+    dirDrawer.pdfFsid = null
+    dirDrawer.previewUrl = renderCompositeImage(dirDrawer.files, dirDrawer.title, dirDrawer.borderColor)
   }
 }
 

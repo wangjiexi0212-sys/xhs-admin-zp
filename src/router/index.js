@@ -91,6 +91,11 @@ const router = createRouter({
           component: () => import('../views/note/ExamTemplate.vue'),
         },
         {
+          path: 'note/components',
+          name: 'note-components',
+          component: () => import('../views/note/Components.vue'),
+        },
+        {
           path: 'system/llm',
           name: 'system-llm',
           component: () => import('../views/system/Llm.vue'),
