@@ -183,10 +183,38 @@
               <a-select-option value="culture">企业文化</a-select-option>
             </a-select>
           </template>
+          <template v-if="dirDrawer.type === 'history'">
+            <span style="font-size:13px;color:#555;white-space:nowrap">文案预设：</span>
+            <a-select
+              v-model:value="dirDrawer.title"
+              style="width:260px"
+              :options="HISTORY_TITLE_OPTIONS"
+              @change="refreshDirPreview"
+            />
+          </template>
+          <template v-if="dirDrawer.type === 'mock'">
+            <span style="font-size:13px;color:#555;white-space:nowrap">文案预设：</span>
+            <a-select
+              v-model:value="dirDrawer.title"
+              style="width:260px"
+              :options="MOCK_TITLE_OPTIONS"
+              @change="refreshDirPreview"
+            />
+          </template>
           <span style="font-size:13px;color:#555;white-space:nowrap">标题文案：</span>
           <a-input v-model:value="dirDrawer.title" style="width:200px" @input="refreshDirPreview" />
           <span style="font-size:13px;color:#555;white-space:nowrap">边框颜色：</span>
           <input type="color" v-model="dirDrawer.borderColor" @input="refreshDirPreview" style="width:40px;height:32px;border:1px solid #d9d9d9;border-radius:4px;cursor:pointer;padding:2px" />
+          <span style="font-size:13px;color:#555;white-space:nowrap">背景色：</span>
+          <input type="color" v-model="dirDrawer.bgColor" @input="refreshDirPreview" style="width:40px;height:32px;border:1px solid #d9d9d9;border-radius:4px;cursor:pointer;padding:2px" />
+          <span style="font-size:13px;color:#555;white-space:nowrap">透明度：</span>
+          <input type="range" v-model.number="dirDrawer.bgOpacity" min="0" max="1" step="0.05" @input="refreshDirPreview" style="width:90px;accent-color:#1677ff;cursor:pointer" />
+          <span style="font-size:12px;color:#999;min-width:28px">{{ Math.round(dirDrawer.bgOpacity * 100) }}%</span>
+          <template v-if="dirDrawer.type === 'history' || dirDrawer.type === 'mock'">
+            <a-divider type="vertical" style="height:20px" />
+            <span style="font-size:13px;color:#555;white-space:nowrap">只生成目录图：</span>
+            <a-switch v-model:checked="dirDrawer.dirOnly" @change="refreshDirPreview" />
+          </template>
           <a-button @click="downloadCompositeImage" :disabled="!dirDrawer.previewUrl">下载目录图</a-button>
           <a-button @click="downloadPdfPage" :disabled="!dirDrawer.pdfPreviewUrl">下载PDF首页</a-button>
         </div>
@@ -1380,13 +1408,91 @@ async function fetchDetail() {
 
 onMounted(fetchDetail)
 
+// --- 真题目录标题文案预设列表 ---
+const HISTORY_TITLE_OPTIONS = [
+  '刷真题，吃透核心考点',
+  '研真题，洞悉考察方向',
+  '析真题，总结答题套路',
+  '品真题，掌握命题规律',
+  '梳理真题，理清考察重点',
+  '复盘真题，弥补知识短板',
+  '深挖真题，抓住得分关键',
+  '细读真题，熟悉题型结构',
+  '拆解真题，归纳解题方法',
+  '精读真题，找准出题侧重',
+  '复盘真题，规避常见陷阱',
+  '吃透真题，稳固知识体系',
+  '揣摩真题，把握考察逻辑',
+  '整理真题，汇总高频考点',
+  '演算真题，提升做题速度',
+  '回顾真题，强化记忆印象',
+  '深究真题，摸清考察范围',
+  '品读真题，规范答题话术',
+  '深挖真题，梳理高频题型',
+  '复盘真题，找准失分根源',
+].map(v => ({ label: v, value: v }))
+
+function pickRandomHistoryTitle() {
+  const list = HISTORY_TITLE_OPTIONS
+  return list[Math.floor(Math.random() * list.length)].value
+}
+
+// --- 模拟题目录标题文案预设列表 ---
+const MOCK_TITLE_OPTIONS = [
+  '刷模拟题，查漏补缺',
+  '练模拟题，把控时限',
+  '研模拟题，适应题型',
+  '做模拟题，夯实功底',
+  '复盘模拟题，补齐短板',
+  '吃透模拟题，稳定发挥',
+  '梳理模拟题，熟记考点',
+  '拆解模拟题，总结思路',
+  '演算模拟题，提升速度',
+  '精读模拟题，规避陷阱',
+  '背诵模拟题，巩固要点',
+  '深究模拟题，找准失分点',
+  '勤做模拟题，锻炼心态',
+  '整理模拟题，归纳技巧',
+  '细品模拟题，规范作答',
+  '反复模拟题，强化记忆',
+  '深挖模拟题，抓住得分点',
+  '整套模拟题，全真演练',
+  '回看模拟题，梳理框架',
+  '吃透模拟题，从容应考',
+].map(v => ({ label: v, value: v }))
+
+function pickRandomMockTitle() {
+  const list = MOCK_TITLE_OPTIONS
+  return list[Math.floor(Math.random() * list.length)].value
+}
+
 // --- 百度网盘目录图生成 ---
+
+// 预设淡色背景色池
+const BG_COLOR_POOL = [
+  '#a8c8f0', '#f0a8b4', '#a8e0c8', '#f0d0a8',
+  '#c8b4f0', '#a8d8f0', '#f0e0a8', '#b4f0d0',
+  '#f0b4c8', '#b4c8f0', '#d0f0a8', '#f0c8a8',
+  // 新增 20 组
+  '#ffd6d6', '#d6f0ff', '#d6ffd6', '#fff0d6',
+  '#e8d6ff', '#d6ffe8', '#ffecd6', '#d6e8ff',
+  '#ffe4f0', '#e4ffe4', '#fff4d6', '#d6f4ff',
+  '#f0d6ff', '#d6ffee', '#ffd6ee', '#eeffd6',
+  '#dce8ff', '#ffdce8', '#dcffee', '#ffeedd',
+]
+function pickRandomBgColor() {
+  return BG_COLOR_POOL[Math.floor(Math.random() * BG_COLOR_POOL.length)]
+}
+
 const dirDrawer = reactive({
   visible: false,
   type: '',
   dirMode: 'dir', // 'dir' | 'culture'，仅 exam 类型可切换
   title: '笔试资料完整目录',
   borderColor: '#F9863B',
+  bgColor: pickRandomBgColor(),
+  bgOpacity: 0.35,
+  dirOnly: false,  // 是否只生成目录图（跳过 PDF 合成）
   files: [],
   loading: false,
   previewUrl: '',
@@ -1425,7 +1531,30 @@ function drawPdfIcon(ctx, x, y, size) {
   ctx.textBaseline = 'alphabetic'
 }
 
-function renderCompositeImage(files, title, borderColor) {
+function drawGridBg(ctx, x, y, w, h, color, opacity, cellSize = 28) {
+  if (opacity <= 0) return
+  ctx.save()
+  ctx.globalAlpha = opacity
+  // 底色填充
+  ctx.fillStyle = color
+  ctx.fillRect(x, y, w, h)
+  // 格子线（比底色略亮/略白）
+  ctx.strokeStyle = '#ffffff'
+  ctx.lineWidth = 0.8
+  ctx.beginPath()
+  for (let cx = x; cx <= x + w; cx += cellSize) {
+    ctx.moveTo(cx, y)
+    ctx.lineTo(cx, y + h)
+  }
+  for (let cy = y; cy <= y + h; cy += cellSize) {
+    ctx.moveTo(x, cy)
+    ctx.lineTo(x + w, cy)
+  }
+  ctx.stroke()
+  ctx.restore()
+}
+
+function renderCompositeImage(files, title, borderColor, bgColor, bgOpacity) {
   const DPR = 2
   const W = 600
   const BORDER = 10
@@ -1448,6 +1577,9 @@ function renderCompositeImage(files, title, borderColor) {
   // 内部白色区域
   ctx.fillStyle = '#ffffff'
   ctx.fillRect(BORDER, BORDER, W - BORDER * 2, H - BORDER * 2)
+
+  // 格子背景（叠在白色上方）
+  drawGridBg(ctx, BORDER, BORDER, W - BORDER * 2, H - BORDER * 2, bgColor, bgOpacity)
 
   // 标题
   ctx.fillStyle = '#FF0000'
@@ -1503,17 +1635,19 @@ function renderCompositeImage(files, title, borderColor) {
 
 function refreshDirPreview() {
   if (!dirDrawer.files.length) return
-  const usePdf = (dirDrawer.type === 'history' || dirDrawer.dirMode === 'culture') && dirDrawer.pdfPageDataUrl
+  const usePdf = (dirDrawer.type === 'history' || dirDrawer.type === 'mock' || dirDrawer.dirMode === 'culture')
+    && dirDrawer.pdfPageDataUrl
+    && !dirDrawer.dirOnly
   if (usePdf) {
-    buildHistoryComposite(dirDrawer.pdfPageDataUrl, dirDrawer.files, dirDrawer.borderColor, dirDrawer.title)
+    buildHistoryComposite(dirDrawer.pdfPageDataUrl, dirDrawer.files, dirDrawer.borderColor, dirDrawer.title, dirDrawer.bgColor, dirDrawer.bgOpacity)
       .then(url => { dirDrawer.previewUrl = url })
   } else {
-    dirDrawer.previewUrl = renderCompositeImage(dirDrawer.files, dirDrawer.title, dirDrawer.borderColor)
+    dirDrawer.previewUrl = renderCompositeImage(dirDrawer.files, dirDrawer.title, dirDrawer.borderColor, dirDrawer.bgColor, dirDrawer.bgOpacity)
   }
 }
 
 // 新版：整图 1242×1656，外边框，顶部标题 + PDF 铺满 + 右下角目录浮层
-async function buildHistoryComposite(pdfDataUrl, files, borderColor, title) {
+async function buildHistoryComposite(pdfDataUrl, files, borderColor, title, bgColor, bgOpacity) {
   const pdfImg = await loadImage(pdfDataUrl)
 
   const CANVAS_W = 1242
@@ -1538,6 +1672,9 @@ async function buildHistoryComposite(pdfDataUrl, files, borderColor, title) {
   ctx.fillStyle = '#ffffff'
   ctx.fillRect(innerX, innerY, innerW, innerH)
 
+  // === 格子背景（叠在白色上方）===
+  drawGridBg(ctx, innerX, innerY, innerW, innerH, bgColor, bgOpacity, 36)
+
   // === 标题（红色加粗，白底，居中）===
   ctx.fillStyle = '#FF0000'
   const fontSize = Math.round(TITLE_H * 0.5)
@@ -1548,26 +1685,44 @@ async function buildHistoryComposite(pdfDataUrl, files, borderColor, title) {
   ctx.textAlign = 'left'
   ctx.textBaseline = 'alphabetic'
 
-  // === PDF 铺满剩余内容区（cover 模式，超出部分裁剪）===
+  // === PDF 带随机外边距放入内容区（contain 模式，四周留白）===
   const pdfAreaX = innerX
   const pdfAreaY = innerY + TITLE_H
   const pdfAreaW = innerW
   const pdfAreaH = innerH - TITLE_H
 
-  const scaleW = pdfAreaW / pdfImg.width
-  const scaleH = pdfAreaH / pdfImg.height
-  const scale = Math.max(scaleW, scaleH)
-  const pdfDrawW = pdfImg.width * scale
-  const pdfDrawH = pdfImg.height * scale
+  const rndInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min
+
+  // 随机裁边：四边各独立随机裁 30~70px
+  const cropL = rndInt(30, 70)
+  const cropR = rndInt(30, 70)
+  const cropT = rndInt(30, 70)
+  const cropB = rndInt(30, 70)
+  const srcX = cropL
+  const srcY = cropT
+  const srcW = pdfImg.width - cropL - cropR
+  const srcH = pdfImg.height - cropT - cropB
+
+  // 随机外边距（裁边后的内容再留白）
+  const pdfMargin = rndInt(30, 80)
+  const pdfMaxW = pdfAreaW - pdfMargin * 2
+  const pdfMaxH = pdfAreaH - pdfMargin * 2
+  const scaleW = pdfMaxW / srcW
+  const scaleH = pdfMaxH / srcH
+  const scale = Math.min(scaleW, scaleH)
+  const pdfDrawW = srcW * scale
+  const pdfDrawH = srcH * scale
   const pdfDrawX = pdfAreaX + (pdfAreaW - pdfDrawW) / 2
   const pdfDrawY = pdfAreaY + (pdfAreaH - pdfDrawH) / 2
 
-  ctx.save()
-  ctx.beginPath()
-  ctx.rect(pdfAreaX, pdfAreaY, pdfAreaW, pdfAreaH)
-  ctx.clip()
-  ctx.drawImage(pdfImg, pdfDrawX, pdfDrawY, pdfDrawW, pdfDrawH)
-  ctx.restore()
+  // Z 轴随机缩放：宽度随机偏移 -50~50px，等比作用到高度
+  const scaleOffset = rndInt(-50, 50)
+  const finalDrawW = pdfDrawW + scaleOffset
+  const finalDrawH = pdfDrawH * (finalDrawW / pdfDrawW)
+  const finalDrawX = pdfAreaX + (pdfAreaW - finalDrawW) / 2
+  const finalDrawY = pdfAreaY + (pdfAreaH - finalDrawH) / 2
+
+  ctx.drawImage(pdfImg, srcX, srcY, srcW, srcH, finalDrawX, finalDrawY, finalDrawW, finalDrawH)
 
   // === 右下角目录浮层 ===
   const ICON_SIZE = 36
@@ -1588,9 +1743,8 @@ async function buildHistoryComposite(pdfDataUrl, files, borderColor, title) {
   )
   const OVERLAY_H = pdfFiles.length * ROW_H + OVERLAY_PAD * 2
 
-  const rnd = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min
-  const offsetRight = rnd(30, 80)
-  const offsetBottom = rnd(30, 80)
+  const offsetRight = rndInt(30, 80)
+  const offsetBottom = rndInt(30, 80)
   const overlayX = CANVAS_W - BORDER - OVERLAY_W - offsetRight
   const overlayY = CANVAS_H - BORDER - OVERLAY_H - offsetBottom
 
@@ -1637,13 +1791,14 @@ async function generateDirImage(type) {
 
   const titleMap = {
     exam: '笔试资料完整目录',
-    history: '历年真题（回忆版）',
-    mock: '刷模拟题，巩固知识点',
+    history: pickRandomHistoryTitle(),
+    mock: pickRandomMockTitle(),
   }
   dirDrawer.type = type
   dirDrawer.dirMode = 'dir'
   dirDrawer.title = titleMap[type]
   dirDrawer.borderColor = '#F9863B'
+  dirDrawer.dirOnly = false
   dirDrawer.files = []
   dirDrawer.previewUrl = ''
   dirDrawer.pdfPageDataUrl = ''
@@ -1679,13 +1834,15 @@ async function generateDirImage(type) {
         pdfCanvas.height = viewport.height
         await page.render({ canvasContext: pdfCanvas.getContext('2d'), viewport }).promise
         dirDrawer.pdfPageDataUrl = pdfCanvas.toDataURL('image/png')
-        dirDrawer.previewUrl = await buildHistoryComposite(dirDrawer.pdfPageDataUrl, files, dirDrawer.borderColor, dirDrawer.title)
+        dirDrawer.previewUrl = dirDrawer.dirOnly
+          ? renderCompositeImage(files, dirDrawer.title, dirDrawer.borderColor, dirDrawer.bgColor, dirDrawer.bgOpacity)
+          : await buildHistoryComposite(dirDrawer.pdfPageDataUrl, files, dirDrawer.borderColor, dirDrawer.title, dirDrawer.bgColor, dirDrawer.bgOpacity)
       } else {
         message.warning(`未找到文件名含"${keyword}"的PDF，降级显示目录列表`)
-        dirDrawer.previewUrl = renderCompositeImage(files, dirDrawer.title, dirDrawer.borderColor)
+        dirDrawer.previewUrl = renderCompositeImage(files, dirDrawer.title, dirDrawer.borderColor, dirDrawer.bgColor, dirDrawer.bgOpacity)
       }
     } else {
-      dirDrawer.previewUrl = renderCompositeImage(files, dirDrawer.title, dirDrawer.borderColor)
+      dirDrawer.previewUrl = renderCompositeImage(files, dirDrawer.title, dirDrawer.borderColor, dirDrawer.bgColor, dirDrawer.bgOpacity)
     }
   } catch (e) {
     message.error(e.message || '生成失败')
@@ -1720,7 +1877,7 @@ async function changeDirMode(mode) {
       dirDrawer.pdfPageDataUrl = pdfCanvas.toDataURL('image/png')
       dirDrawer.pdfPreviewUrl = dirDrawer.pdfPageDataUrl
       dirDrawer.pdfFsid = culturePdf.fs_id
-      dirDrawer.previewUrl = await buildHistoryComposite(dirDrawer.pdfPageDataUrl, dirDrawer.files, dirDrawer.borderColor, dirDrawer.title)
+      dirDrawer.previewUrl = await buildHistoryComposite(dirDrawer.pdfPageDataUrl, dirDrawer.files, dirDrawer.borderColor, dirDrawer.title, dirDrawer.bgColor, dirDrawer.bgOpacity)
     } catch (e) {
       message.error(e.message || '加载企业文化PDF失败')
     } finally {
@@ -1731,17 +1888,20 @@ async function changeDirMode(mode) {
     dirDrawer.pdfPageDataUrl = ''
     dirDrawer.pdfPreviewUrl = ''
     dirDrawer.pdfFsid = null
-    dirDrawer.previewUrl = renderCompositeImage(dirDrawer.files, dirDrawer.title, dirDrawer.borderColor)
+    dirDrawer.previewUrl = renderCompositeImage(dirDrawer.files, dirDrawer.title, dirDrawer.borderColor, dirDrawer.bgColor, dirDrawer.bgOpacity)
   }
 }
 
-function downloadCompositeImage() {
+async function downloadCompositeImage() {
   if (!dirDrawer.previewUrl) return
-  const a = document.createElement('a')
-  a.href = dirDrawer.previewUrl
-  const label = dirDrawer.type === 'exam' ? '笔试资料目录' : '真题目录'
-  a.download = `${data.value.company_name || 'product'}-${label}.png`
-  a.click()
+  try {
+    const blob = await processImageForDownload(dirDrawer.previewUrl)
+    const label = dirDrawer.type === 'exam' ? '笔试资料目录'
+      : dirDrawer.type === 'history' ? '真题目录' : '模拟题目录'
+    triggerBlobDownload(blob, `${data.value.company_name || 'product'}-${label}.jpg`)
+  } catch (e) {
+    message.error(e.message || '下载失败')
+  }
 }
 
 let pdfjsLib = null
@@ -1781,7 +1941,7 @@ async function renderPdfFirstPage(file) {
     // history 类型：同步更新合成图
     if (dirDrawer.type === 'history') {
       dirDrawer.pdfPageDataUrl = dirDrawer.pdfPreviewUrl
-      dirDrawer.previewUrl = await buildHistoryComposite(dirDrawer.pdfPageDataUrl, dirDrawer.files, dirDrawer.borderColor, dirDrawer.title)
+      dirDrawer.previewUrl = await buildHistoryComposite(dirDrawer.pdfPageDataUrl, dirDrawer.files, dirDrawer.borderColor, dirDrawer.title, dirDrawer.bgColor, dirDrawer.bgOpacity)
     }
   } catch (e) {
     message.error('PDF渲染失败：' + (e.message || '未知错误'))

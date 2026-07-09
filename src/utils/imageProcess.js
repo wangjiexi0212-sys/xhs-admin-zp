@@ -98,11 +98,19 @@ export function buildRandomGradient(ctx, W, H) {
  *   5. 输出为 JPEG，随机质量 0.88~0.95（改变压缩签名）
  */
 export async function processImageForDownload(srcUrl) {
-  const resp = await fetch(srcUrl, { mode: 'cors' })
-  if (!resp.ok) throw new Error('图片获取失败')
-  const sourceBlob = await resp.blob()
+  let objUrl
+  let needRevoke = false
 
-  const objUrl = URL.createObjectURL(sourceBlob)
+  if (srcUrl.startsWith('data:')) {
+    // data URL 直接使用，无需 fetch
+    objUrl = srcUrl
+  } else {
+    const resp = await fetch(srcUrl, { mode: 'cors' })
+    if (!resp.ok) throw new Error('图片获取失败')
+    const sourceBlob = await resp.blob()
+    objUrl = URL.createObjectURL(sourceBlob)
+    needRevoke = true
+  }
   try {
     const img = await loadImage(objUrl)
 
@@ -148,7 +156,7 @@ export async function processImageForDownload(srcUrl) {
       )
     })
   } finally {
-    URL.revokeObjectURL(objUrl)
+    if (needRevoke) URL.revokeObjectURL(objUrl)
   }
 }
 
