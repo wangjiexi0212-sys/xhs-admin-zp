@@ -426,7 +426,13 @@
           <div v-if="titleGenerating" class="field-placeholder loading-box">
             <a-spin /> <span style="margin-left: 8px; color: #999">正在生成标题...</span>
           </div>
-          <a-input v-else-if="generatedTitle" v-model:value="generatedTitle" placeholder="生成的标题" />
+          <div v-else-if="generatedTitle">
+            <a-input v-model:value="generatedTitle" placeholder="生成的标题" />
+            <div style="text-align: right; font-size: 12px; margin-top: 3px;"
+              :style="{ color: generatedTitle.length > 20 ? '#ff4d4f' : '#999' }">
+              {{ generatedTitle.length }}/20 字
+            </div>
+          </div>
           <div v-else class="field-placeholder"></div>
         </a-form-item>
         <a-form-item>
@@ -1294,6 +1300,7 @@ async function generateTitle() {
       `商品类型：${data.value.job_type_name || ''}`,
       data.value.written_exam_content ? `笔试内容：${data.value.written_exam_content}` : '',
       data.value.interview_content ? `面试内容：${data.value.interview_content}` : '',
+      '注意：标题字数不能超过20个字。',
     ].filter(Boolean).join('\n') + formulaHint
 
     const res = await chatLlm({
@@ -1309,10 +1316,14 @@ async function generateTitle() {
       max_tokens: 512,
       temperature: 0.7,
     })
-    const out = (res.content || '').replace(/^["'「『]+|["'」』]+$/g, '').trim()
+    let out = (res.content || '').replace(/^["'「『]+|["'」』]+$/g, '').trim()
     if (!out) {
       message.error('模型未返回内容')
       return
+    }
+    if (out.length > 20) {
+      out = out.slice(0, 20)
+      message.warning('标题超过20字，已自动截断至20字')
     }
     generatedTitle.value = out
     cardText.value = out
@@ -1394,6 +1405,7 @@ async function generateBody() {
       sourceText,
       '',
       '只输出正文本身，不要重复标题，不要任何额外说明。',
+      '注意：正文中不得出现任何诱导性内容或引流内容（如"关注我"、"添加微信"、"点击链接"、"私信我"、"加群"等），只需聚焦内容本身。',
     ].join('\n')
 
     const res = await chatLlm({
