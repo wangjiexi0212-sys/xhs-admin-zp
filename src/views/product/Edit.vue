@@ -102,6 +102,36 @@
               </a-form-item>
             </a-col>
           </a-row>
+
+          <a-divider style="margin: 8px 0 16px" />
+          <div class="custom-dir-header">
+            <span class="custom-dir-title">自定义目录</span>
+            <a-button type="dashed" size="small" @click="addCustomDir">
+              <template #icon><PlusOutlined /></template>
+              添加目录
+            </a-button>
+          </div>
+          <div v-if="form.baidu_custom_dirs.length" class="custom-dir-list">
+            <div v-for="(dir, idx) in form.baidu_custom_dirs" :key="idx" class="custom-dir-row">
+              <span class="custom-dir-index">{{ idx + 1 }}</span>
+              <a-input
+                v-model:value="dir.name"
+                placeholder="目录名称，如：面试资料"
+                style="width: 180px; flex-shrink: 0"
+                :maxlength="50"
+              />
+              <a-input
+                v-model:value="dir.path"
+                placeholder="网盘路径，如：/我的资源/某单位面试资料"
+                style="flex: 1"
+              />
+              <a-button type="text" danger @click="removeCustomDir(idx)">
+                <template #icon><DeleteOutlined /></template>
+              </a-button>
+            </div>
+            <div class="hint" style="margin-top: 4px">名称将显示为目录标签，路径以 / 开头</div>
+          </div>
+          <div v-else style="color: #bbb; font-size: 13px; padding: 4px 0">暂无自定义目录，点击「添加目录」新增</div>
         </a-card>
 
         <a-card title="小红书信息" :bordered="false" style="margin-top: 12px">
@@ -211,6 +241,7 @@ const form = reactive({
   baidu_path_exam: '',
   baidu_path_history: '',
   baidu_path_mock: '',
+  baidu_custom_dirs: [],  // [{ name: '', path: '' }]
   xhs_product_id: '',
   xhs_content: [],
   xhs_tags: '',
@@ -248,6 +279,9 @@ async function fetchDetail() {
       baidu_path_exam: data.baidu_path_exam ?? '',
       baidu_path_history: data.baidu_path_history ?? '',
       baidu_path_mock: data.baidu_path_mock ?? '',
+      baidu_custom_dirs: Array.isArray(data.baidu_custom_dirs)
+        ? data.baidu_custom_dirs.map(d => ({ name: d.name ?? '', path: d.path ?? '' }))
+        : [],
       xhs_product_id: data.xhs_product_id ?? '',
       xhs_content: Array.isArray(data.xhs_content) ? [...data.xhs_content] : [],
       xhs_tags: Array.isArray(data.xhs_tags) ? data.xhs_tags.join(' ') : (data.xhs_tags ?? ''),
@@ -291,6 +325,9 @@ async function onSubmit() {
       baidu_path_exam: trim(form.baidu_path_exam) || null,
       baidu_path_history: trim(form.baidu_path_history) || null,
       baidu_path_mock: trim(form.baidu_path_mock) || null,
+      baidu_custom_dirs: form.baidu_custom_dirs
+        .map(d => ({ name: trim(d.name), path: trim(d.path) }))
+        .filter(d => d.name || d.path),
       xhs_product_id: trim(form.xhs_product_id) || null,
       xhs_content: form.xhs_content.map(trim).filter(Boolean),
       xhs_tags: trim(form.xhs_tags)
@@ -328,6 +365,14 @@ function addContent() {
 }
 function removeContent(idx) {
   form.xhs_content.splice(idx, 1)
+}
+
+// --- 自定义网盘目录 ---
+function addCustomDir() {
+  form.baidu_custom_dirs.push({ name: '', path: '' })
+}
+function removeCustomDir(idx) {
+  form.baidu_custom_dirs.splice(idx, 1)
 }
 
 // --- 小红书图片 ---
@@ -426,5 +471,34 @@ function onPreviewImage(file) {
   margin-top: 4px;
   font-size: 12px;
   color: #999;
+}
+.custom-dir-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.custom-dir-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: #555;
+}
+.custom-dir-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.custom-dir-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.custom-dir-index {
+  flex-shrink: 0;
+  width: 20px;
+  line-height: 32px;
+  color: #999;
+  font-size: 13px;
+  text-align: center;
 }
 </style>

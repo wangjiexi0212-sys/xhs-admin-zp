@@ -126,44 +126,64 @@
       </a-card>
 
       <a-card title="百度网盘目录" :bordered="false" style="margin-top: 12px">
-        <a-row v-if="!data.baidu_path_exam && !data.baidu_path_history && !data.baidu_path_mock">
+        <a-row v-if="!data.baidu_path_exam && !data.baidu_path_history && !data.baidu_path_mock && !data.baidu_custom_dirs?.length">
           <a-col :span="24" style="color: #999">暂未配置百度网盘目录路径，请在编辑页面填写</a-col>
         </a-row>
-        <a-row :gutter="24" v-else>
-          <a-col :span="8" v-if="data.baidu_path_exam">
-            <div class="baidu-dir-item">
-              <div class="baidu-dir-label">笔试资料目录</div>
-              <div class="baidu-dir-path">{{ data.baidu_path_exam }}</div>
-              <a-space style="margin-top: 8px">
-                <a-button :loading="dirDrawer.loading && dirDrawer.type === 'exam'" @click="generateDirImage('exam')">
-                  生成目录图
-                </a-button>
-              </a-space>
-            </div>
-          </a-col>
-          <a-col :span="8" v-if="data.baidu_path_history">
-            <div class="baidu-dir-item">
-              <div class="baidu-dir-label">真题目录</div>
-              <div class="baidu-dir-path">{{ data.baidu_path_history }}</div>
-              <a-space style="margin-top: 8px">
-                <a-button :loading="dirDrawer.loading && dirDrawer.type === 'history'" @click="generateDirImage('history')">
-                  生成目录图
-                </a-button>
-              </a-space>
-            </div>
-          </a-col>
-          <a-col :span="8" v-if="data.baidu_path_mock">
-            <div class="baidu-dir-item">
-              <div class="baidu-dir-label">模拟题目录</div>
-              <div class="baidu-dir-path">{{ data.baidu_path_mock }}</div>
-              <a-space style="margin-top: 8px">
-                <a-button :loading="dirDrawer.loading && dirDrawer.type === 'mock'" @click="generateDirImage('mock')">
-                  生成目录图
-                </a-button>
-              </a-space>
-            </div>
-          </a-col>
-        </a-row>
+        <template v-else>
+          <a-row :gutter="24" v-if="data.baidu_path_exam || data.baidu_path_history || data.baidu_path_mock">
+            <a-col :span="8" v-if="data.baidu_path_exam">
+              <div class="baidu-dir-item">
+                <div class="baidu-dir-label">笔试资料目录</div>
+                <div class="baidu-dir-path">{{ data.baidu_path_exam }}</div>
+                <a-space style="margin-top: 8px">
+                  <a-button :loading="dirDrawer.loading && dirDrawer.type === 'exam'" @click="generateDirImage('exam')">
+                    生成目录图
+                  </a-button>
+                </a-space>
+              </div>
+            </a-col>
+            <a-col :span="8" v-if="data.baidu_path_history">
+              <div class="baidu-dir-item">
+                <div class="baidu-dir-label">真题目录</div>
+                <div class="baidu-dir-path">{{ data.baidu_path_history }}</div>
+                <a-space style="margin-top: 8px">
+                  <a-button :loading="dirDrawer.loading && dirDrawer.type === 'history'" @click="generateDirImage('history')">
+                    生成目录图
+                  </a-button>
+                </a-space>
+              </div>
+            </a-col>
+            <a-col :span="8" v-if="data.baidu_path_mock">
+              <div class="baidu-dir-item">
+                <div class="baidu-dir-label">模拟题目录</div>
+                <div class="baidu-dir-path">{{ data.baidu_path_mock }}</div>
+                <a-space style="margin-top: 8px">
+                  <a-button :loading="dirDrawer.loading && dirDrawer.type === 'mock'" @click="generateDirImage('mock')">
+                    生成目录图
+                  </a-button>
+                </a-space>
+              </div>
+            </a-col>
+          </a-row>
+
+          <!-- 自定义目录 -->
+          <template v-if="data.baidu_custom_dirs?.length">
+            <a-divider style="margin: 12px 0" />
+            <a-row :gutter="24">
+              <a-col :span="8" v-for="(item, idx) in data.baidu_custom_dirs" :key="idx">
+                <div class="baidu-dir-item">
+                  <div class="baidu-dir-label">{{ item.name || '自定义' }}</div>
+                  <div class="baidu-dir-path">{{ item.path }}</div>
+                  <a-space style="margin-top: 8px">
+                    <a-button :loading="customLoading === idx" @click="openCustomDir(item, idx)">
+                      打开
+                    </a-button>
+                  </a-space>
+                </div>
+              </a-col>
+            </a-row>
+          </template>
+        </template>
       </a-card>
 
       <!-- 目录图画布抽屉 -->
@@ -1501,9 +1521,14 @@ const dirDrawer = reactive({
   pdfFileName: '',
   pdfLoading: false,
   pdfPreviewUrl: '',
-  // history/culture 类型合成用：存储已渲染的 PDF 首页 data URL
+  // history/culture/custom 类型合成用：存储已渲染的 PDF 首页 data URL
   pdfPageDataUrl: '',
+  // 自定义目录专用：记录当前操作的条目下标
+  customIndex: -1,
 })
+
+// 自定义目录各条目的 loading 状态（按 idx 隔离，不影响固定目录的 dirDrawer.loading）
+const customLoading = ref(-1)
 
 function drawFolderIcon(ctx, x, y, size) {
   const s = size
@@ -1635,7 +1660,7 @@ function renderCompositeImage(files, title, borderColor, bgColor, bgOpacity) {
 
 function refreshDirPreview() {
   if (!dirDrawer.files.length) return
-  const usePdf = (dirDrawer.type === 'history' || dirDrawer.type === 'mock' || dirDrawer.dirMode === 'culture')
+  const usePdf = (dirDrawer.type === 'history' || dirDrawer.type === 'mock' || dirDrawer.type === 'custom' || dirDrawer.dirMode === 'culture')
     && dirDrawer.pdfPageDataUrl
     && !dirDrawer.dirOnly
   if (usePdf) {
@@ -1897,7 +1922,9 @@ async function downloadCompositeImage() {
   try {
     const blob = await processImageForDownload(dirDrawer.previewUrl)
     const label = dirDrawer.type === 'exam' ? '笔试资料目录'
-      : dirDrawer.type === 'history' ? '真题目录' : '模拟题目录'
+      : dirDrawer.type === 'history' ? '真题目录'
+      : dirDrawer.type === 'mock' ? '模拟题目录'
+      : (dirDrawer.title || '自定义')
     triggerBlobDownload(blob, `${data.value.company_name || 'product'}-${label}.jpg`)
   } catch (e) {
     message.error(e.message || '下载失败')
@@ -1938,8 +1965,8 @@ async function renderPdfFirstPage(file) {
     canvas.height = viewport.height
     await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise
     dirDrawer.pdfPreviewUrl = canvas.toDataURL('image/png')
-    // history 类型：同步更新合成图
-    if (dirDrawer.type === 'history') {
+    // history / custom 类型：同步更新合成图
+    if (dirDrawer.type === 'history' || dirDrawer.type === 'custom') {
       dirDrawer.pdfPageDataUrl = dirDrawer.pdfPreviewUrl
       dirDrawer.previewUrl = await buildHistoryComposite(dirDrawer.pdfPageDataUrl, dirDrawer.files, dirDrawer.borderColor, dirDrawer.title, dirDrawer.bgColor, dirDrawer.bgOpacity)
     }
@@ -1956,6 +1983,80 @@ function downloadPdfPage() {
   a.href = dirDrawer.pdfPreviewUrl
   a.download = `${dirDrawer.pdfFileName.replace(/\.pdf$/i, '')}-首页.png`
   a.click()
+}
+
+// --- 自定义目录：打开并随机预览一个 PDF ---
+async function openCustomDir(item, idx) {
+  if (!item.path) {
+    message.warning('该条目未配置路径')
+    return
+  }
+  customLoading.value = idx
+  try {
+    const res = await getBaiduFiles(item.path)
+    const files = res.files || []
+    // 筛选 PDF 文件（isdir===0 且文件名以 .pdf 结尾，不区分大小写）
+    const pdfFiles = files.filter(f => f.isdir === 0 && /\.pdf$/i.test(f.name))
+    if (!pdfFiles.length) {
+      message.warning('该目录下暂无 PDF 文件')
+      return
+    }
+
+    // 随机选一个 PDF
+    const pdfFile = pdfFiles[Math.floor(Math.random() * pdfFiles.length)]
+
+    // 目录文件列表（文件夹在前）
+    const sortedFiles = [...files].sort((a, b) => b.isdir - a.isdir)
+
+    // 初始化抽屉状态
+    dirDrawer.type = 'custom'
+    dirDrawer.customIndex = idx
+    dirDrawer.dirMode = 'dir'
+    dirDrawer.title = item.name || '自定义'
+    dirDrawer.borderColor = '#F9863B'
+    // bgColor 复用页面加载时已随机生成的值，无需重新生成
+    dirDrawer.bgOpacity = 0.35
+    dirDrawer.dirOnly = false
+    dirDrawer.files = sortedFiles
+    dirDrawer.previewUrl = ''
+    dirDrawer.pdfPageDataUrl = ''
+    dirDrawer.pdfPreviewUrl = ''
+    dirDrawer.pdfFsid = null
+    dirDrawer.pdfFileName = ''
+    dirDrawer.loading = true
+    dirDrawer.visible = true
+
+    // 渲染随机 PDF 首页
+    const lib = await ensurePdfjs()
+    const pdfDoc = await lib.getDocument({
+      url: `/api/baidu/proxy-pdf?path=${encodeURIComponent(pdfFile.path)}`,
+      httpHeaders: { Authorization: `Bearer ${getToken()}` },
+    }).promise
+    const page = await pdfDoc.getPage(1)
+    const viewport = page.getViewport({ scale: 2 })
+    const pdfCanvas = document.createElement('canvas')
+    pdfCanvas.width = viewport.width
+    pdfCanvas.height = viewport.height
+    await page.render({ canvasContext: pdfCanvas.getContext('2d'), viewport }).promise
+
+    dirDrawer.pdfPageDataUrl = pdfCanvas.toDataURL('image/png')
+    dirDrawer.pdfPreviewUrl = dirDrawer.pdfPageDataUrl
+    dirDrawer.pdfFsid = pdfFile.fs_id
+    dirDrawer.pdfFileName = pdfFile.name
+
+    // 生成合成目录图
+    dirDrawer.previewUrl = await buildHistoryComposite(
+      dirDrawer.pdfPageDataUrl, sortedFiles,
+      dirDrawer.borderColor, dirDrawer.title,
+      dirDrawer.bgColor, dirDrawer.bgOpacity
+    )
+  } catch (e) {
+    message.error(e.message || '打开失败')
+    dirDrawer.visible = false
+  } finally {
+    dirDrawer.loading = false
+    customLoading.value = -1
+  }
 }
 </script>
 
