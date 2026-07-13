@@ -237,17 +237,41 @@
           </template>
           <a-button @click="downloadCompositeImage" :disabled="!dirDrawer.previewUrl">下载目录图</a-button>
           <a-button @click="downloadPdfPage" :disabled="!dirDrawer.pdfPreviewUrl">下载PDF首页</a-button>
+          <a-divider type="vertical" style="height:20px" />
+          <a-button
+            :type="mosaicMode ? 'primary' : 'default'"
+            size="small"
+            :disabled="!dirDrawer.previewUrl"
+            @click="toggleMosaicMode"
+          >🖌 马赛克涂鸦{{ mosaicMode ? '（点击关闭）' : '' }}</a-button>
+          <template v-if="mosaicMode">
+            <span style="font-size:12px;color:#555;white-space:nowrap">笔触大小：</span>
+            <input type="range" v-model.number="mosaicBlockSize" min="10" max="80" step="5"
+              style="width:80px;accent-color:#1677ff;cursor:pointer" />
+            <span style="font-size:12px;color:#999;min-width:32px">{{ mosaicBlockSize }}px</span>
+          </template>
+          <a-button v-if="mosaicHasPaint" size="small" danger @click="clearMosaic">清除马赛克</a-button>
         </div>
 
         <!-- 两栏主区域 -->
         <div style="flex:1; display:flex; gap:16px; min-height:0; overflow:hidden">
           <!-- 左栏：目录图预览 -->
-          <div style="width:60%; overflow:auto; display:flex; justify-content:center; align-items:flex-start; background:#f0f0f0; border-radius:8px; padding:20px">
+          <div style="width:60%; overflow:auto; display:flex; justify-content:center; align-items:flex-start; background:#f0f0f0; border-radius:8px; padding:20px; user-select:none">
             <a-spin v-if="dirDrawer.loading" style="margin-top:60px" />
-            <img
+            <canvas
               v-else-if="dirDrawer.previewUrl"
-              :src="dirDrawer.previewUrl"
-              style="max-width:100%; box-shadow:0 4px 20px rgba(0,0,0,0.15); border-radius:4px; display:block"
+              ref="previewCanvasRef"
+              :style="{
+                maxWidth: '100%',
+                boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+                borderRadius: '4px',
+                display: 'block',
+                cursor: mosaicMode ? 'crosshair' : 'default'
+              }"
+              @mousedown="onMosaicStart"
+              @mousemove="onMosaicMove"
+              @mouseup="onMosaicEnd"
+              @mouseleave="onMosaicEnd"
             />
             <div v-else style="color:#999;margin-top:60px">暂无预览</div>
           </div>
@@ -693,7 +717,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import { LeftOutlined, EditOutlined, FileTextOutlined, DownloadOutlined, BulbOutlined, FileWordOutlined, SyncOutlined, CheckCircleOutlined, CloseCircleOutlined, ClockCircleOutlined, FormOutlined, StopOutlined, CopyOutlined } from '@ant-design/icons-vue'
@@ -1920,7 +1944,11 @@ async function changeDirMode(mode) {
 async function downloadCompositeImage() {
   if (!dirDrawer.previewUrl) return
   try {
-    const blob = await processImageForDownload(dirDrawer.previewUrl)
+    // 有马赛克涂鸦时，从 canvas 读取最终图（马赛克已合入）；否则使用原始 previewUrl
+    const sourceUrl = (mosaicHasPaint.value && previewCanvasRef.value)
+      ? previewCanvasRef.value.toDataURL('image/png')
+      : dirDrawer.previewUrl
+    const blob = await processImageForDownload(sourceUrl)
     const label = dirDrawer.type === 'exam' ? '笔试资料目录'
       : dirDrawer.type === 'history' ? '真题目录'
       : dirDrawer.type === 'mock' ? '模拟题目录'
@@ -1929,6 +1957,122 @@ async function downloadCompositeImage() {
   } catch (e) {
     message.error(e.message || '下载失败')
   }
+}
+
+// --- 马赛克涂鸦 ---
+const previewCanvasRef = ref(null)
+const mosaicMode = ref(false)
+const mosaicBlockSize = ref(20)
+const mosaicHasPaint = ref(false)
+let mosaicIsDrawing = false
+let mosaicBaseDataUrl = ''  // 原始图（无马赛克），用于"清除"还原
+
+function toggleMosaicMode() {
+  mosaicMode.value = !mosaicMode.value
+  if (!mosaicMode.value) mosaicIsDrawing = false
+}
+
+function clearMosaic() {
+  if (!mosaicBaseDataUrl || !previewCanvasRef.value) return
+  const img = new Image()
+  img.onload = () => {
+    const canvas = previewCanvasRef.value
+    if (!canvas) return
+    canvas.width = img.naturalWidth
+    canvas.height = img.naturalHeight
+    canvas.getContext('2d').drawImage(img, 0, 0)
+    mosaicHasPaint.value = false
+  }
+  img.src = mosaicBaseDataUrl
+}
+
+// 每次 previewUrl 更新时，把新图画到 canvas 上并重置马赛克状态
+watch(() => dirDrawer.previewUrl, (url) => {
+  if (!url) return
+  mosaicBaseDataUrl = url
+  mosaicHasPaint.value = false
+  mosaicIsDrawing = false
+  nextTick(() => {
+    const canvas = previewCanvasRef.value
+    if (!canvas) return
+    const img = new Image()
+    img.onload = () => {
+      canvas.width = img.naturalWidth
+      canvas.height = img.naturalHeight
+      canvas.getContext('2d').drawImage(img, 0, 0)
+    }
+    img.src = url
+  })
+})
+
+// 抽屉关闭时重置马赛克状态
+watch(() => dirDrawer.visible, (v) => {
+  if (!v) {
+    mosaicMode.value = false
+    mosaicHasPaint.value = false
+    mosaicIsDrawing = false
+  }
+})
+
+function getMosaicCanvasCoords(event) {
+  const canvas = previewCanvasRef.value
+  if (!canvas) return null
+  const rect = canvas.getBoundingClientRect()
+  const scaleX = canvas.width / rect.width
+  const scaleY = canvas.height / rect.height
+  return {
+    x: Math.round((event.clientX - rect.left) * scaleX),
+    y: Math.round((event.clientY - rect.top) * scaleY),
+  }
+}
+
+function applyMosaicAtPoint(cx, cy) {
+  const canvas = previewCanvasRef.value
+  if (!canvas) return
+  const ctx = canvas.getContext('2d')
+  const blockSize = mosaicBlockSize.value
+  const brushRadius = blockSize * 2  // 涂抹半径，覆盖约 4x4 个像素块
+
+  // 对齐到块边界
+  const x0 = Math.max(0, Math.floor((cx - brushRadius) / blockSize) * blockSize)
+  const y0 = Math.max(0, Math.floor((cy - brushRadius) / blockSize) * blockSize)
+  const x1 = Math.min(canvas.width, Math.ceil((cx + brushRadius) / blockSize) * blockSize)
+  const y1 = Math.min(canvas.height, Math.ceil((cy + brushRadius) / blockSize) * blockSize)
+
+  for (let by = y0; by < y1; by += blockSize) {
+    for (let bx = x0; bx < x1; bx += blockSize) {
+      const bw = Math.min(blockSize, canvas.width - bx)
+      const bh = Math.min(blockSize, canvas.height - by)
+      if (bw <= 0 || bh <= 0) continue
+
+      // 采样块中心像素颜色，填满整个块（马赛克效果）
+      const sx = Math.min(bx + Math.floor(bw / 2), canvas.width - 1)
+      const sy = Math.min(by + Math.floor(bh / 2), canvas.height - 1)
+      const pixel = ctx.getImageData(sx, sy, 1, 1).data
+      ctx.fillStyle = `rgb(${pixel[0]},${pixel[1]},${pixel[2]})`
+      ctx.fillRect(bx, by, bw, bh)
+    }
+  }
+  mosaicHasPaint.value = true
+}
+
+function onMosaicStart(event) {
+  if (!mosaicMode.value) return
+  event.preventDefault()
+  mosaicIsDrawing = true
+  const pos = getMosaicCanvasCoords(event)
+  if (pos) applyMosaicAtPoint(pos.x, pos.y)
+}
+
+function onMosaicMove(event) {
+  if (!mosaicMode.value || !mosaicIsDrawing) return
+  event.preventDefault()
+  const pos = getMosaicCanvasCoords(event)
+  if (pos) applyMosaicAtPoint(pos.x, pos.y)
+}
+
+function onMosaicEnd() {
+  mosaicIsDrawing = false
 }
 
 let pdfjsLib = null
