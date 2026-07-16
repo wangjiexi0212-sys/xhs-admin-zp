@@ -126,6 +126,17 @@
       </a-card>
 
       <a-card title="百度网盘目录" :bordered="false" style="margin-top: 12px">
+        <template #extra>
+          <a-button
+            v-if="data.baidu_path_exam || data.baidu_path_history || data.baidu_path_mock || data.baidu_custom_dirs?.length"
+            type="primary"
+            :loading="batchDownloading"
+            @click="batchDownloadAllDirImages"
+          >
+            <template #icon><DownloadOutlined /></template>
+            {{ batchDownloading ? `生成中 ${batchProgress.done}/${batchProgress.total}...` : '打包下载全部目录图' }}
+          </a-button>
+        </template>
         <a-row v-if="!data.baidu_path_exam && !data.baidu_path_history && !data.baidu_path_mock && !data.baidu_custom_dirs?.length">
           <a-col :span="24" style="color: #999">暂未配置百度网盘目录路径，请在编辑页面填写</a-col>
         </a-row>
@@ -1868,48 +1879,61 @@ async function generateDirImage(type) {
   dirDrawer.loading = true
   dirDrawer.visible = true
 
-  try {
-    const res = await getBaiduFiles(path)
-    const files = res.files || []
-    if (!files.length) {
-      message.warning('该目录下暂无文件')
-      return
-    }
-    files.sort((a, b) => b.isdir - a.isdir)
-    dirDrawer.files = files
+  const MAX_RETRY = 5
+  let lastErr = null
+  for (let attempt = 1; attempt <= MAX_RETRY; attempt++) {
+    try {
+      const res = await getBaiduFiles(path)
+      const files = res.files || []
+      if (!files.length) {
+        message.warning('该目录下暂无文件')
+        dirDrawer.loading = false
+        return
+      }
+      files.sort((a, b) => b.isdir - a.isdir)
+      dirDrawer.files = files
 
-    if (type === 'history' || type === 'mock') {
-      // history 找含「2025」的 PDF，mock 找含「2026」的 PDF
-      const keyword = type === 'mock' ? '2026' : '2025'
-      const targetPdf = files.find(f => f.isdir === 0 && f.name.includes(keyword))
-      if (targetPdf) {
-        const lib = await ensurePdfjs()
-        const pdfDoc = await lib.getDocument({
-          url: `/api/baidu/proxy-pdf?path=${encodeURIComponent(targetPdf.path)}`,
-          httpHeaders: { Authorization: `Bearer ${getToken()}` },
-        }).promise
-        const page = await pdfDoc.getPage(1)
-        const viewport = page.getViewport({ scale: 2 })
-        const pdfCanvas = document.createElement('canvas')
-        pdfCanvas.width = viewport.width
-        pdfCanvas.height = viewport.height
-        await page.render({ canvasContext: pdfCanvas.getContext('2d'), viewport }).promise
-        dirDrawer.pdfPageDataUrl = pdfCanvas.toDataURL('image/png')
-        dirDrawer.previewUrl = dirDrawer.dirOnly
-          ? renderCompositeImage(files, dirDrawer.title, dirDrawer.borderColor, dirDrawer.bgColor, dirDrawer.bgOpacity)
-          : await buildHistoryComposite(dirDrawer.pdfPageDataUrl, files, dirDrawer.borderColor, dirDrawer.title, dirDrawer.bgColor, dirDrawer.bgOpacity)
+      if (type === 'history' || type === 'mock') {
+        // history 找含「2025」的 PDF，mock 找含「2026」的 PDF
+        const keyword = type === 'mock' ? '2026' : '2025'
+        const targetPdf = files.find(f => f.isdir === 0 && f.name.includes(keyword))
+        if (targetPdf) {
+          const lib = await ensurePdfjs()
+          const pdfDoc = await lib.getDocument({
+            url: `/api/baidu/proxy-pdf?path=${encodeURIComponent(targetPdf.path)}`,
+            httpHeaders: { Authorization: `Bearer ${getToken()}` },
+          }).promise
+          const page = await pdfDoc.getPage(1)
+          const viewport = page.getViewport({ scale: 2 })
+          const pdfCanvas = document.createElement('canvas')
+          pdfCanvas.width = viewport.width
+          pdfCanvas.height = viewport.height
+          await page.render({ canvasContext: pdfCanvas.getContext('2d'), viewport }).promise
+          dirDrawer.pdfPageDataUrl = pdfCanvas.toDataURL('image/png')
+          dirDrawer.previewUrl = dirDrawer.dirOnly
+            ? renderCompositeImage(files, dirDrawer.title, dirDrawer.borderColor, dirDrawer.bgColor, dirDrawer.bgOpacity)
+            : await buildHistoryComposite(dirDrawer.pdfPageDataUrl, files, dirDrawer.borderColor, dirDrawer.title, dirDrawer.bgColor, dirDrawer.bgOpacity)
+        } else {
+          message.warning(`未找到文件名含"${keyword}"的PDF，降级显示目录列表`)
+          dirDrawer.previewUrl = renderCompositeImage(files, dirDrawer.title, dirDrawer.borderColor, dirDrawer.bgColor, dirDrawer.bgOpacity)
+        }
       } else {
-        message.warning(`未找到文件名含"${keyword}"的PDF，降级显示目录列表`)
         dirDrawer.previewUrl = renderCompositeImage(files, dirDrawer.title, dirDrawer.borderColor, dirDrawer.bgColor, dirDrawer.bgOpacity)
       }
-    } else {
-      dirDrawer.previewUrl = renderCompositeImage(files, dirDrawer.title, dirDrawer.borderColor, dirDrawer.bgColor, dirDrawer.bgOpacity)
+      lastErr = null
+      break  // 成功，退出重试循环
+    } catch (e) {
+      lastErr = e
+      if (attempt < MAX_RETRY) {
+        message.warning(`第 ${attempt} 次请求失败，正在自动重试...`)
+        await new Promise(r => setTimeout(r, 1000))
+      }
     }
-  } catch (e) {
-    message.error(e.message || '生成失败')
-  } finally {
-    dirDrawer.loading = false
   }
+  if (lastErr) {
+    message.error((lastErr.message || '生成失败') + `，已重试 ${MAX_RETRY} 次`)
+  }
+  dirDrawer.loading = false
 }
 
 async function changeDirMode(mode) {
@@ -2141,6 +2165,220 @@ function downloadPdfPage() {
   a.click()
 }
 
+// --- 打包下载全部目录图 ---
+const batchDownloading = ref(false)
+const batchProgress = reactive({ done: 0, total: 0 })
+
+let jsZipLib = null
+async function ensureJSZip() {
+  if (jsZipLib) return jsZipLib
+  await new Promise((resolve, reject) => {
+    const script = document.createElement('script')
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
+    script.onload = resolve
+    script.onerror = reject
+    document.head.appendChild(script)
+  })
+  jsZipLib = window.JSZip
+  return jsZipLib
+}
+
+/**
+ * 带重试的 getBaiduFiles（最多 MAX_RETRY 次）
+ */
+async function getBaiduFilesWithRetry(path, MAX_RETRY = 5) {
+  let lastErr = null
+  for (let attempt = 1; attempt <= MAX_RETRY; attempt++) {
+    try {
+      return await getBaiduFiles(path)
+    } catch (e) {
+      lastErr = e
+      if (attempt < MAX_RETRY) {
+        await new Promise(r => setTimeout(r, 1000))
+      }
+    }
+  }
+  throw lastErr
+}
+
+/**
+ * 生成某个目录的目录图（dataURL），失败抛出异常
+ * type: 'exam' | 'history' | 'mock' | 'custom'
+ */
+async function buildDirImageForBatch(path, type, title) {
+  const res = await getBaiduFilesWithRetry(path)
+  const files = res.files || []
+  if (!files.length) throw new Error('目录为空')
+  files.sort((a, b) => b.isdir - a.isdir)
+
+  if (type === 'history' || type === 'mock') {
+    const keyword = type === 'mock' ? '2026' : '2025'
+    const targetPdf = files.find(f => f.isdir === 0 && f.name.includes(keyword))
+    if (targetPdf) {
+      try {
+        const lib = await ensurePdfjs()
+        const pdfDoc = await lib.getDocument({
+          url: `/api/baidu/proxy-pdf?path=${encodeURIComponent(targetPdf.path)}`,
+          httpHeaders: { Authorization: `Bearer ${getToken()}` },
+        }).promise
+        const page = await pdfDoc.getPage(1)
+        const viewport = page.getViewport({ scale: 2 })
+        const pdfCanvas = document.createElement('canvas')
+        pdfCanvas.width = viewport.width
+        pdfCanvas.height = viewport.height
+        await page.render({ canvasContext: pdfCanvas.getContext('2d'), viewport }).promise
+        const pdfDataUrl = pdfCanvas.toDataURL('image/png')
+        return await buildHistoryComposite(pdfDataUrl, files, '#F9863B', title, pickRandomBgColor(), 0.35)
+      } catch (_) {
+        // PDF 合成失败时降级为纯目录图
+      }
+    }
+    return renderCompositeImage(files, title, '#F9863B', pickRandomBgColor(), 0.35)
+  }
+
+  if (type === 'custom') {
+    const pdfFiles = files.filter(f => f.isdir === 0 && /\.pdf$/i.test(f.name))
+    if (pdfFiles.length) {
+      try {
+        const pdfFile = pdfFiles[Math.floor(Math.random() * pdfFiles.length)]
+        const lib = await ensurePdfjs()
+        const pdfDoc = await lib.getDocument({
+          url: `/api/baidu/proxy-pdf?path=${encodeURIComponent(pdfFile.path)}`,
+          httpHeaders: { Authorization: `Bearer ${getToken()}` },
+        }).promise
+        const page = await pdfDoc.getPage(1)
+        const viewport = page.getViewport({ scale: 2 })
+        const pdfCanvas = document.createElement('canvas')
+        pdfCanvas.width = viewport.width
+        pdfCanvas.height = viewport.height
+        await page.render({ canvasContext: pdfCanvas.getContext('2d'), viewport }).promise
+        const pdfDataUrl = pdfCanvas.toDataURL('image/png')
+        return await buildHistoryComposite(pdfDataUrl, files, '#F9863B', title, pickRandomBgColor(), 0.35)
+      } catch (_) {
+        // PDF 合成失败时降级为纯目录图
+      }
+    }
+    return renderCompositeImage(files, title, '#F9863B', pickRandomBgColor(), 0.35)
+  }
+
+  // exam 类型：纯目录图
+  return renderCompositeImage(files, title, '#F9863B', pickRandomBgColor(), 0.35)
+}
+
+async function batchDownloadAllDirImages() {
+  if (batchDownloading.value) return
+
+  // 收集需要下载的目录任务
+  const tasks = []
+  if (data.value.baidu_path_exam) {
+    tasks.push({ path: data.value.baidu_path_exam, type: 'exam', label: '笔试资料目录', title: '笔试资料完整目录' })
+  }
+  if (data.value.baidu_path_exam) {
+    // 企业文化：复用 exam 路径，需要找「企业文化」PDF
+    tasks.push({ path: data.value.baidu_path_exam, type: 'culture', label: '企业文化目录', title: '企业近况及文化' })
+  }
+  if (data.value.baidu_path_history) {
+    tasks.push({ path: data.value.baidu_path_history, type: 'history', label: '真题目录', title: pickRandomHistoryTitle() })
+  }
+  if (data.value.baidu_path_mock) {
+    tasks.push({ path: data.value.baidu_path_mock, type: 'mock', label: '模拟题目录', title: pickRandomMockTitle() })
+  }
+  if (data.value.baidu_custom_dirs?.length) {
+    data.value.baidu_custom_dirs.forEach((item, idx) => {
+      tasks.push({ path: item.path, type: 'custom', label: item.name || `自定义${idx + 1}`, title: item.name || '自定义' })
+    })
+  }
+
+  if (!tasks.length) {
+    message.warning('暂无可下载的目录')
+    return
+  }
+
+  batchDownloading.value = true
+  batchProgress.done = 0
+  batchProgress.total = tasks.length
+
+  let JSZip
+  try {
+    JSZip = await ensureJSZip()
+  } catch (e) {
+    message.error('JSZip 加载失败，请检查网络')
+    batchDownloading.value = false
+    return
+  }
+
+  const zip = new JSZip()
+  const company = data.value.company_name || 'product'
+  const errors = []
+
+  for (const task of tasks) {
+    try {
+      let dataUrl
+
+      if (task.type === 'culture') {
+        // 企业文化：在 exam 路径下找「企业文化」PDF
+        const res = await getBaiduFilesWithRetry(task.path)
+        const files = res.files || []
+        files.sort((a, b) => b.isdir - a.isdir)
+        const culturePdf = files.find(f => f.isdir === 0 && f.name.includes('企业文化'))
+        if (!culturePdf) {
+          errors.push(`${task.label}：未找到"企业文化"PDF文件`)
+          batchProgress.done++
+          continue
+        }
+        try {
+          const lib = await ensurePdfjs()
+          const pdfDoc = await lib.getDocument({
+            url: `/api/baidu/proxy-pdf?path=${encodeURIComponent(culturePdf.path)}`,
+            httpHeaders: { Authorization: `Bearer ${getToken()}` },
+          }).promise
+          const page = await pdfDoc.getPage(1)
+          const viewport = page.getViewport({ scale: 2 })
+          const pdfCanvas = document.createElement('canvas')
+          pdfCanvas.width = viewport.width
+          pdfCanvas.height = viewport.height
+          await page.render({ canvasContext: pdfCanvas.getContext('2d'), viewport }).promise
+          const pdfDataUrl = pdfCanvas.toDataURL('image/png')
+          dataUrl = await buildHistoryComposite(pdfDataUrl, files, '#F9863B', task.title, pickRandomBgColor(), 0.35)
+        } catch (e) {
+          errors.push(`${task.label}：${e.message || '生成失败'}`)
+          batchProgress.done++
+          continue
+        }
+      } else {
+        dataUrl = await buildDirImageForBatch(task.path, task.type, task.title)
+      }
+
+      // dataURL → base64 → 加入 zip（dataURL 为 PNG）
+      const base64 = dataUrl.replace(/^data:image\/png;base64,/, '')
+      zip.file(`${company}-${task.label}.png`, base64, { base64: true })
+    } catch (e) {
+      errors.push(`${task.label}：${e.message || '生成失败'}`)
+    }
+    batchProgress.done++
+  }
+
+  if (errors.length === tasks.length) {
+    message.error('所有目录图生成失败：' + errors.join('；'))
+    batchDownloading.value = false
+    return
+  }
+
+  try {
+    const blob = await zip.generateAsync({ type: 'blob' })
+    triggerBlobDownload(blob, `${company}-百度网盘目录图.zip`)
+    if (errors.length) {
+      message.warning(`已打包 ${tasks.length - errors.length} 张，${errors.length} 张失败：${errors.join('；')}`)
+    } else {
+      message.success(`已成功打包 ${tasks.length} 张目录图`)
+    }
+  } catch (e) {
+    message.error('ZIP 生成失败：' + (e.message || '未知错误'))
+  } finally {
+    batchDownloading.value = false
+  }
+}
+
 // --- 自定义目录：打开并随机预览一个 PDF ---
 async function openCustomDir(item, idx) {
   if (!item.path) {
@@ -2148,71 +2386,86 @@ async function openCustomDir(item, idx) {
     return
   }
   customLoading.value = idx
-  try {
-    const res = await getBaiduFiles(item.path)
-    const files = res.files || []
-    // 筛选 PDF 文件（isdir===0 且文件名以 .pdf 结尾，不区分大小写）
-    const pdfFiles = files.filter(f => f.isdir === 0 && /\.pdf$/i.test(f.name))
-    if (!pdfFiles.length) {
-      message.warning('该目录下暂无 PDF 文件')
-      return
+  const MAX_RETRY = 5
+  let lastErr = null
+  for (let attempt = 1; attempt <= MAX_RETRY; attempt++) {
+    try {
+      const res = await getBaiduFiles(item.path)
+      const files = res.files || []
+      // 筛选 PDF 文件（isdir===0 且文件名以 .pdf 结尾，不区分大小写）
+      const pdfFiles = files.filter(f => f.isdir === 0 && /\.pdf$/i.test(f.name))
+      if (!pdfFiles.length) {
+        message.warning('该目录下暂无 PDF 文件')
+        customLoading.value = -1
+        return
+      }
+
+      // 随机选一个 PDF
+      const pdfFile = pdfFiles[Math.floor(Math.random() * pdfFiles.length)]
+
+      // 目录文件列表（文件夹在前）
+      const sortedFiles = [...files].sort((a, b) => b.isdir - a.isdir)
+
+      // 初始化抽屉状态（首次进入时打开抽屉）
+      if (attempt === 1) {
+        dirDrawer.type = 'custom'
+        dirDrawer.customIndex = idx
+        dirDrawer.dirMode = 'dir'
+        dirDrawer.title = item.name || '自定义'
+        dirDrawer.borderColor = '#F9863B'
+        // bgColor 复用页面加载时已随机生成的值，无需重新生成
+        dirDrawer.bgOpacity = 0.35
+        dirDrawer.dirOnly = false
+        dirDrawer.previewUrl = ''
+        dirDrawer.pdfPageDataUrl = ''
+        dirDrawer.pdfPreviewUrl = ''
+        dirDrawer.pdfFsid = null
+        dirDrawer.pdfFileName = ''
+        dirDrawer.loading = true
+        dirDrawer.visible = true
+      }
+      dirDrawer.files = sortedFiles
+
+      // 渲染随机 PDF 首页
+      const lib = await ensurePdfjs()
+      const pdfDoc = await lib.getDocument({
+        url: `/api/baidu/proxy-pdf?path=${encodeURIComponent(pdfFile.path)}`,
+        httpHeaders: { Authorization: `Bearer ${getToken()}` },
+      }).promise
+      const page = await pdfDoc.getPage(1)
+      const viewport = page.getViewport({ scale: 2 })
+      const pdfCanvas = document.createElement('canvas')
+      pdfCanvas.width = viewport.width
+      pdfCanvas.height = viewport.height
+      await page.render({ canvasContext: pdfCanvas.getContext('2d'), viewport }).promise
+
+      dirDrawer.pdfPageDataUrl = pdfCanvas.toDataURL('image/png')
+      dirDrawer.pdfPreviewUrl = dirDrawer.pdfPageDataUrl
+      dirDrawer.pdfFsid = pdfFile.fs_id
+      dirDrawer.pdfFileName = pdfFile.name
+
+      // 生成合成目录图
+      dirDrawer.previewUrl = await buildHistoryComposite(
+        dirDrawer.pdfPageDataUrl, sortedFiles,
+        dirDrawer.borderColor, dirDrawer.title,
+        dirDrawer.bgColor, dirDrawer.bgOpacity
+      )
+      lastErr = null
+      break  // 成功，退出重试循环
+    } catch (e) {
+      lastErr = e
+      if (attempt < MAX_RETRY) {
+        message.warning(`第 ${attempt} 次请求失败，正在自动重试...`)
+        await new Promise(r => setTimeout(r, 1000))
+      }
     }
-
-    // 随机选一个 PDF
-    const pdfFile = pdfFiles[Math.floor(Math.random() * pdfFiles.length)]
-
-    // 目录文件列表（文件夹在前）
-    const sortedFiles = [...files].sort((a, b) => b.isdir - a.isdir)
-
-    // 初始化抽屉状态
-    dirDrawer.type = 'custom'
-    dirDrawer.customIndex = idx
-    dirDrawer.dirMode = 'dir'
-    dirDrawer.title = item.name || '自定义'
-    dirDrawer.borderColor = '#F9863B'
-    // bgColor 复用页面加载时已随机生成的值，无需重新生成
-    dirDrawer.bgOpacity = 0.35
-    dirDrawer.dirOnly = false
-    dirDrawer.files = sortedFiles
-    dirDrawer.previewUrl = ''
-    dirDrawer.pdfPageDataUrl = ''
-    dirDrawer.pdfPreviewUrl = ''
-    dirDrawer.pdfFsid = null
-    dirDrawer.pdfFileName = ''
-    dirDrawer.loading = true
-    dirDrawer.visible = true
-
-    // 渲染随机 PDF 首页
-    const lib = await ensurePdfjs()
-    const pdfDoc = await lib.getDocument({
-      url: `/api/baidu/proxy-pdf?path=${encodeURIComponent(pdfFile.path)}`,
-      httpHeaders: { Authorization: `Bearer ${getToken()}` },
-    }).promise
-    const page = await pdfDoc.getPage(1)
-    const viewport = page.getViewport({ scale: 2 })
-    const pdfCanvas = document.createElement('canvas')
-    pdfCanvas.width = viewport.width
-    pdfCanvas.height = viewport.height
-    await page.render({ canvasContext: pdfCanvas.getContext('2d'), viewport }).promise
-
-    dirDrawer.pdfPageDataUrl = pdfCanvas.toDataURL('image/png')
-    dirDrawer.pdfPreviewUrl = dirDrawer.pdfPageDataUrl
-    dirDrawer.pdfFsid = pdfFile.fs_id
-    dirDrawer.pdfFileName = pdfFile.name
-
-    // 生成合成目录图
-    dirDrawer.previewUrl = await buildHistoryComposite(
-      dirDrawer.pdfPageDataUrl, sortedFiles,
-      dirDrawer.borderColor, dirDrawer.title,
-      dirDrawer.bgColor, dirDrawer.bgOpacity
-    )
-  } catch (e) {
-    message.error(e.message || '打开失败')
-    dirDrawer.visible = false
-  } finally {
-    dirDrawer.loading = false
-    customLoading.value = -1
   }
+  if (lastErr) {
+    message.error((lastErr.message || '打开失败') + `，已重试 ${MAX_RETRY} 次`)
+    dirDrawer.visible = false
+  }
+  dirDrawer.loading = false
+  customLoading.value = -1
 }
 </script>
 
