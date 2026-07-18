@@ -43,6 +43,7 @@
           <a-menu-item key="/note/card-generator">卡片生成</a-menu-item>
           <a-menu-item key="/note/exam-template">试题模版</a-menu-item>
           <a-menu-item key="/note/components">组件管理</a-menu-item>
+          <a-menu-item key="/note/bg-images">背景图片管理</a-menu-item>
         </a-sub-menu>
         <a-sub-menu key="system">
           <template #icon>

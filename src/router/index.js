@@ -96,6 +96,11 @@ const router = createRouter({
           component: () => import('../views/note/Components.vue'),
         },
         {
+          path: 'note/bg-images',
+          name: 'note-bg-images',
+          component: () => import('../views/note/BgImages.vue'),
+        },
+        {
           path: 'system/llm',
           name: 'system-llm',
           component: () => import('../views/system/Llm.vue'),

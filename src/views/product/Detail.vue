@@ -127,15 +127,23 @@
 
       <a-card title="百度网盘目录" :bordered="false" style="margin-top: 12px">
         <template #extra>
-          <a-button
-            v-if="data.baidu_path_exam || data.baidu_path_history || data.baidu_path_mock || data.baidu_custom_dirs?.length"
-            type="primary"
-            :loading="batchDownloading"
-            @click="batchDownloadAllDirImages"
-          >
-            <template #icon><DownloadOutlined /></template>
-            {{ batchDownloading ? `生成中 ${batchProgress.done}/${batchProgress.total}...` : '打包下载全部目录图' }}
-          </a-button>
+          <a-space>
+            <span style="font-size:13px;color:#555">使用背景图</span>
+            <a-switch v-model:checked="useBgImage" size="small" @change="onUseBgImageChange" />
+            <template v-if="useBgImage">
+              <img v-if="selectedBgImageUrl" :src="selectedBgImageUrl" style="height:28px;width:21px;object-fit:cover;border-radius:3px;border:1px solid #d9d9d9;vertical-align:middle" />
+              <a-button size="small" :loading="bgImageLoading" @click="rePickBgImage">换一张</a-button>
+            </template>
+            <a-button
+              v-if="data.baidu_path_exam || data.baidu_path_history || data.baidu_path_mock || data.baidu_custom_dirs?.length"
+              type="primary"
+              :loading="batchDownloading"
+              @click="batchDownloadAllDirImages"
+            >
+              <template #icon><DownloadOutlined /></template>
+              {{ batchDownloading ? `生成中 ${batchProgress.done}/${batchProgress.total}...` : '打包下载全部目录图' }}
+            </a-button>
+          </a-space>
         </template>
         <a-row v-if="!data.baidu_path_exam && !data.baidu_path_history && !data.baidu_path_mock && !data.baidu_custom_dirs?.length">
           <a-col :span="24" style="color: #999">暂未配置百度网盘目录路径，请在编辑页面填写</a-col>
@@ -379,6 +387,12 @@
 
     <!-- 生成笔记 抽屉 -->
     <a-drawer v-model:open="generateVisible" title="生成笔记" placement="right" width="80%" :destroy-on-close="false">
+      <template #extra>
+        <a-button :loading="noteDownloading" @click="downloadNoteContent">
+          <template #icon><FileWordOutlined /></template>
+          下载笔记内容
+        </a-button>
+      </template>
       <a-form layout="vertical">
         <a-form-item>
           <template #label>
@@ -752,6 +766,9 @@ import { createExamJob, getLatestExamJob, getExamJob, downloadExamJob, downloadE
 import { processImageForDownload, processImageForDisplay, buildRandomGradient, triggerBlobDownload } from '@/utils/imageProcess'
 import { getBaiduFiles } from '@/api/baidu'
 import { getToken } from '@/api/request'
+import { getBgImageList } from '@/api/bgImages'
+import { Document, Packer, Paragraph, TextRun, HeadingLevel } from 'docx'
+import { saveAs } from 'file-saver'
 
 const route = useRoute()
 const router = useRouter()
@@ -766,6 +783,7 @@ const titleGenerating = ref(false)
 const generatedTitle = ref('')
 const cardText = ref('')
 const bodyGenerating = ref(false)
+const noteDownloading = ref(false)
 const generatedBody = ref('')
 const imagesGenerating = ref(false)
 const generatedImages = ref([])
@@ -1148,6 +1166,48 @@ async function copyText(text) {
     message.success('已复制')
   } catch {
     message.error('复制失败')
+  }
+}
+
+// emoji 分段：docx 默认字体不含 emoji 字形，需单独指定 Segoe UI Emoji 字体，否则 Word 内显示为方块或空白
+const EMOJI_SPLIT = /(\p{Extended_Pictographic}(?:\uFE0F)?(?:\u200D\p{Extended_Pictographic}(?:\uFE0F)?)*)/gu
+const EMOJI_TEST = /^(?:\p{Extended_Pictographic}(?:\uFE0F)?(?:\u200D\p{Extended_Pictographic}(?:\uFE0F)?)*)$/u
+
+function textToRuns(text, extraProps = {}) {
+  if (!text) return [new TextRun({ text: '', ...extraProps })]
+  return text.split(EMOJI_SPLIT).filter(Boolean).map(part =>
+    EMOJI_TEST.test(part)
+      ? new TextRun({ text: part, font: 'Segoe UI Emoji', ...extraProps })
+      : new TextRun({ text: part, ...extraProps })
+  )
+}
+
+async function downloadNoteContent() {
+  if (noteDownloading.value) return
+  noteDownloading.value = true
+  try {
+    if (!generatedTitle.value) await generateTitle()
+    if (!generatedBody.value) await generateBody()
+
+    const doc = new Document({
+      sections: [{
+        properties: {},
+        children: [
+          new Paragraph({ heading: HeadingLevel.HEADING_1, children: textToRuns(generatedTitle.value || '（无标题）') }),
+          ...String(generatedBody.value || '（无正文）').split('\n').map(line => new Paragraph({ children: textToRuns(line) })),
+          new Paragraph({ text: '' }),
+          new Paragraph({
+            children: textToRuns(generatedTags.value.length ? generatedTags.value.join(' ') : '（无标签）', { color: 'FF6699' }),
+          }),
+        ],
+      }],
+    })
+    const blob = await Packer.toBlob(doc)
+    saveAs(blob, `笔记-${data.value.company_name || data.value.id || 'note'}.docx`)
+  } catch (e) {
+    message.error(e.message || '下载失败')
+  } finally {
+    noteDownloading.value = false
   }
 }
 
@@ -1535,6 +1595,52 @@ function pickRandomMockTitle() {
 
 // --- 百度网盘目录图生成 ---
 
+// 背景图开关 + 图片池
+const useBgImage = ref(false)
+const bgImageLoading = ref(false)
+const selectedBgImageUrl = ref('')
+let bgImagePool = []
+
+async function ensureBgImagePool() {
+  if (bgImagePool.length) return
+  try {
+    const res = await getBgImageList()
+    bgImagePool = (res.list || []).map(item => item.url).filter(Boolean)
+  } catch { /* ignore */ }
+}
+
+function pickRandomBgImageUrl() {
+  if (!bgImagePool.length) return ''
+  return bgImagePool[Math.floor(Math.random() * bgImagePool.length)]
+}
+
+async function onUseBgImageChange(val) {
+  if (!val) { selectedBgImageUrl.value = ''; return }
+  bgImageLoading.value = true
+  await ensureBgImagePool()
+  selectedBgImageUrl.value = pickRandomBgImageUrl()
+  bgImageLoading.value = false
+  if (!selectedBgImageUrl.value) message.warning('背景图管理中暂无图片，请先上传')
+}
+
+async function rePickBgImage() {
+  bgImageLoading.value = true
+  await ensureBgImagePool()
+  const current = selectedBgImageUrl.value
+  if (bgImagePool.length > 1) {
+    let next = current
+    while (next === current) next = pickRandomBgImageUrl()
+    selectedBgImageUrl.value = next
+  } else {
+    selectedBgImageUrl.value = pickRandomBgImageUrl()
+  }
+  bgImageLoading.value = false
+}
+
+function getActiveBgImageUrl() {
+  return useBgImage.value ? (selectedBgImageUrl.value || null) : null
+}
+
 // 预设淡色背景色池
 const BG_COLOR_POOL = [
   '#a8c8f0', '#f0a8b4', '#a8e0c8', '#f0d0a8',
@@ -1626,10 +1732,10 @@ function drawGridBg(ctx, x, y, w, h, color, opacity, cellSize = 28) {
   ctx.restore()
 }
 
-function renderCompositeImage(files, title, borderColor, bgColor, bgOpacity) {
+function renderCompositeImage(files, title, borderColor, bgColor, bgOpacity, bgImageUrl = null) {
   const DPR = 2
   const W = 600
-  const BORDER = 10
+  const BORDER = bgImageUrl ? 0 : 10
   const PADDING = 28
   const ICON_SIZE = 30
   const ROW_H = 52
@@ -1642,17 +1748,32 @@ function renderCompositeImage(files, title, borderColor, bgColor, bgOpacity) {
   const ctx = canvas.getContext('2d')
   ctx.scale(DPR, DPR)
 
-  // 边框背景
+  if (bgImageUrl) {
+    // 背景图模式：异步，返回 Promise
+    return new Promise(async (resolve) => {
+      try {
+        const img = await loadImage(bgImageUrl)
+        ctx.drawImage(img, 0, 0, W, H)
+      } catch {
+        ctx.fillStyle = '#ffffff'
+        ctx.fillRect(0, 0, W, H)
+      }
+      _drawCompositeContent(ctx, files, title, W, H, BORDER, PADDING, ICON_SIZE, ROW_H, TITLE_H, bgColor, bgOpacity)
+      resolve(canvas.toDataURL('image/png'))
+    })
+  }
+
+  // 普通模式：同步
   ctx.fillStyle = borderColor
   ctx.fillRect(0, 0, W, H)
-
-  // 内部白色区域
   ctx.fillStyle = '#ffffff'
   ctx.fillRect(BORDER, BORDER, W - BORDER * 2, H - BORDER * 2)
-
-  // 格子背景（叠在白色上方）
   drawGridBg(ctx, BORDER, BORDER, W - BORDER * 2, H - BORDER * 2, bgColor, bgOpacity)
+  _drawCompositeContent(ctx, files, title, W, H, BORDER, PADDING, ICON_SIZE, ROW_H, TITLE_H, bgColor, bgOpacity)
+  return canvas.toDataURL('image/png')
+}
 
+function _drawCompositeContent(ctx, files, title, W, H, BORDER, PADDING, ICON_SIZE, ROW_H, TITLE_H, bgColor, bgOpacity) {
   // 标题
   ctx.fillStyle = '#FF0000'
   ctx.font = `bold 34px "PingFang SC", "Microsoft YaHei", sans-serif`
@@ -1701,53 +1822,63 @@ function renderCompositeImage(files, title, borderColor, bgColor, bgOpacity) {
       ctx.stroke()
     }
   })
-
-  return canvas.toDataURL('image/png')
 }
 
 function refreshDirPreview() {
   if (!dirDrawer.files.length) return
+  const bgImg = getActiveBgImageUrl()
   const usePdf = (dirDrawer.type === 'history' || dirDrawer.type === 'mock' || dirDrawer.type === 'custom' || dirDrawer.dirMode === 'culture')
     && dirDrawer.pdfPageDataUrl
     && !dirDrawer.dirOnly
   if (usePdf) {
-    buildHistoryComposite(dirDrawer.pdfPageDataUrl, dirDrawer.files, dirDrawer.borderColor, dirDrawer.title, dirDrawer.bgColor, dirDrawer.bgOpacity)
+    buildHistoryComposite(dirDrawer.pdfPageDataUrl, dirDrawer.files, dirDrawer.borderColor, dirDrawer.title, dirDrawer.bgColor, dirDrawer.bgOpacity, bgImg)
       .then(url => { dirDrawer.previewUrl = url })
   } else {
-    dirDrawer.previewUrl = renderCompositeImage(dirDrawer.files, dirDrawer.title, dirDrawer.borderColor, dirDrawer.bgColor, dirDrawer.bgOpacity)
+    const result = renderCompositeImage(dirDrawer.files, dirDrawer.title, dirDrawer.borderColor, dirDrawer.bgColor, dirDrawer.bgOpacity, bgImg)
+    if (result instanceof Promise) {
+      result.then(url => { dirDrawer.previewUrl = url })
+    } else {
+      dirDrawer.previewUrl = result
+    }
   }
 }
 
 // 新版：整图 1242×1656，外边框，顶部标题 + PDF 铺满 + 右下角目录浮层
-async function buildHistoryComposite(pdfDataUrl, files, borderColor, title, bgColor, bgOpacity) {
+async function buildHistoryComposite(pdfDataUrl, files, borderColor, title, bgColor, bgOpacity, bgImageUrl = null) {
   const pdfImg = await loadImage(pdfDataUrl)
 
   const CANVAS_W = 1242
   const CANVAS_H = 1656
-  const BORDER = 12
-  const TITLE_H = 120  // 标题区高度
+  const BORDER = bgImageUrl ? 0 : 12
+  const TITLE_H = 120
 
   const canvas = document.createElement('canvas')
   canvas.width = CANVAS_W
   canvas.height = CANVAS_H
   const ctx = canvas.getContext('2d')
 
-  // === 整图边框（填满后覆盖内部白色）===
-  ctx.fillStyle = borderColor
-  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H)
+  if (bgImageUrl) {
+    try {
+      const bgImg = await loadImage(bgImageUrl)
+      ctx.drawImage(bgImg, 0, 0, CANVAS_W, CANVAS_H)
+    } catch {
+      ctx.fillStyle = '#ffffff'
+      ctx.fillRect(0, 0, CANVAS_W, CANVAS_H)
+    }
+  } else {
+    ctx.fillStyle = borderColor
+    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H)
+    const innerX = BORDER, innerY = BORDER
+    const innerW = CANVAS_W - BORDER * 2, innerH = CANVAS_H - BORDER * 2
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(innerX, innerY, innerW, innerH)
+    drawGridBg(ctx, innerX, innerY, innerW, innerH, bgColor, bgOpacity, 36)
+  }
 
-  // === 白色内部区域 ===
-  const innerX = BORDER
-  const innerY = BORDER
-  const innerW = CANVAS_W - BORDER * 2
-  const innerH = CANVAS_H - BORDER * 2
-  ctx.fillStyle = '#ffffff'
-  ctx.fillRect(innerX, innerY, innerW, innerH)
+  const innerX = BORDER, innerY = BORDER
+  const innerW = CANVAS_W - BORDER * 2, innerH = CANVAS_H - BORDER * 2
 
-  // === 格子背景（叠在白色上方）===
-  drawGridBg(ctx, innerX, innerY, innerW, innerH, bgColor, bgOpacity, 36)
-
-  // === 标题（红色加粗，白底，居中）===
+  // === 标题（红色加粗，居中）===
   ctx.fillStyle = '#FF0000'
   const fontSize = Math.round(TITLE_H * 0.5)
   ctx.font = `bold ${fontSize}px "PingFang SC", "Microsoft YaHei", sans-serif`
@@ -1861,6 +1992,8 @@ async function generateDirImage(type) {
     : data.value.baidu_path_mock
   if (!path) return
 
+  const bgImg = getActiveBgImageUrl()
+
   const titleMap = {
     exam: '笔试资料完整目录',
     history: pickRandomHistoryTitle(),
@@ -1911,14 +2044,14 @@ async function generateDirImage(type) {
           await page.render({ canvasContext: pdfCanvas.getContext('2d'), viewport }).promise
           dirDrawer.pdfPageDataUrl = pdfCanvas.toDataURL('image/png')
           dirDrawer.previewUrl = dirDrawer.dirOnly
-            ? renderCompositeImage(files, dirDrawer.title, dirDrawer.borderColor, dirDrawer.bgColor, dirDrawer.bgOpacity)
-            : await buildHistoryComposite(dirDrawer.pdfPageDataUrl, files, dirDrawer.borderColor, dirDrawer.title, dirDrawer.bgColor, dirDrawer.bgOpacity)
+            ? await Promise.resolve(renderCompositeImage(files, dirDrawer.title, dirDrawer.borderColor, dirDrawer.bgColor, dirDrawer.bgOpacity, bgImg))
+            : await buildHistoryComposite(dirDrawer.pdfPageDataUrl, files, dirDrawer.borderColor, dirDrawer.title, dirDrawer.bgColor, dirDrawer.bgOpacity, bgImg)
         } else {
           message.warning(`未找到文件名含"${keyword}"的PDF，降级显示目录列表`)
-          dirDrawer.previewUrl = renderCompositeImage(files, dirDrawer.title, dirDrawer.borderColor, dirDrawer.bgColor, dirDrawer.bgOpacity)
+          dirDrawer.previewUrl = await Promise.resolve(renderCompositeImage(files, dirDrawer.title, dirDrawer.borderColor, dirDrawer.bgColor, dirDrawer.bgOpacity, bgImg))
         }
       } else {
-        dirDrawer.previewUrl = renderCompositeImage(files, dirDrawer.title, dirDrawer.borderColor, dirDrawer.bgColor, dirDrawer.bgOpacity)
+        dirDrawer.previewUrl = await Promise.resolve(renderCompositeImage(files, dirDrawer.title, dirDrawer.borderColor, dirDrawer.bgColor, dirDrawer.bgOpacity, bgImg))
       }
       lastErr = null
       break  // 成功，退出重试循环
@@ -1962,7 +2095,7 @@ async function changeDirMode(mode) {
       dirDrawer.pdfPageDataUrl = pdfCanvas.toDataURL('image/png')
       dirDrawer.pdfPreviewUrl = dirDrawer.pdfPageDataUrl
       dirDrawer.pdfFsid = culturePdf.fs_id
-      dirDrawer.previewUrl = await buildHistoryComposite(dirDrawer.pdfPageDataUrl, dirDrawer.files, dirDrawer.borderColor, dirDrawer.title, dirDrawer.bgColor, dirDrawer.bgOpacity)
+      dirDrawer.previewUrl = await buildHistoryComposite(dirDrawer.pdfPageDataUrl, dirDrawer.files, dirDrawer.borderColor, dirDrawer.title, dirDrawer.bgColor, dirDrawer.bgOpacity, getActiveBgImageUrl())
     } catch (e) {
       message.error(e.message || '加载企业文化PDF失败')
     } finally {
@@ -1973,7 +2106,12 @@ async function changeDirMode(mode) {
     dirDrawer.pdfPageDataUrl = ''
     dirDrawer.pdfPreviewUrl = ''
     dirDrawer.pdfFsid = null
-    dirDrawer.previewUrl = renderCompositeImage(dirDrawer.files, dirDrawer.title, dirDrawer.borderColor, dirDrawer.bgColor, dirDrawer.bgOpacity)
+    const result = renderCompositeImage(dirDrawer.files, dirDrawer.title, dirDrawer.borderColor, dirDrawer.bgColor, dirDrawer.bgOpacity, getActiveBgImageUrl())
+    if (result instanceof Promise) {
+      dirDrawer.previewUrl = await result
+    } else {
+      dirDrawer.previewUrl = result
+    }
   }
 }
 
@@ -2148,7 +2286,7 @@ async function renderPdfFirstPage(file) {
     // history / custom 类型：同步更新合成图
     if (dirDrawer.type === 'history' || dirDrawer.type === 'custom') {
       dirDrawer.pdfPageDataUrl = dirDrawer.pdfPreviewUrl
-      dirDrawer.previewUrl = await buildHistoryComposite(dirDrawer.pdfPageDataUrl, dirDrawer.files, dirDrawer.borderColor, dirDrawer.title, dirDrawer.bgColor, dirDrawer.bgOpacity)
+      dirDrawer.previewUrl = await buildHistoryComposite(dirDrawer.pdfPageDataUrl, dirDrawer.files, dirDrawer.borderColor, dirDrawer.title, dirDrawer.bgColor, dirDrawer.bgOpacity, getActiveBgImageUrl())
     }
   } catch (e) {
     message.error('PDF渲染失败：' + (e.message || '未知错误'))
@@ -2408,12 +2546,12 @@ async function openCustomDir(item, idx) {
 
       // 初始化抽屉状态（首次进入时打开抽屉）
       if (attempt === 1) {
+        const bgImg = getActiveBgImageUrl()
         dirDrawer.type = 'custom'
         dirDrawer.customIndex = idx
         dirDrawer.dirMode = 'dir'
         dirDrawer.title = item.name || '自定义'
         dirDrawer.borderColor = '#F9863B'
-        // bgColor 复用页面加载时已随机生成的值，无需重新生成
         dirDrawer.bgOpacity = 0.35
         dirDrawer.dirOnly = false
         dirDrawer.previewUrl = ''
@@ -2448,7 +2586,8 @@ async function openCustomDir(item, idx) {
       dirDrawer.previewUrl = await buildHistoryComposite(
         dirDrawer.pdfPageDataUrl, sortedFiles,
         dirDrawer.borderColor, dirDrawer.title,
-        dirDrawer.bgColor, dirDrawer.bgOpacity
+        dirDrawer.bgColor, dirDrawer.bgOpacity,
+        getActiveBgImageUrl()
       )
       lastErr = null
       break  // 成功，退出重试循环
