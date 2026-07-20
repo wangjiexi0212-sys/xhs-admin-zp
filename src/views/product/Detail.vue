@@ -242,6 +242,17 @@
           </template>
           <span style="font-size:13px;color:#555;white-space:nowrap">标题文案：</span>
           <a-input v-model:value="dirDrawer.title" style="width:200px" @input="refreshDirPreview" />
+          <span style="font-size:13px;color:#555;white-space:nowrap">标题Y轴：</span>
+          <a-input-number
+            v-model:value="dirDrawer.titleY"
+            :min="0"
+            :max="1656"
+            :step="1"
+            placeholder="自动"
+            allow-clear
+            style="width:100px"
+            @change="refreshDirPreview"
+          />
           <span style="font-size:13px;color:#555;white-space:nowrap">边框颜色：</span>
           <input type="color" v-model="dirDrawer.borderColor" @input="refreshDirPreview" style="width:40px;height:32px;border:1px solid #d9d9d9;border-radius:4px;cursor:pointer;padding:2px" />
           <span style="font-size:13px;color:#555;white-space:nowrap">背景色：</span>
@@ -1662,6 +1673,7 @@ const dirDrawer = reactive({
   type: '',
   dirMode: 'dir', // 'dir' | 'culture'，仅 exam 类型可切换
   title: '笔试资料完整目录',
+  titleY: null,  // 标题Y坐标（null=自动居中，可手动指定像素值覆盖）
   borderColor: '#F9863B',
   bgColor: pickRandomBgColor(),
   bgOpacity: 0.35,
@@ -1732,7 +1744,7 @@ function drawGridBg(ctx, x, y, w, h, color, opacity, cellSize = 28) {
   ctx.restore()
 }
 
-function renderCompositeImage(files, title, borderColor, bgColor, bgOpacity, bgImageUrl = null) {
+function renderCompositeImage(files, title, borderColor, bgColor, bgOpacity, bgImageUrl = null, titleY = null) {
   const DPR = 2
   const W = 600
   const BORDER = bgImageUrl ? 0 : 10
@@ -1758,7 +1770,7 @@ function renderCompositeImage(files, title, borderColor, bgColor, bgOpacity, bgI
         ctx.fillStyle = '#ffffff'
         ctx.fillRect(0, 0, W, H)
       }
-      _drawCompositeContent(ctx, files, title, W, H, BORDER, PADDING, ICON_SIZE, ROW_H, TITLE_H, bgColor, bgOpacity)
+      _drawCompositeContent(ctx, files, title, W, H, BORDER, PADDING, ICON_SIZE, ROW_H, TITLE_H, bgColor, bgOpacity, titleY)
       resolve(canvas.toDataURL('image/png'))
     })
   }
@@ -1769,17 +1781,17 @@ function renderCompositeImage(files, title, borderColor, bgColor, bgOpacity, bgI
   ctx.fillStyle = '#ffffff'
   ctx.fillRect(BORDER, BORDER, W - BORDER * 2, H - BORDER * 2)
   drawGridBg(ctx, BORDER, BORDER, W - BORDER * 2, H - BORDER * 2, bgColor, bgOpacity)
-  _drawCompositeContent(ctx, files, title, W, H, BORDER, PADDING, ICON_SIZE, ROW_H, TITLE_H, bgColor, bgOpacity)
+  _drawCompositeContent(ctx, files, title, W, H, BORDER, PADDING, ICON_SIZE, ROW_H, TITLE_H, bgColor, bgOpacity, titleY)
   return canvas.toDataURL('image/png')
 }
 
-function _drawCompositeContent(ctx, files, title, W, H, BORDER, PADDING, ICON_SIZE, ROW_H, TITLE_H, bgColor, bgOpacity) {
+function _drawCompositeContent(ctx, files, title, W, H, BORDER, PADDING, ICON_SIZE, ROW_H, TITLE_H, bgColor, bgOpacity, titleY = null) {
   // 标题
   ctx.fillStyle = '#FF0000'
   ctx.font = `bold 34px "PingFang SC", "Microsoft YaHei", sans-serif`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  ctx.fillText(title, W / 2, BORDER + TITLE_H / 2)
+  ctx.fillText(title, W / 2, titleY ?? (BORDER + TITLE_H / 2))
   ctx.textAlign = 'left'
   ctx.textBaseline = 'alphabetic'
 
@@ -1831,10 +1843,10 @@ function refreshDirPreview() {
     && dirDrawer.pdfPageDataUrl
     && !dirDrawer.dirOnly
   if (usePdf) {
-    buildHistoryComposite(dirDrawer.pdfPageDataUrl, dirDrawer.files, dirDrawer.borderColor, dirDrawer.title, dirDrawer.bgColor, dirDrawer.bgOpacity, bgImg)
+    buildHistoryComposite(dirDrawer.pdfPageDataUrl, dirDrawer.files, dirDrawer.borderColor, dirDrawer.title, dirDrawer.bgColor, dirDrawer.bgOpacity, bgImg, dirDrawer.titleY)
       .then(url => { dirDrawer.previewUrl = url })
   } else {
-    const result = renderCompositeImage(dirDrawer.files, dirDrawer.title, dirDrawer.borderColor, dirDrawer.bgColor, dirDrawer.bgOpacity, bgImg)
+    const result = renderCompositeImage(dirDrawer.files, dirDrawer.title, dirDrawer.borderColor, dirDrawer.bgColor, dirDrawer.bgOpacity, bgImg, dirDrawer.titleY)
     if (result instanceof Promise) {
       result.then(url => { dirDrawer.previewUrl = url })
     } else {
@@ -1844,7 +1856,7 @@ function refreshDirPreview() {
 }
 
 // 新版：整图 1242×1656，外边框，顶部标题 + PDF 铺满 + 右下角目录浮层
-async function buildHistoryComposite(pdfDataUrl, files, borderColor, title, bgColor, bgOpacity, bgImageUrl = null) {
+async function buildHistoryComposite(pdfDataUrl, files, borderColor, title, bgColor, bgOpacity, bgImageUrl = null, titleY = null) {
   const pdfImg = await loadImage(pdfDataUrl)
 
   const CANVAS_W = 1242
@@ -1884,7 +1896,7 @@ async function buildHistoryComposite(pdfDataUrl, files, borderColor, title, bgCo
   ctx.font = `bold ${fontSize}px "PingFang SC", "Microsoft YaHei", sans-serif`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  ctx.fillText(title, CANVAS_W / 2, innerY + TITLE_H / 2)
+  ctx.fillText(title, CANVAS_W / 2, titleY ?? (innerY + TITLE_H / 2))
   ctx.textAlign = 'left'
   ctx.textBaseline = 'alphabetic'
 
@@ -2002,6 +2014,7 @@ async function generateDirImage(type) {
   dirDrawer.type = type
   dirDrawer.dirMode = 'dir'
   dirDrawer.title = titleMap[type]
+  dirDrawer.titleY = null
   dirDrawer.borderColor = '#F9863B'
   dirDrawer.dirOnly = false
   dirDrawer.files = []
@@ -2044,14 +2057,14 @@ async function generateDirImage(type) {
           await page.render({ canvasContext: pdfCanvas.getContext('2d'), viewport }).promise
           dirDrawer.pdfPageDataUrl = pdfCanvas.toDataURL('image/png')
           dirDrawer.previewUrl = dirDrawer.dirOnly
-            ? await Promise.resolve(renderCompositeImage(files, dirDrawer.title, dirDrawer.borderColor, dirDrawer.bgColor, dirDrawer.bgOpacity, bgImg))
-            : await buildHistoryComposite(dirDrawer.pdfPageDataUrl, files, dirDrawer.borderColor, dirDrawer.title, dirDrawer.bgColor, dirDrawer.bgOpacity, bgImg)
+            ? await Promise.resolve(renderCompositeImage(files, dirDrawer.title, dirDrawer.borderColor, dirDrawer.bgColor, dirDrawer.bgOpacity, bgImg, dirDrawer.titleY))
+            : await buildHistoryComposite(dirDrawer.pdfPageDataUrl, files, dirDrawer.borderColor, dirDrawer.title, dirDrawer.bgColor, dirDrawer.bgOpacity, bgImg, dirDrawer.titleY)
         } else {
           message.warning(`未找到文件名含"${keyword}"的PDF，降级显示目录列表`)
-          dirDrawer.previewUrl = await Promise.resolve(renderCompositeImage(files, dirDrawer.title, dirDrawer.borderColor, dirDrawer.bgColor, dirDrawer.bgOpacity, bgImg))
+          dirDrawer.previewUrl = await Promise.resolve(renderCompositeImage(files, dirDrawer.title, dirDrawer.borderColor, dirDrawer.bgColor, dirDrawer.bgOpacity, bgImg, dirDrawer.titleY))
         }
       } else {
-        dirDrawer.previewUrl = await Promise.resolve(renderCompositeImage(files, dirDrawer.title, dirDrawer.borderColor, dirDrawer.bgColor, dirDrawer.bgOpacity, bgImg))
+        dirDrawer.previewUrl = await Promise.resolve(renderCompositeImage(files, dirDrawer.title, dirDrawer.borderColor, dirDrawer.bgColor, dirDrawer.bgOpacity, bgImg, dirDrawer.titleY))
       }
       lastErr = null
       break  // 成功，退出重试循环
@@ -2095,7 +2108,7 @@ async function changeDirMode(mode) {
       dirDrawer.pdfPageDataUrl = pdfCanvas.toDataURL('image/png')
       dirDrawer.pdfPreviewUrl = dirDrawer.pdfPageDataUrl
       dirDrawer.pdfFsid = culturePdf.fs_id
-      dirDrawer.previewUrl = await buildHistoryComposite(dirDrawer.pdfPageDataUrl, dirDrawer.files, dirDrawer.borderColor, dirDrawer.title, dirDrawer.bgColor, dirDrawer.bgOpacity, getActiveBgImageUrl())
+      dirDrawer.previewUrl = await buildHistoryComposite(dirDrawer.pdfPageDataUrl, dirDrawer.files, dirDrawer.borderColor, dirDrawer.title, dirDrawer.bgColor, dirDrawer.bgOpacity, getActiveBgImageUrl(), dirDrawer.titleY)
     } catch (e) {
       message.error(e.message || '加载企业文化PDF失败')
     } finally {
@@ -2106,7 +2119,7 @@ async function changeDirMode(mode) {
     dirDrawer.pdfPageDataUrl = ''
     dirDrawer.pdfPreviewUrl = ''
     dirDrawer.pdfFsid = null
-    const result = renderCompositeImage(dirDrawer.files, dirDrawer.title, dirDrawer.borderColor, dirDrawer.bgColor, dirDrawer.bgOpacity, getActiveBgImageUrl())
+    const result = renderCompositeImage(dirDrawer.files, dirDrawer.title, dirDrawer.borderColor, dirDrawer.bgColor, dirDrawer.bgOpacity, getActiveBgImageUrl(), dirDrawer.titleY)
     if (result instanceof Promise) {
       dirDrawer.previewUrl = await result
     } else {
@@ -2286,7 +2299,7 @@ async function renderPdfFirstPage(file) {
     // history / custom 类型：同步更新合成图
     if (dirDrawer.type === 'history' || dirDrawer.type === 'custom') {
       dirDrawer.pdfPageDataUrl = dirDrawer.pdfPreviewUrl
-      dirDrawer.previewUrl = await buildHistoryComposite(dirDrawer.pdfPageDataUrl, dirDrawer.files, dirDrawer.borderColor, dirDrawer.title, dirDrawer.bgColor, dirDrawer.bgOpacity, getActiveBgImageUrl())
+      dirDrawer.previewUrl = await buildHistoryComposite(dirDrawer.pdfPageDataUrl, dirDrawer.files, dirDrawer.borderColor, dirDrawer.title, dirDrawer.bgColor, dirDrawer.bgOpacity, getActiveBgImageUrl(), dirDrawer.titleY)
     }
   } catch (e) {
     message.error('PDF渲染失败：' + (e.message || '未知错误'))
@@ -2587,7 +2600,7 @@ async function openCustomDir(item, idx) {
         dirDrawer.pdfPageDataUrl, sortedFiles,
         dirDrawer.borderColor, dirDrawer.title,
         dirDrawer.bgColor, dirDrawer.bgOpacity,
-        getActiveBgImageUrl()
+        getActiveBgImageUrl(), dirDrawer.titleY
       )
       lastErr = null
       break  // 成功，退出重试循环

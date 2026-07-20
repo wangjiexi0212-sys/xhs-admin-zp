@@ -41,6 +41,15 @@
       <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-shrink:0; flex-wrap:wrap">
         <span style="font-size:13px;color:#555;white-space:nowrap">标题文案：</span>
         <a-input v-model:value="drawer.title" style="width:200px" @input="refreshPreview" />
+        <span style="font-size:13px;color:#555;white-space:nowrap">标题Y轴：</span>
+        <a-input-number
+          v-model:value="drawer.titleY"
+          :min="0"
+          :max="1656"
+          :step="1"
+          style="width:90px"
+          @change="refreshPreview"
+        />
         <span style="font-size:13px;color:#555;white-space:nowrap">边框颜色：</span>
         <input type="color" v-model="drawer.borderColor" @input="refreshPreview"
           style="width:40px;height:32px;border:1px solid #d9d9d9;border-radius:4px;cursor:pointer;padding:2px" />
@@ -113,6 +122,7 @@ const drawer = reactive({
   visible: false,
   componentId: null,
   title: '公共基础笔记',
+  titleY: 72,   // 标题中心点Y坐标（默认 BORDER 12 + TITLE_H 120/2 = 72）
   borderColor: '#F9863B',
   files: [],
   loading: false,
@@ -160,6 +170,7 @@ async function openDirDrawer(item) {
 
   drawer.componentId = item.id
   drawer.title = '公共基础笔记'
+  drawer.titleY = 72
   drawer.borderColor = '#F9863B'
   drawer.files = []
   drawer.previewUrl = ''
@@ -208,7 +219,7 @@ async function renderPdfRandomPage(file) {
     await page.render({ canvasContext: pdfCanvas.getContext('2d'), viewport }).promise
     drawer.pdfPageDataUrl = pdfCanvas.toDataURL('image/png')
     drawer.pdfPreviewUrl = drawer.pdfPageDataUrl
-    drawer.previewUrl = await buildPublicBasicComposite(drawer.pdfPageDataUrl, drawer.files, drawer.borderColor, drawer.title)
+    drawer.previewUrl = await buildPublicBasicComposite(drawer.pdfPageDataUrl, drawer.files, drawer.borderColor, drawer.title, drawer.titleY)
   } finally {
     drawer.pdfLoading = false
   }
@@ -222,7 +233,7 @@ async function pickPdf(file) {
 
 function refreshPreview() {
   if (!drawer.pdfPageDataUrl) return
-  buildPublicBasicComposite(drawer.pdfPageDataUrl, drawer.files, drawer.borderColor, drawer.title)
+  buildPublicBasicComposite(drawer.pdfPageDataUrl, drawer.files, drawer.borderColor, drawer.title, drawer.titleY)
     .then(url => { drawer.previewUrl = url })
 }
 
@@ -279,7 +290,7 @@ function drawFolderIcon(ctx, x, y, size) {
   ctx.fill()
 }
 
-async function buildPublicBasicComposite(pdfDataUrl, files, borderColor, title) {
+async function buildPublicBasicComposite(pdfDataUrl, files, borderColor, title, titleY) {
   const pdfImg = await loadImage(pdfDataUrl)
 
   const CANVAS_W = 1242
@@ -309,7 +320,7 @@ async function buildPublicBasicComposite(pdfDataUrl, files, borderColor, title) 
   ctx.font = `bold ${fontSize}px "PingFang SC", "Microsoft YaHei", sans-serif`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  ctx.fillText(title, CANVAS_W / 2, innerY + TITLE_H / 2)
+  ctx.fillText(title, CANVAS_W / 2, titleY ?? (innerY + TITLE_H / 2))
   ctx.textAlign = 'left'
   ctx.textBaseline = 'alphabetic'
 

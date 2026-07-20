@@ -48,6 +48,7 @@
         </template>
         <template v-else-if="column.key === 'action'">
           <a-space>
+            <a-button size="small" type="primary" ghost @click="openImageGen(record)">生图</a-button>
             <a-button size="small" @click="openEdit(record)">编辑</a-button>
             <a-popconfirm
               :title="record.status === 1 ? '确定下架？' : '确定上架？'"
@@ -127,6 +128,53 @@
         </a-row>
       </a-form>
     </a-modal>
+
+    <!-- 生图弹窗 -->
+    <a-modal
+      v-model:open="imageGenVisible"
+      title="生图提示词"
+      width="800px"
+      :footer="null"
+      :destroy-on-close="true"
+    >
+      <a-textarea
+        v-model:value="imageGenContent"
+        :rows="12"
+        style="font-size:13px; font-family: monospace; resize: vertical"
+      />
+
+      <!-- 操作行 -->
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-top:12px">
+        <span style="font-size:12px; color:#999">
+          当前绘图服务：
+          <a-tag v-if="aiImageStore.activeProvider" color="green">{{ aiImageStore.activeProvider }}</a-tag>
+          <a-tag v-else color="default">未配置</a-tag>
+        </span>
+        <a-button
+          type="primary"
+          :loading="imageGenLoading"
+          :disabled="!imageGenContent.trim() || !aiImageStore.activeProvider"
+          @click="generateImage"
+        >生图</a-button>
+      </div>
+
+      <!-- 生成结果 -->
+      <div v-if="imageGenUrls.length" style="margin-top:16px; display:flex; flex-wrap:wrap; gap:12px; justify-content:center">
+        <div v-for="(url, i) in imageGenUrls" :key="i" style="display:flex; flex-direction:column; align-items:center; gap:6px">
+          <img
+            :src="url"
+            style="max-height:360px; max-width:100%; border-radius:6px; box-shadow:0 2px 12px rgba(0,0,0,0.12); display:block"
+          />
+          <a-button
+            size="small"
+            type="link"
+            :loading="imageDownloadingIdx === i"
+            style="font-size:12px; padding:0"
+            @click="downloadGenImage(url, i)"
+          >下载</a-button>
+        </div>
+      </div>
+    </a-modal>
   </div>
 </template>
 
@@ -141,8 +189,12 @@ import {
   deleteCardPrompt,
   toggleCardPromptStatus,
 } from '@/api/cardPrompts'
+import { useAiImageStore } from '@/stores/aiImage'
+import { drawQuanneng, drawMd2Card } from '@/api/draw'
+import { processImageForDownload, triggerBlobDownload } from '@/utils/imageProcess'
 
 const jobTypeOptions = ref([])
+const aiImageStore = useAiImageStore()
 
 async function fetchJobTypes() {
   try {
@@ -168,7 +220,7 @@ const columns = [
   { title: '排序', dataIndex: 'sort_order', width: 70 },
   { title: '状态', key: 'status', width: 80 },
   { title: '创建人', dataIndex: 'created_by_name', width: 100 },
-  { title: '操作', key: 'action', width: 180, fixed: 'right' },
+  { title: '操作', key: 'action', width: 230, fixed: 'right' },
 ]
 
 const pagination = computed(() => ({
@@ -286,6 +338,77 @@ async function onSubmit() {
   }
 }
 
+// ---- 生图弹窗 ----
+const imageGenVisible = ref(false)
+const imageGenContent = ref('')
+const imageGenLoading = ref(false)
+const imageGenUrls = ref([])
+const imageDownloadingIdx = ref(-1)
+
+function openImageGen(record) {
+  imageGenContent.value = record.content ?? ''
+  imageGenUrls.value = []
+  imageGenVisible.value = true
+}
+
+async function generateImage() {
+  await aiImageStore.ensureLoaded()
+  const provider = aiImageStore.activeProvider
+  if (!provider) {
+    message.warning('请先在「系统配置 > AI绘图」中配置并启用一个绘图服务')
+    return
+  }
+  const prompt = imageGenContent.value.trim()
+  if (!prompt) return
+
+  const config = aiImageStore.activeConfig
+  imageGenLoading.value = true
+  imageGenUrls.value = []
+  try {
+    let res
+    if (provider === 'quanneng') {
+      res = await drawQuanneng({
+        api_key: config.api_key,
+        base_url: config.base_url || '',
+        model: config.model || 'gpt-image-2',
+        prompt,
+        size: config.ratio || '1080x1440',
+        response_format: 'url',
+        count: 1,
+      })
+      imageGenUrls.value = res.urls || []
+    } else if (provider === 'md2card') {
+      res = await drawMd2Card({
+        api_key: config.api_key,
+        text: prompt,
+        keywords: config.model || '',    // model 字段复用存关键词
+        count: config.concurrency || 1,  // concurrency 字段复用存张数
+      })
+      imageGenUrls.value = res.urls || []
+    } else if (provider === 'jimeng') {
+      message.warning('即梦暂不支持在此处直接调用，请前往商品详情页使用封面生成功能')
+      return
+    }
+    if (!imageGenUrls.value.length) message.warning('未返回图片，请检查配置后重试')
+  } catch (e) {
+    message.error(e.message || '生图失败')
+  } finally {
+    imageGenLoading.value = false
+  }
+}
+
+async function downloadGenImage(url, idx) {
+  imageDownloadingIdx.value = idx
+  try {
+    const blob = await processImageForDownload(url)
+    triggerBlobDownload(blob, `card-img-${idx + 1}.jpg`)
+  } catch (e) {
+    message.error(e.message || '下载失败')
+  } finally {
+    imageDownloadingIdx.value = -1
+  }
+}
+
 async function onToggleStatus(record) {
   try {
     const res = await toggleCardPromptStatus(record.id)
@@ -309,6 +432,7 @@ async function onDelete(id) {
 onMounted(() => {
   fetchJobTypes()
   fetchList()
+  aiImageStore.ensureLoaded()
 })
 </script>
 
