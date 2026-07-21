@@ -19,5 +19,8 @@ export const updateCardPrompt = (id, data) =>
 export const toggleCardPromptStatus = (id) =>
   request(`/api/card-prompts/${id}/status`, { method: 'PATCH' })
 
+export const updateCardPromptSampleImage = (id, imageUrl) =>
+  request(`/api/card-prompts/${id}/sample_image`, { method: 'PATCH', body: { sample_image: imageUrl } })
+
 export const deleteCardPrompt = (id) =>
   request(`/api/card-prompts/${id}`, { method: 'DELETE' })
