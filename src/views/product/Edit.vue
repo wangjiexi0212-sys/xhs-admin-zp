@@ -10,6 +10,19 @@
 
     <a-spin :spinning="initLoading">
       <a-form :model="form" :rules="rules" ref="formRef" layout="vertical" class="edit-form">
+        <a-card v-if="!isEdit" title="快速导入" :bordered="false" style="margin-bottom: 12px">
+          <a-textarea
+            v-model:value="quickImportText"
+            :rows="3"
+            placeholder="粘贴一行数据（字段间用制表符分隔）：&#10;公告名称  招聘人数  报名时间  笔试时间  面试时间  笔试内容  面试内容  公告原文网址"
+            style="font-size: 13px"
+          />
+          <div class="quick-import-footer">
+            <span class="hint">字段顺序：公告名称 / 招聘人数 / 报名时间 / 笔试时间 / 面试时间 / 笔试内容 / 面试内容 / 公告原文网址，用制表符（Tab）分隔</span>
+            <a-button type="primary" ghost @click="parseQuickImport">解析并填入</a-button>
+          </div>
+        </a-card>
+
         <a-card title="基本信息" :bordered="false">
           <a-row :gutter="16">
             <a-col :span="24">
@@ -82,6 +95,18 @@
         </a-card>
 
         <a-card title="百度网盘链接" :bordered="false" style="margin-top: 12px">
+          <div class="quick-fill-row">
+            <span class="quick-fill-label">快速填充：</span>
+            <a-input
+              v-model:value="quickFillKeyword"
+              placeholder="输入关键词，如：某某单位"
+              style="width: 240px"
+              allow-clear
+              @pressEnter="applyQuickFill"
+            />
+            <a-button type="primary" ghost @click="applyQuickFill">一键填充目录</a-button>
+          </div>
+          <a-divider style="margin: 12px 0 16px" />
           <a-row :gutter="16">
             <a-col :span="12">
               <a-form-item label="笔试资料目录" name="baidu_path_exam">
@@ -98,6 +123,12 @@
             <a-col :span="12">
               <a-form-item label="模拟题目录" name="baidu_path_mock">
                 <a-input v-model:value="form.baidu_path_mock" placeholder="如：/我的资源/某单位模拟题" />
+                <div class="hint">填写网盘文件夹的绝对路径，以 / 开头</div>
+              </a-form-item>
+            </a-col>
+            <a-col :span="12">
+              <a-form-item label="面试题目录" name="baidu_path_interview">
+                <a-input v-model:value="form.baidu_path_interview" placeholder="如：/我的资源/某单位面试题" />
                 <div class="hint">填写网盘文件夹的绝对路径，以 / 开头</div>
               </a-form-item>
             </a-col>
@@ -160,6 +191,17 @@
           </a-form-item>
 
           <a-form-item label="小红书标签">
+            <div class="quick-fill-row" style="margin-bottom: 8px">
+              <span class="quick-fill-label">快速填充：</span>
+              <a-input
+                v-model:value="xhsTagKeyword"
+                placeholder="输入关键词，如：某某单位"
+                style="width: 240px"
+                allow-clear
+                @pressEnter="applyXhsTags"
+              />
+              <a-button type="primary" ghost @click="applyXhsTags">生成标签</a-button>
+            </div>
             <a-textarea
               v-model:value="form.xhs_tags"
               :rows="2"
@@ -241,6 +283,7 @@ const form = reactive({
   baidu_path_exam: '',
   baidu_path_history: '',
   baidu_path_mock: '',
+  baidu_path_interview: '',
   baidu_custom_dirs: [],  // [{ name: '', path: '' }]
   xhs_product_id: '',
   xhs_content: [],
@@ -279,6 +322,7 @@ async function fetchDetail() {
       baidu_path_exam: data.baidu_path_exam ?? '',
       baidu_path_history: data.baidu_path_history ?? '',
       baidu_path_mock: data.baidu_path_mock ?? '',
+      baidu_path_interview: data.baidu_path_interview ?? '',
       baidu_custom_dirs: Array.isArray(data.baidu_custom_dirs)
         ? data.baidu_custom_dirs.map(d => ({ name: d.name ?? '', path: d.path ?? '' }))
         : [],
@@ -325,6 +369,7 @@ async function onSubmit() {
       baidu_path_exam: trim(form.baidu_path_exam) || null,
       baidu_path_history: trim(form.baidu_path_history) || null,
       baidu_path_mock: trim(form.baidu_path_mock) || null,
+      baidu_path_interview: trim(form.baidu_path_interview) || null,
       baidu_custom_dirs: form.baidu_custom_dirs
         .map(d => ({ name: trim(d.name), path: trim(d.path) }))
         .filter(d => d.name || d.path),
@@ -373,6 +418,56 @@ function addCustomDir() {
 }
 function removeCustomDir(idx) {
   form.baidu_custom_dirs.splice(idx, 1)
+}
+
+// --- 百度网盘快速填充 ---
+const quickFillKeyword = ref('')
+function applyQuickFill() {
+  const kw = quickFillKeyword.value.trim()
+  if (!kw) {
+    message.warning('请先输入关键词')
+    return
+  }
+  form.baidu_path_exam = `/虚拟资料/2026${kw}备考资料/2026${kw}笔试资料`
+  form.baidu_path_history = `/虚拟资料/2026${kw}备考资料/2026${kw}笔试资料/1.2026年${kw}23~25年笔试真题（回忆版）`
+  form.baidu_path_mock = `/虚拟资料/2026${kw}备考资料/2026${kw}笔试资料/1.2026年${kw}26年笔试模拟题`
+  form.baidu_path_interview = `/虚拟资料/2026${kw}备考资料/2026${kw}面试资料`
+}
+
+// --- 小红书标签快速填充 ---
+const xhsTagKeyword = ref('')
+function applyXhsTags() {
+  const kw = xhsTagKeyword.value.trim()
+  if (!kw) {
+    message.warning('请先输入关键词')
+    return
+  }
+  form.xhs_tags = `#${kw}笔试 #${kw}笔试真题 #${kw}笔试 #${kw}笔试资料 #${kw}笔试备考 #${kw}笔试题库 #${kw} 笔试考什么 #${kw}备考 #${kw}笔试 #${kw} #${kw}招聘`
+}
+
+// --- 新增页快速导入 ---
+const quickImportText = ref('')
+function parseQuickImport() {
+  const raw = quickImportText.value
+  if (!raw.trim()) {
+    message.warning('请先粘贴数据')
+    return
+  }
+  const parts = raw.split('\t').map(s => s.trim())
+  if (parts.length < 2) {
+    message.error('解析失败：请确认字段间使用 Tab 键分隔')
+    return
+  }
+  const [title, recruit_count, apply_time, written_exam_time, interview_time, written_exam_content, interview_content, source_url] = parts
+  if (title) form.title = title
+  if (recruit_count) form.recruit_count = recruit_count
+  if (apply_time) form.apply_time = apply_time
+  if (written_exam_time) form.written_exam_time = written_exam_time
+  if (interview_time) form.interview_time = interview_time
+  if (written_exam_content) form.written_exam_content = written_exam_content
+  if (interview_content) form.interview_content = interview_content
+  if (source_url) form.source_url = source_url
+  message.success('解析完成，请检查各字段')
 }
 
 // --- 小红书图片 ---
@@ -500,5 +595,22 @@ function onPreviewImage(file) {
   color: #999;
   font-size: 13px;
   text-align: center;
+}
+.quick-fill-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.quick-fill-label {
+  font-size: 13px;
+  color: #555;
+  flex-shrink: 0;
+}
+.quick-import-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+  gap: 12px;
 }
 </style>

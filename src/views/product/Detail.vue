@@ -135,7 +135,7 @@
               <a-button size="small" :loading="bgImageLoading" @click="rePickBgImage">换一张</a-button>
             </template>
             <a-button
-              v-if="data.baidu_path_exam || data.baidu_path_history || data.baidu_path_mock || data.baidu_custom_dirs?.length"
+              v-if="data.baidu_path_exam || data.baidu_path_history || data.baidu_path_mock || data.baidu_path_interview || data.baidu_custom_dirs?.length"
               type="primary"
               :loading="batchDownloading"
               @click="batchDownloadAllDirImages"
@@ -145,11 +145,11 @@
             </a-button>
           </a-space>
         </template>
-        <a-row v-if="!data.baidu_path_exam && !data.baidu_path_history && !data.baidu_path_mock && !data.baidu_custom_dirs?.length">
+        <a-row v-if="!data.baidu_path_exam && !data.baidu_path_history && !data.baidu_path_mock && !data.baidu_path_interview && !data.baidu_custom_dirs?.length">
           <a-col :span="24" style="color: #999">暂未配置百度网盘目录路径，请在编辑页面填写</a-col>
         </a-row>
         <template v-else>
-          <a-row :gutter="24" v-if="data.baidu_path_exam || data.baidu_path_history || data.baidu_path_mock">
+          <a-row :gutter="24" v-if="data.baidu_path_exam || data.baidu_path_history || data.baidu_path_mock || data.baidu_path_interview">
             <a-col :span="8" v-if="data.baidu_path_exam">
               <div class="baidu-dir-item">
                 <div class="baidu-dir-label">笔试资料目录</div>
@@ -178,6 +178,17 @@
                 <div class="baidu-dir-path">{{ data.baidu_path_mock }}</div>
                 <a-space style="margin-top: 8px">
                   <a-button :loading="dirDrawer.loading && dirDrawer.type === 'mock'" @click="generateDirImage('mock')">
+                    生成目录图
+                  </a-button>
+                </a-space>
+              </div>
+            </a-col>
+            <a-col :span="8" v-if="data.baidu_path_interview">
+              <div class="baidu-dir-item">
+                <div class="baidu-dir-label">面试题目录</div>
+                <div class="baidu-dir-path">{{ data.baidu_path_interview }}</div>
+                <a-space style="margin-top: 8px">
+                  <a-button :loading="dirDrawer.loading && dirDrawer.type === 'interview'" @click="generateDirImage('interview')">
                     生成目录图
                   </a-button>
                 </a-space>
@@ -2001,7 +2012,8 @@ async function buildHistoryComposite(pdfDataUrl, files, borderColor, title, bgCo
 async function generateDirImage(type) {
   const path = type === 'exam' ? data.value.baidu_path_exam
     : type === 'history' ? data.value.baidu_path_history
-    : data.value.baidu_path_mock
+    : type === 'mock' ? data.value.baidu_path_mock
+    : data.value.baidu_path_interview
   if (!path) return
 
   const bgImg = getActiveBgImageUrl()
@@ -2010,6 +2022,7 @@ async function generateDirImage(type) {
     exam: '笔试资料完整目录',
     history: pickRandomHistoryTitle(),
     mock: pickRandomMockTitle(),
+    interview: '面试题完整目录',
   }
   dirDrawer.type = type
   dirDrawer.dirMode = 'dir'
@@ -2139,6 +2152,7 @@ async function downloadCompositeImage() {
     const label = dirDrawer.type === 'exam' ? '笔试资料目录'
       : dirDrawer.type === 'history' ? '真题目录'
       : dirDrawer.type === 'mock' ? '模拟题目录'
+      : dirDrawer.type === 'interview' ? '面试题目录'
       : (dirDrawer.title || '自定义')
     triggerBlobDownload(blob, `${data.value.company_name || 'product'}-${label}.jpg`)
   } catch (e) {
@@ -2433,6 +2447,9 @@ async function batchDownloadAllDirImages() {
   }
   if (data.value.baidu_path_mock) {
     tasks.push({ path: data.value.baidu_path_mock, type: 'mock', label: '模拟题目录', title: pickRandomMockTitle() })
+  }
+  if (data.value.baidu_path_interview) {
+    tasks.push({ path: data.value.baidu_path_interview, type: 'interview', label: '面试题目录', title: '面试题完整目录' })
   }
   if (data.value.baidu_custom_dirs?.length) {
     data.value.baidu_custom_dirs.forEach((item, idx) => {

@@ -212,7 +212,7 @@
       width="480px"
       :body-style="{ padding: '16px 20px', overflow: 'auto' }"
     >
-      <pre style="white-space: pre-wrap; word-break: break-all; font-size: 13px; line-height: 1.8; margin: 0; font-family: inherit">{{ sampleWordsText }}</pre>
+      <pre style="white-space: pre-wrap; word-break: break-all; font-size: 13px; line-height: 1.8; margin: 0; font-family: inherit; color: #333">{{ sampleWordsText }}</pre>
     </a-drawer>
   </div>
 </template>
