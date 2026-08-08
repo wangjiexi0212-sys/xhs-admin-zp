@@ -1401,28 +1401,36 @@ async function generateTitle() {
       return
     }
 
-    // 2) 随机取一条标题公式作为参考
-    let formulaHint = ''
-    if (data.value.job_type_id) {
-      try {
-        const formulaRes = await getRandomTitleFormula(data.value.job_type_id)
-        if (formulaRes?.formula) {
-          formulaHint = `\n\n请参考以下标题公式生成（将其中的 {单位} 替换为实际单位名称，风格、节奏与公式保持一致，不要照搬原句）：\n${formulaRes.formula}`
-        }
-      } catch (_) { /* 取不到公式时跳过，不影响主流程 */ }
-    }
+    // 2) 组装用户消息并调用 LLM
+    // 前端随机选类别，避免 AI 每次走同一条路
+    const CATEGORY_NAMES = [
+      '碎片化轻备考',
+      '考前复盘避坑',
+      '高效备考拒绝盲目刷题',
+      '真题深挖吃透出题逻辑',
+      '专项突破稳步提分',
+      '零基础懒人轻松备考',
+      '考情解读抓准重点',
+      '少背书刷题速过',
+    ]
+    const categoryIndex = Math.floor(Math.random() * CATEGORY_NAMES.length)
+    const categoryName = CATEGORY_NAMES[categoryIndex]
 
-    // 3) 组装用户消息并调用 LLM
     const userContent = [
       `单位名称：${data.value.company_name || ''}`,
       `商品类型：${data.value.job_type_name || ''}`,
       data.value.written_exam_content ? `笔试内容：${data.value.written_exam_content}` : '',
       data.value.interview_content ? `面试内容：${data.value.interview_content}` : '',
+      `本次必须使用【类别${categoryIndex + 1}：${categoryName}】的风格生成标题，不得使用其他类别风格。`,
       '注意：标题字数不能超过20个字。',
-    ].filter(Boolean).join('\n') + formulaHint
+    ].filter(Boolean).join('\n')
 
     // 记录本次使用的提示词，供查看
     titlePromptUsed.value = { system: promptItem.content, user: userContent }
+    console.log('[generateTitle] messages →', JSON.stringify([
+      { role: 'system', content: promptItem.content },
+      { role: 'user', content: userContent },
+    ], null, 2))
 
     const res = await chatLlm({
       provider: active.provider,
@@ -1435,8 +1443,9 @@ async function generateTitle() {
         { role: 'user', content: userContent },
       ],
       max_tokens: 512,
-      temperature: 0.7,
+      temperature: 1.0,
     })
+    console.log('[generateTitle] raw response →', JSON.stringify(res, null, 2))
     let out = (res.content || '').replace(/^["'「『]+|["'」』]+$/g, '').trim()
     if (!out) {
       message.error('模型未返回内容')

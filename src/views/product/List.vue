@@ -26,7 +26,14 @@
           @change="onSearch"
         />
       </a-space>
-      <a-button type="primary" @click="goCreate">+ 新增商品</a-button>
+      <a-space>
+        <a-badge :count="expiredCount" :offset="[-4, 4]">
+          <a-button @click="expiredDrawerVisible = true; fetchExpiredProducts()">
+            <BellOutlined /> 消息
+          </a-button>
+        </a-badge>
+        <a-button type="primary" @click="goCreate">+ 新增商品</a-button>
+      </a-space>
     </div>
 
     <div v-if="selectedRowKeys.length" class="selection-bar">
@@ -113,18 +120,51 @@
         </template>
       </template>
     </a-table>
+
+    <!-- 报名截止跟进 Drawer -->
+    <a-drawer
+      v-model:open="expiredDrawerVisible"
+      title="报名已截止 · 待跟进笔试"
+      placement="right"
+      width="780"
+    >
+      <div style="margin-bottom: 12px; color: #999; font-size: 13px;">
+        共 {{ expiredCount }} 条报名截止商品，按截止时间从久到近排列
+      </div>
+      <a-table
+        :columns="expiredColumns"
+        :data-source="expiredList"
+        :loading="expiredLoading"
+        :pagination="{ pageSize: 50, showTotal: t => `共 ${t} 条` }"
+        row-key="id"
+        size="small"
+        :scroll="{ x: 660 }"
+      >
+        <template #bodyCell="{ column, record }">
+          <template v-if="column.key === 'daysAgo'">
+            <a-tag :color="record.daysAgo >= 30 ? 'red' : record.daysAgo >= 14 ? 'orange' : 'default'">
+              已截止 {{ record.daysAgo }} 天
+            </a-tag>
+          </template>
+          <template v-else-if="column.key === 'action'">
+            <a-button type="link" size="small" @click="goDetail(record.id)">详情</a-button>
+          </template>
+        </template>
+      </a-table>
+    </a-drawer>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { message } from 'ant-design-vue'
+import { message, Modal } from 'ant-design-vue'
 import { getProductList, deleteProduct, getProductDetail } from '@/api/products'
 import { getJobTypeList } from '@/api/jobTypes'
 import { buildRandomGradient, triggerBlobDownload } from '@/utils/imageProcess'
 import { getBaiduFiles } from '@/api/baidu'
 import { getToken } from '@/api/request'
+import { BellOutlined } from '@ant-design/icons-vue'
 import { chatLlm } from '@/api/llm'
 import { getPromptList } from '@/api/prompts'
 import { getContentTemplateList } from '@/api/contentTemplates'
@@ -465,50 +505,54 @@ async function getBaiduFilesWithRetry(path, MAX_RETRY = 5) {
   throw lastErr
 }
 
-async function buildDirImageForBatch(path, type, title) {
+async function buildDirImageForBatch(path, type, title, onlyDir = false) {
   const res = await getBaiduFilesWithRetry(path)
   const files = res.files || []
   if (!files.length) throw new Error('目录为空')
   files.sort((a, b) => b.isdir - a.isdir)
   if (type === 'history' || type === 'mock') {
-    const keyword = type === 'mock' ? '2026' : '2025'
-    const targetPdf = files.find(f => f.isdir === 0 && f.name.includes(keyword))
-    if (targetPdf) {
-      try {
-        const lib = await ensurePdfjs()
-        const pdfDoc = await lib.getDocument({
-          url: `/api/baidu/proxy-pdf?path=${encodeURIComponent(targetPdf.path)}`,
-          httpHeaders: { Authorization: `Bearer ${getToken()}` },
-        }).promise
-        const page = await pdfDoc.getPage(1)
-        const viewport = page.getViewport({ scale: 2 })
-        const pdfCanvas = document.createElement('canvas')
-        pdfCanvas.width = viewport.width
-        pdfCanvas.height = viewport.height
-        await page.render({ canvasContext: pdfCanvas.getContext('2d'), viewport }).promise
-        return await buildHistoryComposite(pdfCanvas.toDataURL('image/png'), files, '#F9863B', title, pickRandomBgColor(), 0.35)
-      } catch (_) {}
+    if (!onlyDir) {
+      const keyword = type === 'mock' ? '2026' : '2025'
+      const targetPdf = files.find(f => f.isdir === 0 && f.name.includes(keyword))
+      if (targetPdf) {
+        try {
+          const lib = await ensurePdfjs()
+          const pdfDoc = await lib.getDocument({
+            url: `/api/baidu/proxy-pdf?path=${encodeURIComponent(targetPdf.path)}`,
+            httpHeaders: { Authorization: `Bearer ${getToken()}` },
+          }).promise
+          const page = await pdfDoc.getPage(1)
+          const viewport = page.getViewport({ scale: 2 })
+          const pdfCanvas = document.createElement('canvas')
+          pdfCanvas.width = viewport.width
+          pdfCanvas.height = viewport.height
+          await page.render({ canvasContext: pdfCanvas.getContext('2d'), viewport }).promise
+          return await buildHistoryComposite(pdfCanvas.toDataURL('image/png'), files, '#F9863B', title, pickRandomBgColor(), 0.35)
+        } catch (_) {}
+      }
     }
     return renderCompositeImage(files, title, '#F9863B', pickRandomBgColor(), 0.35)
   }
   if (type === 'custom') {
-    const pdfFiles = files.filter(f => f.isdir === 0 && /\.pdf$/i.test(f.name))
-    if (pdfFiles.length) {
-      try {
-        const pdfFile = pdfFiles[Math.floor(Math.random() * pdfFiles.length)]
-        const lib = await ensurePdfjs()
-        const pdfDoc = await lib.getDocument({
-          url: `/api/baidu/proxy-pdf?path=${encodeURIComponent(pdfFile.path)}`,
-          httpHeaders: { Authorization: `Bearer ${getToken()}` },
-        }).promise
-        const page = await pdfDoc.getPage(1)
-        const viewport = page.getViewport({ scale: 2 })
-        const pdfCanvas = document.createElement('canvas')
-        pdfCanvas.width = viewport.width
-        pdfCanvas.height = viewport.height
-        await page.render({ canvasContext: pdfCanvas.getContext('2d'), viewport }).promise
-        return await buildHistoryComposite(pdfCanvas.toDataURL('image/png'), files, '#F9863B', title, pickRandomBgColor(), 0.35)
-      } catch (_) {}
+    if (!onlyDir) {
+      const pdfFiles = files.filter(f => f.isdir === 0 && /\.pdf$/i.test(f.name))
+      if (pdfFiles.length) {
+        try {
+          const pdfFile = pdfFiles[Math.floor(Math.random() * pdfFiles.length)]
+          const lib = await ensurePdfjs()
+          const pdfDoc = await lib.getDocument({
+            url: `/api/baidu/proxy-pdf?path=${encodeURIComponent(pdfFile.path)}`,
+            httpHeaders: { Authorization: `Bearer ${getToken()}` },
+          }).promise
+          const page = await pdfDoc.getPage(1)
+          const viewport = page.getViewport({ scale: 2 })
+          const pdfCanvas = document.createElement('canvas')
+          pdfCanvas.width = viewport.width
+          pdfCanvas.height = viewport.height
+          await page.render({ canvasContext: pdfCanvas.getContext('2d'), viewport }).promise
+          return await buildHistoryComposite(pdfCanvas.toDataURL('image/png'), files, '#F9863B', title, pickRandomBgColor(), 0.35)
+        } catch (_) {}
+      }
     }
     return renderCompositeImage(files, title, '#F9863B', pickRandomBgColor(), 0.35)
   }
@@ -660,6 +704,21 @@ async function onBatchGenerateDirImages() {
     message.warning('请先勾选商品')
     return
   }
+  Modal.confirm({
+    title: '生成方式',
+    content: '是否只生成目录图？\n选「只生成目录图」将仅生成真题和模拟题的目录图；选「完整生成」保持原有逻辑（所有目录图 + 笔记内容）。',
+    okText: '只生成目录图',
+    cancelText: '完整生成',
+    onOk: () => runBatchDirImages(true),
+    onCancel: () => runBatchDirImages(false),
+  })
+}
+
+async function runBatchDirImages(onlyDirImages) {
+  if (!selectedRowKeys.value.length) {
+    message.warning('请先勾选商品')
+    return
+  }
   dirBatchLogs.value = []
   dirBatchDone.value = 0
   dirBatchTotal.value = selectedRowKeys.value.length
@@ -724,6 +783,7 @@ async function onBatchGenerateDirImages() {
         if (task.type === 'culture') {
           const res = await getBaiduFilesWithRetry(task.path)
           const files = (res.files || []).sort((a, b) => b.isdir - a.isdir)
+          // 企业文化始终生成 PDF 合成图
           const culturePdf = files.find(f => f.isdir === 0 && f.name.includes('企业文化'))
           if (!culturePdf) {
             dirBatchLogs.value.push({ text: `  └ ${task.label}：未找到"企业文化"PDF，跳过`, type: 'warn' })
@@ -742,7 +802,7 @@ async function onBatchGenerateDirImages() {
           await page.render({ canvasContext: pdfCanvas.getContext('2d'), viewport }).promise
           dataUrl = await buildHistoryComposite(pdfCanvas.toDataURL('image/png'), files, '#F9863B', task.title, pickRandomBgColor(), 0.35)
         } else {
-          dataUrl = await buildDirImageForBatch(task.path, task.type, task.title)
+          dataUrl = await buildDirImageForBatch(task.path, task.type, task.title, onlyDirImages)
         }
         const base64 = dataUrl.replace(/^data:image\/png;base64,/, '')
         folder.file(`${task.label}.png`, base64, { base64: true })
@@ -943,9 +1003,75 @@ async function onDelete(id) {
   }
 }
 
+// ---- 报名截止跟进 ----
+
+/**
+ * 从 apply_time 文本中提取截止日期（取最后一个 XX月XX日）
+ * 支持：
+ *   "06月05日 - 06月15日"  → 06月15日
+ *   "06月07日截止"         → 06月07日
+ *   "公告发布日 - 07月31日" → 07月31日
+ */
+function parseApplyEndDate(applyTime) {
+  if (!applyTime) return null
+  const matches = applyTime.match(/(\d{1,2})月(\d{1,2})日/g)
+  if (!matches || matches.length === 0) return null
+  const last = matches[matches.length - 1].match(/(\d{1,2})月(\d{1,2})日/)
+  const month = parseInt(last[1])
+  const day = parseInt(last[2])
+  const now = new Date()
+  let year = now.getFullYear()
+  // 如果推算出来的日期比今天晚超过 180 天，说明是上一年的
+  const candidate = new Date(year, month - 1, day)
+  if (candidate - now > 180 * 24 * 60 * 60 * 1000) year -= 1
+  return new Date(year, month - 1, day)
+}
+
+const expiredDrawerVisible = ref(false)
+const expiredLoading = ref(false)
+const expiredList = ref([])   // [{ ...product, endDate, daysAgo }]
+
+const expiredCount = computed(() => expiredList.value.length)
+
+async function fetchExpiredProducts() {
+  expiredLoading.value = true
+  try {
+    // 拉全量（最多 2000 条），在前端解析截止日期
+    const res = await getProductList({ page: 1, pageSize: 2000 })
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const result = []
+    for (const p of res.list) {
+      const endDate = parseApplyEndDate(p.apply_time)
+      if (!endDate) continue
+      endDate.setHours(0, 0, 0, 0)
+      if (endDate < today) {
+        const daysAgo = Math.round((today - endDate) / (24 * 60 * 60 * 1000))
+        result.push({ ...p, endDate, daysAgo })
+      }
+    }
+    // 截止越久排越前
+    result.sort((a, b) => b.daysAgo - a.daysAgo)
+    expiredList.value = result
+  } catch (e) {
+    message.error(e.message || '加载失败')
+  } finally {
+    expiredLoading.value = false
+  }
+}
+
+const expiredColumns = [
+  { title: '单位', dataIndex: 'company_name', width: 160, ellipsis: true },
+  { title: '报名截止', dataIndex: 'apply_time', width: 160 },
+  { title: '已截止天数', key: 'daysAgo', width: 110 },
+  { title: '笔试时间', dataIndex: 'written_exam_time', width: 140 },
+  { title: '操作', key: 'action', width: 80, fixed: 'right' },
+]
+
 onMounted(() => {
   fetchJobTypes()
   fetchList()
+  fetchExpiredProducts()
 })
 </script>
 
