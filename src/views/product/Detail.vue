@@ -1743,6 +1743,7 @@ async function generateBodyFromTemplate(tpl) {
       `笔记标题：${generatedTitle.value || '（未生成，请围绕企业名称与笔试内容自行展开）'}`,
       '',
       '要求：只输出正文，不重复标题，不含任何引流内容（关注我、加微信、私信等），数字和表情符号的使用风格与模版保持一致。',
+      '禁止使用网络口头禅或夸张感叹句，例如"谁懂啊家人们"、"后台被问麻了"、"救命"、"真的绷不住"等，语气保持实用、亲切即可。',
     ].join('\n')
     const res = await chatLlm({
       provider: active.provider,
