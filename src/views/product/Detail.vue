@@ -467,6 +467,9 @@
                 <a-button type="link" size="small" :loading="titleGenerating" @click="generateTitle">
                   {{ generatedTitle ? '重新生成' : '生成标题' }}
                 </a-button>
+                <a-button v-if="titlePromptUsed" type="link" size="small" @click="titlePromptVisible = true">
+                  提示词
+                </a-button>
               </a-space>
             </div>
           </template>
@@ -566,6 +569,26 @@
         </a-form-item>
       </a-form>
     </a-drawer>
+
+    <!-- 生成标题 提示词 弹窗 -->
+    <a-modal
+      v-model:open="titlePromptVisible"
+      title="生成标题 · 提示词"
+      :footer="null"
+      width="600px"
+      destroy-on-close
+    >
+      <template v-if="titlePromptUsed">
+        <div style="margin-bottom: 12px;">
+          <div style="font-size: 12px; color: #999; margin-bottom: 4px;">System（系统提示词）</div>
+          <a-textarea :value="titlePromptUsed.system" :auto-size="{ minRows: 4, maxRows: 12 }" readonly />
+        </div>
+        <div>
+          <div style="font-size: 12px; color: #999; margin-bottom: 4px;">User（用户输入）</div>
+          <a-textarea :value="titlePromptUsed.user" :auto-size="{ minRows: 3, maxRows: 10 }" readonly />
+        </div>
+      </template>
+    </a-modal>
 
     <!-- 生成面试题 抽屉 -->
     <a-drawer
@@ -815,6 +838,8 @@ const coverStatusMsg = ref('正在生成封面图...')
 const coverImageUrl = ref('')
 const coverImageUrls = ref([])
 const coverPromptUsed = ref('')
+const titlePromptUsed = ref(null) // { system: string, user: string } | null
+const titlePromptVisible = ref(false)
 
 // --- 生成面试题（后端异步）---
 const interviewVisible = ref(false)
@@ -1395,6 +1420,9 @@ async function generateTitle() {
       data.value.interview_content ? `面试内容：${data.value.interview_content}` : '',
       '注意：标题字数不能超过20个字。',
     ].filter(Boolean).join('\n') + formulaHint
+
+    // 记录本次使用的提示词，供查看
+    titlePromptUsed.value = { system: promptItem.content, user: userContent }
 
     const res = await chatLlm({
       provider: active.provider,
