@@ -496,6 +496,9 @@
                 <a-button type="link" size="small" :loading="bodyGenerating" @click="generateBody">
                   {{ generatedBody ? '重新生成' : '生成正文' }}
                 </a-button>
+                <a-button type="link" size="small" :loading="bodyGenerating" @click="templateModalVisible = true">
+                  模版生成
+                </a-button>
               </a-space>
             </div>
           </template>
@@ -569,6 +572,29 @@
         </a-form-item>
       </a-form>
     </a-drawer>
+
+    <!-- 模版生成正文 选择弹窗 -->
+    <a-modal
+      v-model:open="templateModalVisible"
+      title="选择正文模版"
+      :footer="null"
+      width="680px"
+      destroy-on-close
+    >
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 8px 0;">
+        <div
+          v-for="tpl in BODY_TEMPLATES"
+          :key="tpl.id"
+          style="border: 1px solid #e8e8e8; border-radius: 8px; padding: 14px 16px; cursor: pointer; transition: border-color 0.2s, box-shadow 0.2s;"
+          @mouseenter="e => e.currentTarget.style.borderColor = '#1677ff'"
+          @mouseleave="e => e.currentTarget.style.borderColor = '#e8e8e8'"
+          @click="generateBodyFromTemplate(tpl)"
+        >
+          <div style="font-weight: 600; font-size: 14px; margin-bottom: 4px;">{{ tpl.title }}</div>
+          <div style="font-size: 12px; color: #999;">{{ tpl.desc }}</div>
+        </div>
+      </div>
+    </a-modal>
 
     <!-- 生成标题 提示词 弹窗 -->
     <a-modal
@@ -840,6 +866,125 @@ const coverImageUrls = ref([])
 const coverPromptUsed = ref('')
 const titlePromptUsed = ref(null) // { system: string, user: string } | null
 const titlePromptVisible = ref(false)
+const templateModalVisible = ref(false)
+
+const BODY_TEMPLATES = [
+  {
+    id: 1,
+    title: '考点解析型',
+    desc: '按科目拆解各科考什么',
+    content: `26山东发展投资集团校招，笔试考什么？附真题
+谁懂啊家人们！山东发展投资 26 校招网申都开冲了🥹 截止到 7 月 31 号！
+后台被问麻了：笔试到底考啥？有没有真题能刷？
+刚把往届考情扒完 + 整理好资料包，说点实打实的干货！
+✅ 行测
+45-55 道单选题，言语、数量、判断、资料分析四大块
+难度比山东省考低，但题量很紧，非常拼做题速度
+重点死磕判断推理 + 资料分析，提分巨快，别死磕数量难题浪费时间💨
+✅ 公基 + 企业文化
+单选多选都有，时政、山东省情、党建法律是常客
+集团的愿景使命、核心业务、发展战略是必考点！
+官网翻 5 分钟就能拿的送分题，千万别丢分丢得冤🙅‍♀️
+✅ 材料写作
+基本 1-2 道主观题，以议论文为主，偶尔考公文
+主题常围绕国企担当、产业投资、双碳、山东区域经济
+提前攒几套行文框架 + 专属金句，上考场直接套不慌✍️
+✅ 岗位专业知识
+专业岗必考，综合岗基本不考
+投资、财会、人力各岗考各的，别瞎复习别的岗内容
+整理了 22-25 年考生回忆版真题 + 全套备考包
+行测公基高分笔记、写作范文、企业文化押题卷、省情时政汇总都有
+都是往届学长学姐考完攒的一手题，题型考点完全对标，考前刷一遍直接找手感🔥
+最后敲黑板：笔试大概率八月初就安排，别等网申过了再学！
+早准备早上岸，冲就完事了～`,
+  },
+  {
+    id: 2,
+    title: 'N天冲刺计划型',
+    desc: '分天结构化备考安排',
+    content: `山东发展投资集团笔试资料，5天拿下85+
+救命！山东发展投资集团笔试，5 天裸考冲 85 + 真的够了🤯
+Day1-2 死磕行测 + 公基（占分大头）
+行测别挨个抠知识点，直接上做题技巧 + 黄金公式，重点死磕判断推理和资料分析，提分巨快！数量挑简单题型练，难题直接蒙，性价比太低。公基直接背高频考点 + 记忆口诀，地毯式复习纯纯浪费时间🙅‍♀️
+Day3 薅企业文化 + 省情时政的分
+纯纯送分题！集团的定位、核心业务、发展愿景过一遍，搭配近半年山东时政速记，半天就能刷完，白捡的分千万别丢✅
+Day4 写作 + 专业知识收尾
+写作别背百篇范文，直接记国企写作通用框架 + 专属金句，主题往国企担当、产业投资、双碳上靠，考场直接套。专业岗刷对应题库抓核心，综合岗直接跳过省时间⏰
+Day5 刷回忆真题找手感
+22-25 年考生回忆卷掐时间整套做，熟悉出题套路，错题复盘一遍，比瞎刷模拟题管用 10 倍🔥
+资料都整理妥了，直接拿走去冲！`,
+  },
+  {
+    id: 3,
+    title: '资料清单型',
+    desc: '详细列举各类资料包内容',
+    content: `放心背！26山东发展投资，笔试真题+讲义~
+放心背！26 山东发展投资笔试真的不用裸考硬熬😭
+历年考点重复率巨高，找对资料直接抄作业就行，别再走弯路当陪跑了🙏
+✅ 集团概况 + 山东时政速记
+官网核心信息都整理好了，搭配近一年山东时政高频考点，都是选择判断的常客，考前突击背完直接拿分💯
+✅ 行测 + 公基全套干货
+三色笔记 + 考点汇总 + 专项题库，言语、判断、公基法律经济这些重点模块都捋得明明白白，零基础也能直接上手，不用死磕大本教材📝
+✅ 岗位专业知识 + 写作
+财会、人力、计算机、工程这些常招岗都有对应题库；还有国企写作金句 + 精选范文，大作文直接套框架，考场提笔就写不卡壳✍️
+✅ 22-25 年考生回忆真题
+都是往届学长学姐考完整理的回忆版真题，带完整答案解析，刷完直接摸透出题套路，考场撞见熟题真的爽飞🚀
+备考时间紧的宝子直接拿这套冲，不用自己瞎整理浪费时间！
+祝大家都能稳稳上岸呀🎉`,
+  },
+  {
+    id: 4,
+    title: '复习顺序攻略型',
+    desc: '步骤捋清复习优先级',
+    content: `山东发展投资集团，笔试不难，背完保底86+
+准备山发投笔试的小伙伴别慌！亲身经验，这套笔试没有想象中难，抓对重点短期冲刺完全来得及。
+整套笔试分为几大块：集团企业文化、公基、行测、岗位专业知识，部分岗位会考写作。
+⚠️重中之重：企业认知题一定要先啃！愿景、使命、企业口号、集团重组背景是高频考点，属于送分题，千万别丢。
+复习顺序给大家捋好了：
+1. 先刷历年考生回忆真题，摸清出题偏好；
+2. 吃透山发投企业文化资料，配套题库反复练；
+3. 行测抓技巧，不用盲目海量刷题；
+4. 公基侧重山东时政、省情；
+5. 最后针对性复习对应岗位专业内容。
+不用死磕全部资料，优先攻克高频模块！短期备考抓核心考点，把基础分稳稳拿到手。
+认真背完重点内容，分数很容易拉上来，预祝大家笔试顺利进面✨`,
+  },
+  {
+    id: 5,
+    title: '题库模块型',
+    desc: '按模块推荐题库资料',
+    content: `山东发展投资，笔试题库+答案，稳稳86+
+备考山发投的宝子看过来！别盲目啃书啦😮‍💨
+整理了历年考生回忆版真题，直接上手刷题摸透出题套路！
+重点模块一次性备齐👇
+✅历年回忆真题卷（22-25 年），吃透高频考点
+✅山东时政 + 省情题库，这一块很容易拉开分🥇
+✅集团企业文化专项题，送分题千万别丢！
+✅行测 + 公基全套笔记、练习题，夯实基础
+✅财会 / 工程 / 人力等多岗位专业题库按需挑选
+真心劝大家，企业文化、山东时政优先背！
+笔试客观题占比很高，刷题效率远高于死记硬背📝
+整套资料搭配练习，稳住状态冲刺 86 + 完全有机会！
+备考时间有限，抓核心资料高效冲刺，少走弯路！`,
+  },
+  {
+    id: 6,
+    title: '企业考点速记型',
+    desc: '企业文化数据考点详解',
+    content: `山东水发集团笔试，这些题最好要刷！
+备考水发集团笔试别瞎刷题！🙅‍♀️ 整理了必考高频考点，吃透直接拿捏基础分值，超实用✅
+🏢 企业基础考点（必背）
+省属一级国企！2009年成立，2017年划归省国资委，核心口号"上善若水、发展惠民"，主打民生服务赛道🌊
+💼 三大核心主业（高频单选）
+牢牢记住：水利水务、现代农业、清洁能源！淘汰了环保非主业，聚焦主业是近年考察重点📌
+📊 核心数据速记（易考填空/判断）
+2025年总资产超1634亿，净利润大幅上涨，服务业占比最高，国企瘦身健体、提质增效是核心亮点📈
+🌟 特色时政考点
+山东现代水网核心建设主体，落地百亿级鲁东南水资源配置工程，海外布局东南亚，科创资质拉满💡
+✍️ 刷题小贴士
+笔试最爱考企业定位、主业板块、年度发展亮点、企业文化，不用死记硬背，眼熟就能得分！`,
+  },
+]
 
 // --- 生成面试题（后端异步）---
 const interviewVisible = ref(false)
@@ -1538,6 +1683,67 @@ async function generateBody() {
       '注意：正文中不得出现任何诱导性内容或引流内容（如"关注我"、"添加微信"、"点击链接"、"私信我"、"加群"等），只需聚焦内容本身。',
     ].join('\n')
 
+    const res = await chatLlm({
+      provider: active.provider,
+      api_format: active.api_format,
+      api_key: active.api_key,
+      base_url: active.base_url || '',
+      model: active.default_model,
+      messages: [
+        { role: 'system', content: promptItem.content },
+        { role: 'user', content: userContent },
+      ],
+      max_tokens: 3000,
+      temperature: 0.8,
+    })
+    const out = (res.content || '').trim()
+    if (!out) {
+      message.error('模型未返回内容')
+      return
+    }
+    generatedBody.value = out
+    message.success('正文生成成功')
+  } catch (e) {
+    message.error(e.message || '生成失败')
+  } finally {
+    bodyGenerating.value = false
+  }
+}
+
+async function generateBodyFromTemplate(tpl) {
+  const active = llmStore.active
+  if (!active) {
+    Modal.warning({
+      title: '提示',
+      content: '请先设置使用中的模型',
+      okText: '去设置',
+      onOk: () => router.push('/system/llm'),
+    })
+    return
+  }
+  templateModalVisible.value = false
+  bodyGenerating.value = true
+  try {
+    const promptRes = await getPromptList({ scene: 'content', page: 1, pageSize: 1 })
+    const promptItem = promptRes.list?.[0]
+    if (!promptItem) {
+      message.error('未找到「生成正文」场景的提示词')
+      return
+    }
+    const userContent = [
+      '以下是一段小红书正文模版，请严格保留其结构、分段方式和写作风格，',
+      '将模版中的企业名称和考试内容替换为下方商品信息，重新创作一条全新的小红书正文。',
+      '',
+      '【参考模版】',
+      tpl.content,
+      '',
+      '【商品信息】',
+      `企业名称：${data.value.company_name || ''}`,
+      `笔试内容：${data.value.job_type_name || ''}`,
+      `笔记标题：${generatedTitle.value || '（未生成，请围绕企业名称与笔试内容自行展开）'}`,
+      '',
+      '要求：只输出正文，不重复标题，不含任何引流内容（关注我、加微信、私信等），数字和表情符号的使用风格与模版保持一致。',
+    ].join('\n')
     const res = await chatLlm({
       provider: active.provider,
       api_format: active.api_format,
