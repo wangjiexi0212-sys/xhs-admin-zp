@@ -45,6 +45,14 @@
           <a-menu-item key="/note/components">组件管理</a-menu-item>
           <a-menu-item key="/note/bg-images">背景图片管理</a-menu-item>
         </a-sub-menu>
+        <a-sub-menu key="ai">
+          <template #icon>
+            <RobotOutlined />
+          </template>
+          <template #title>小红书AI</template>
+          <a-menu-item key="/ai/rewrite">全能改写</a-menu-item>
+          <a-menu-item key="/ai/rewrite-prompt">改写提示词</a-menu-item>
+        </a-sub-menu>
         <a-sub-menu key="system">
           <template #icon>
             <SettingOutlined />
@@ -52,6 +60,7 @@
           <template #title>系统设置</template>
           <a-menu-item key="/system/llm">LLM</a-menu-item>
           <a-menu-item key="/system/ai-image">AI绘图</a-menu-item>
+          <a-menu-item key="/system/xhs-cookie">小红书Cookie</a-menu-item>
           <a-menu-item key="/system/baidu">百度网盘</a-menu-item>
         </a-sub-menu>
       </a-menu>
@@ -105,6 +114,7 @@ import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   LogoutOutlined,
+  RobotOutlined,
 } from '@ant-design/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { useLlmStore } from '@/stores/llm'
@@ -116,13 +126,14 @@ const auth = useAuthStore()
 const collapsed = ref(false)
 const selectedKeys = computed(() => [route.path])
 
-const subMenuKeys = ['product', 'user', 'note', 'system']
+const subMenuKeys = ['product', 'user', 'note', 'ai', 'system']
 const openKeys = ref(getDefaultOpenKeys())
 
 function getDefaultOpenKeys() {
   if (route.path.startsWith('/product')) return ['product']
   if (route.path.startsWith('/user')) return ['user']
   if (route.path.startsWith('/note')) return ['note']
+  if (route.path.startsWith('/ai')) return ['ai']
   if (route.path.startsWith('/system')) return ['system']
   return []
 }
@@ -135,6 +146,8 @@ watch(() => route.path, (path) => {
     openKeys.value = ['user']
   } else if (path.startsWith('/note') && !openKeys.value.includes('note')) {
     openKeys.value = ['note']
+  } else if (path.startsWith('/ai') && !openKeys.value.includes('ai')) {
+    openKeys.value = ['ai']
   } else if (path.startsWith('/system') && !openKeys.value.includes('system')) {
     openKeys.value = ['system']
   }

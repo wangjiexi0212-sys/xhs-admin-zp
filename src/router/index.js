@@ -125,6 +125,21 @@ const router = createRouter({
           name: 'system-baidu',
           component: () => import('../views/system/BaiduAuth.vue'),
         },
+        {
+          path: 'system/xhs-cookie',
+          name: 'system-xhs-cookie',
+          component: () => import('../views/system/XhsCookie.vue'),
+        },
+        {
+          path: 'ai/rewrite',
+          name: 'ai-rewrite',
+          component: () => import('../views/ai/Rewrite.vue'),
+        },
+        {
+          path: 'ai/rewrite-prompt',
+          name: 'ai-rewrite-prompt',
+          component: () => import('../views/ai/RewritePrompt.vue'),
+        },
       ],
     },
     {
