@@ -85,9 +85,15 @@ export const rewriteImage = (data) =>
   request('/api/xhs-rewrite/image', { method: 'POST', body: data })
 
 /**
- * 把本地 File 对象上传到 R2，返回公开 URL。
- * 用于「单图 AI 编辑」时上传用户选择的参考图。
+ * 把 AI 生成图片通过 Worker 服务端代理存入 R2，返回可跨域访问的 URL。
+ * 用于绕过 quanneng / jimeng CDN 的 CORS 限制，使浏览器 canvas 可以读取像素。
  */
+export async function proxyImageForDownload(url) {
+  return request('/api/xhs-rewrite/proxy-to-r2', {
+    method: 'POST',
+    body: { url },
+  })
+}
 export async function uploadLocalImageToR2(file) {
   const dataUrl = await new Promise((resolve, reject) => {
     const reader = new FileReader()

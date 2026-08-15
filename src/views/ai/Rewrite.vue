@@ -124,11 +124,9 @@
                 <!-- 图片预览行（图片步骤完成后） -->
                 <div v-if="step.imgUrl" class="step-img-preview">
                   <img :src="step.imgUrl" class="step-img" />
-                  <a :href="step.imgUrl" :download="`img_${step.key}.jpg`" target="_blank">
-                    <a-button size="small" type="link" style="padding:0;font-size:11px">
-                      <DownloadOutlined /> 下载
-                    </a-button>
-                  </a>
+                  <a-button size="small" type="link" style="padding:0;font-size:11px" @click="downloadFromUrl(step.imgUrl, `img_${step.key}.jpg`)">
+                    <DownloadOutlined /> 下载
+                  </a-button>
                 </div>
 
                 <!-- 错误信息 -->
@@ -193,11 +191,9 @@
                   <template v-else>
                     <img :src="img.url" :alt="`图片${ii + 1}`" class="img-preview" />
                     <div class="img-overlay">
-                      <a :href="img.url" :download="`xhs_img${ii + 1}.jpg`" target="_blank">
-                        <a-button size="small" type="primary" ghost>
-                          <DownloadOutlined /> 下载
-                        </a-button>
-                      </a>
+                      <a-button size="small" type="primary" ghost :loading="img.downloading" @click.prevent="downloadSingleImage(img, ii)">
+                        <DownloadOutlined /> 下载
+                      </a-button>
                       <a-button size="small" type="primary" ghost @click.prevent="openEditModal(job, img, ii)">
                         <EditOutlined /> AI 编辑
                       </a-button>
@@ -331,7 +327,8 @@ import {
   EditOutlined, PlusOutlined,
 } from '@ant-design/icons-vue'
 import RewritePromptPanel from './RewritePrompt.vue'
-import { parseXhsLink, rewriteContent, rewriteImage, uploadXhsImageViaWorker, uploadLocalImageToR2 } from '@/api/xhsRewrite'
+import { parseXhsLink, rewriteContent, rewriteImage, uploadXhsImageViaWorker, uploadLocalImageToR2, proxyImageForDownload } from '@/api/xhsRewrite'
+import { processImageForDownload, triggerBlobDownload } from '@/utils/imageProcess'
 
 const links = ref('')
 const submitting = ref(false)
@@ -517,7 +514,7 @@ async function processJob(job) {
     }
 
     // 文案完成后，先展示结果框架（图片异步继续）
-    const images = (parsed.images ?? []).map((src, i) => ({ src, url: '', status: 'pending', idx: i }))
+    const images = (parsed.images ?? []).map((src, i) => ({ src, url: '', status: 'pending', idx: i, downloading: false }))
     job.result = { title: rewritten.title, content: rewritten.content, images }
     job.status = 'done'
     job.totalMs = Date.now() - t0
@@ -576,17 +573,74 @@ async function copyAll(result) {
   await copyText(`${result.title}\n\n${result.content}`)
 }
 
-async function downloadAllImages(job) {
-  const doneImgs = job.result.images.filter(i => i.status === 'done')
-  for (let i = 0; i < doneImgs.length; i++) {
-    const a = document.createElement('a')
-    a.href = doneImgs[i].url
-    a.download = `xhs_img${i + 1}.jpg`
-    a.target = '_blank'
-    a.click()
-    await new Promise(r => setTimeout(r, 300))
+// ─── 图片下载（带防 AI 标注 + 去重指纹处理） ────────────────
+
+/**
+ * 内部：获取 blob，自动处理 CORS。
+ * - 优先直接 CORS fetch（若 AI CDN 支持）
+ * - 失败后通过 Worker 中转到 R2 再处理（绕过 CDN CORS 限制）
+ */
+async function _getProcessedBlob(srcUrl) {
+  try {
+    return await processImageForDownload(srcUrl)
+  } catch {
+    // AI 服务 CDN 不返回 CORS 头，通过 Worker 中转
+    const proxied = await proxyImageForDownload(srcUrl)
+    return await processImageForDownload(proxied.url)
   }
-  message.success(`已触发 ${doneImgs.length} 张图片下载`)
+}
+
+/** 单张下载（供图片 overlay 按钮调用） */
+async function downloadSingleImage(img, idx) {
+  if (img.downloading) return
+  img.downloading = true
+  try {
+    const blob = await _getProcessedBlob(img.url)
+    triggerBlobDownload(blob, `xhs_ai_${idx + 1}.jpg`)
+    message.success('下载成功（已处理去重指纹）')
+  } catch (e) {
+    message.error(e.message || '下载失败')
+  } finally {
+    img.downloading = false
+  }
+}
+
+/** 通过 URL 直接下载（供执行日志下载按钮调用） */
+async function downloadFromUrl(url, filename) {
+  try {
+    const blob = await _getProcessedBlob(url)
+    triggerBlobDownload(blob, filename)
+  } catch (e) {
+    message.error(e.message || '下载失败')
+  }
+}
+
+/** 批量下载全部已完成的图片 */
+async function downloadAllImages(job) {
+  const doneImgs = job.result.images.filter(i => i.status === 'done' && !i.downloading)
+  if (!doneImgs.length) return
+
+  const hideMsg = message.loading(`处理 ${doneImgs.length} 张图片中…`, 0)
+  let success = 0
+
+  for (let i = 0; i < doneImgs.length; i++) {
+    const img = doneImgs[i]
+    img.downloading = true
+    try {
+      const blob = await _getProcessedBlob(img.url)
+      triggerBlobDownload(blob, `xhs_ai_${img.idx + 1}.jpg`)
+      success++
+      // 批量下载间隔，避免浏览器弹窗被拦截
+      if (i < doneImgs.length - 1) await new Promise(r => setTimeout(r, 600))
+    } catch {
+      // 单张失败不中断
+    } finally {
+      img.downloading = false
+    }
+  }
+
+  hideMsg()
+  message.success(`已下载 ${success} / ${doneImgs.length} 张（已处理去重指纹）`)
 }
 
 function rewriteAgain(job) {
