@@ -20,7 +20,7 @@
         </div>
         <div class="card-tab" :class="{ active: activeTab === 'product' }" @click="activeTab = 'product'">
           <ShoppingOutlined />
-          商品详情
+          商品链接
         </div>
       </div>
 
@@ -34,19 +34,23 @@
           :rows="5"
           :bordered="false"
         />
-        <!-- 商品详情输入 -->
-        <a-textarea
+        <!-- 商品链接输入 -->
+        <a-input
           v-else
-          v-model:value="productInfo"
-          class="link-input"
-          placeholder="在此输入商品详情，例如：&#10;商品名称：超保湿玻尿酸面霜&#10;核心卖点：72小时保湿、温和无刺激、适合敏感肌&#10;价格：199元&#10;使用体验：质地轻薄、吸收快、无油腻感&#10;适合人群：干性/混合肌、大学生党"
-          :rows="5"
+          v-model:value="productUrl"
+          class="product-url-input"
+          placeholder="粘贴淘宝、天猫、京东、拼多多等商品链接，支持短链"
           :bordered="false"
-        />
+          allow-clear
+        >
+          <template #prefix><LinkOutlined style="color:#9ca3af" /></template>
+        </a-input>
         <div class="card-actions">
           <div class="action-left">
-            <a-switch v-model:checked="directRewrite" size="small" />
-            <span class="direct-label" :class="{ off: !directRewrite }">直接改写</span>
+            <template v-if="activeTab === 'link'">
+              <a-switch v-model:checked="directRewrite" size="small" />
+              <span class="direct-label" :class="{ off: !directRewrite }">直接改写</span>
+            </template>
             <a-button type="link" size="small" class="prompt-btn" @click="showPromptDrawer = true">
               <SettingOutlined />
               提示词配置
@@ -57,20 +61,49 @@
             size="large"
             class="rewrite-btn"
             :loading="submitting"
-            :disabled="activeTab === 'link' ? !links.trim() : !productInfo.trim()"
+            :disabled="activeTab === 'link' ? !links.trim() : !productUrl.trim()"
             @click="onRewrite"
           >
             <template #icon><ThunderboltOutlined /></template>
-            {{ activeTab === 'link' ? '一键 AI 改写' : 'AI 生成笔记' }}
+            {{ activeTab === 'link' ? '一键 AI 改写' : '解析商品' }}
             <ArrowRightOutlined />
           </a-button>
         </div>
         <div class="card-footer-tip">
           <InfoCircleOutlined />
           <template v-if="activeTab === 'link'">支持多链接批量改写 · 每行一条链接 · 最多 10 条</template>
-          <template v-else>输入商品名称、卖点、价格等信息 · AI 自动生成小红书种草笔记</template>
+          <template v-else>支持淘宝 / 天猫 / 京东 / 拼多多商品链接 · 自动解析商品标题和图片</template>
         </div>
       </div>
+    </div>
+
+    <!-- 商品解析结果 -->
+    <div v-if="activeTab === 'product' && productResult" class="product-result-card">
+      <div class="product-result-header">
+        <span class="product-result-title">{{ productResult.title || '（无标题）' }}</span>
+        <a-button size="small" @click="productResult = null"><CloseOutlined /> 清除</a-button>
+      </div>
+      <div v-if="productResult.images?.length" class="product-img-section">
+        <div class="product-img-label">商品图片（{{ productResult.images.length }} 张）</div>
+        <div class="product-img-grid">
+          <div
+            v-for="(img, ii) in productResult.images"
+            :key="ii"
+            class="product-img-item"
+          >
+            <img :src="img" class="product-img-thumb" @error="e => e.target.style.display='none'" />
+            <div class="product-img-overlay">
+              <a-button size="small" type="primary" ghost @click="downloadProductImg(img, ii)">
+                <DownloadOutlined />
+              </a-button>
+            </div>
+          </div>
+        </div>
+        <a-button size="small" style="margin-top:8px" @click="downloadAllProductImgs">
+          <DownloadOutlined /> 批量下载
+        </a-button>
+      </div>
+      <div v-else class="product-no-img">未解析到图片，可能商品页需要登录或页面结构不支持</div>
     </div>
 
     <!-- 改写任务列表 -->
@@ -343,14 +376,15 @@ import {
   ThunderboltOutlined, ArrowRightOutlined, InfoCircleOutlined,
   CopyOutlined, DownloadOutlined, ReloadOutlined, ExclamationCircleOutlined,
   LoadingOutlined, CheckCircleFilled, CloseCircleFilled, BarsOutlined, DownOutlined,
-  EditOutlined, PlusOutlined,
+  EditOutlined, PlusOutlined, CloseOutlined,
 } from '@ant-design/icons-vue'
 import RewritePromptPanel from './RewritePrompt.vue'
-import { parseXhsLink, rewriteContent, rewriteImage, uploadXhsImageViaWorker, uploadLocalImageToR2, proxyImageForDownload } from '@/api/xhsRewrite'
+import { parseXhsLink, rewriteContent, rewriteImage, uploadXhsImageViaWorker, uploadLocalImageToR2, proxyImageForDownload, parseProductLink } from '@/api/xhsRewrite'
 import { processImageForDownload, triggerBlobDownload } from '@/utils/imageProcess'
 
 const links = ref('')
-const productInfo = ref('')
+const productUrl = ref('')
+const productResult = ref(null)   // { title, images: string[] }
 const activeTab = ref('link')    // 'link' | 'product'
 const submitting = ref(false)
 const showPromptDrawer = ref(false)
@@ -360,18 +394,6 @@ const directRewrite = ref(true)
 const router = useRouter()
 
 let _jobId = 0
-
-// ─── 商品详情模式的专属提示词 ──────────────────────────────
-const PRODUCT_TITLE_PROMPT =
-  `根据以下商品信息，生成一条吸引人的小红书标题。` +
-  `要求：真实自然的用户视角、突出核心亮点、长度 15-30 字、可带 1-2 个 emoji 增强视觉感、只输出标题文本。`
-
-const PRODUCT_CONTENT_PROMPT =
-  `根据以下商品信息，生成一篇适合小红书发布的商品种草笔记正文。` +
-  `要求：1. 用真实自然的第一人称用户视角，像朋友推荐一样亲切；` +
-  `2. 突出产品核心卖点和使用体验，内容具体生动；` +
-  `3. 适当融入生活场景，让读者产生代入感；` +
-  `4. 结尾加 3-5 个相关 #标签；5. 只输出正文，不要标题。`
 
 // 默认图片提示词（与 RewritePrompt.vue 中保持一致，用于「附上系统提示词」功能）
 const DEFAULT_IMAGE_PROMPT = `基于输入图片进行轻度重绘，生成一张风格自然、适合小红书发布的新图。
@@ -462,52 +484,22 @@ async function typewrite(step, text, msPerChar = 18) {
 // ─── 主流程 ───────────────────────────────────────────────
 
 async function onRewrite() {
-  // ── 商品详情模式 ─────────────────────────────────────────
+  // ── 商品链接模式 ─────────────────────────────────────────
   if (activeTab.value === 'product') {
-    const info = productInfo.value.trim()
-    if (!info) { message.warning('请输入商品详情信息'); return }
+    const url = productUrl.value.trim()
+    if (!url) { message.warning('请输入商品链接'); return }
     submitting.value = true
-
-    if (!directRewrite.value) {
-      // 关闭直接改写：先用 LLM 生成初稿再跳编辑页
-      try {
-        const result = await rewriteContent({
-          title: '',
-          content: info,
-          title_prompt: PRODUCT_TITLE_PROMPT,
-          content_prompt: PRODUCT_CONTENT_PROMPT,
-        })
-        sessionStorage.setItem('xhs_rewrite_draft', JSON.stringify({
-          sourceUrl: '商品详情',
-          title: result.title,
-          content: result.content,
-          images: [],
-        }))
-        router.push({ name: 'ai-rewrite-edit' })
-      } catch (e) {
-        message.error(e.message || '生成失败，请检查 LLM 配置')
-      } finally {
-        submitting.value = false
-      }
-      return
+    productResult.value = null
+    try {
+      const result = await parseProductLink({ url })
+      productResult.value = result
+      if (!result.images?.length) message.warning('未解析到图片，请检查链接或尝试其他商品')
+      else message.success(`解析成功：${result.images.length} 张图片`)
+    } catch (e) {
+      message.error(e.message || '解析失败，请检查链接')
+    } finally {
+      submitting.value = false
     }
-
-    // 直接改写：在页面内展示结果
-    const newJob = {
-      id: ++_jobId,
-      sourceUrl: '商品详情',
-      status: 'running',
-      result: null,
-      error: null,
-      totalMs: null,
-      logsCollapsed: true,
-      steps: [
-        makeStep('generate', '🤖  AI 生成种草笔记', { streaming: '' }),
-      ],
-    }
-    jobs.value = [newJob, ...jobs.value]
-    submitting.value = false
-    processProductJob(jobs.value[0], info)
     return
   }
 
@@ -558,43 +550,6 @@ async function onRewrite() {
   // 必须从 jobs.value 取响应式 Proxy，直接用 newJobs 原始对象赋值不会触发 Vue 响应式
   for (let i = 0; i < newJobs.length; i++) {
     processJob(jobs.value[i])
-  }
-}
-
-// ─── 商品详情模式：AI 直接生成种草笔记 ──────────────────────
-async function processProductJob(job, productText) {
-  const t0 = Date.now()
-  try {
-    const endGen = startStep(job, 'generate')
-    addStepLog(job, 'generate', '调用 LLM 生成种草笔记中…')
-    const genStep = job.steps.find(s => s.key === 'generate')
-
-    let result
-    try {
-      result = await rewriteContent({
-        title: '',
-        content: productText,
-        title_prompt: PRODUCT_TITLE_PROMPT,
-        content_prompt: PRODUCT_CONTENT_PROMPT,
-      })
-      // 打字动画：先展示标题，再展示正文片段
-      await typewrite(genStep, result.title, 22)
-      endGen(true)
-      addStepLog(job, 'generate', `已生成标题：${result.title}`)
-      addStepLog(job, 'generate', `正文共 ${result.content?.length ?? 0} 字`)
-    } catch (e) {
-      endGen(false, e.message || '生成失败')
-      throw e
-    }
-
-    job.result = { title: result.title, content: result.content, images: [] }
-    job.status = 'done'
-    job.totalMs = Date.now() - t0
-    job.logsCollapsed = false
-  } catch (e) {
-    job.status = 'error'
-    job.error = e.message || '生成失败，请检查 LLM 配置'
-    job.totalMs = Date.now() - t0
   }
 }
 
@@ -703,6 +658,38 @@ async function processJob(job) {
       job.totalMs = Date.now() - t0
     }
   }
+}
+
+// ─── 商品图片下载 ─────────────────────────────────────────
+
+async function downloadProductImg(url, idx) {
+  try {
+    const res = await fetch(url)
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const blob = await res.blob()
+    triggerBlobDownload(blob, `product_${idx + 1}.jpg`)
+  } catch (e) {
+    message.error(`下载失败：${e.message}`)
+  }
+}
+
+async function downloadAllProductImgs() {
+  const imgs = productResult.value?.images ?? []
+  if (!imgs.length) return
+  const hide = message.loading(`下载 ${imgs.length} 张图片中…`, 0)
+  let ok = 0
+  for (let i = 0; i < imgs.length; i++) {
+    try {
+      const res = await fetch(imgs[i])
+      if (!res.ok) continue
+      const blob = await res.blob()
+      triggerBlobDownload(blob, `product_${i + 1}.jpg`)
+      ok++
+      if (i < imgs.length - 1) await new Promise(r => setTimeout(r, 600))
+    } catch { /* 单张失败不中断 */ }
+  }
+  hide()
+  message.success(`已下载 ${ok} / ${imgs.length} 张`)
 }
 
 // ─── 操作函数 ─────────────────────────────────────────────
@@ -1467,5 +1454,83 @@ async function onEditGenerate() {
 .edit-gen-btn:hover:not(:disabled) {
   background: #e01f3b !important;
   border-color: #e01f3b !important;
+}
+
+/* ─── 商品链接输入 ───────────────────────────────────────── */
+.product-url-input {
+  font-size: 14px;
+  padding: 10px 0;
+}
+.product-url-input :deep(.ant-input) { font-size: 14px; }
+
+/* ─── 商品解析结果卡片 ──────────────────────────────────── */
+.product-result-card {
+  width: 100%;
+  max-width: 760px;
+  background: #fff;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 2px 12px rgba(0,0,0,.04);
+}
+
+.product-result-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.product-result-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1f2937;
+  line-height: 1.5;
+  flex: 1;
+}
+
+.product-img-section { display: flex; flex-direction: column; gap: 10px; }
+.product-img-label { font-size: 12px; font-weight: 600; color: #9ca3af; text-transform: uppercase; letter-spacing: .5px; }
+
+.product-img-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 8px;
+}
+
+.product-img-item {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #f5f6f7;
+  border: 1px solid #e5e7eb;
+}
+
+.product-img-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.product-img-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity .2s;
+}
+.product-img-item:hover .product-img-overlay { opacity: 1; }
+
+.product-no-img {
+  font-size: 13px;
+  color: #9ca3af;
+  padding: 20px 0;
+  text-align: center;
 }
 </style>

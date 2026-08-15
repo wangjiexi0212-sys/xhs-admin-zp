@@ -80,6 +80,10 @@ async function loadImageAsDataUrl(url) {
   })
 }
 
+/** 解析电商商品链接，返回商品标题和图片列表 */
+export const parseProductLink = (data) =>
+  request('/api/xhs-rewrite/parse-product', { method: 'POST', body: data })
+
 /** 用 AI 绘图改写图片（单张），返回新图 URL */
 export const rewriteImage = (data) =>
   request('/api/xhs-rewrite/image', { method: 'POST', body: data })
