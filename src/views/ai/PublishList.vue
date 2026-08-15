@@ -74,7 +74,7 @@
                 <EditOutlined />
               </button>
             </a-tooltip>
-            <a-tooltip title="复制内容">
+            <a-tooltip title="复制草稿">
               <button class="cover-action-btn" @click.stop="copyDraft(draft)">
                 <CopyOutlined />
               </button>
@@ -137,7 +137,7 @@ import {
   PlusOutlined, PictureOutlined, EditOutlined, CopyOutlined, DeleteOutlined,
   ClockCircleOutlined, FileTextOutlined,
 } from '@ant-design/icons-vue'
-import { loadDrafts, deleteDraft, getDraft } from '@/utils/draftStorage'
+import { loadDrafts, saveDraft, deleteDraft, getDraft } from '@/utils/draftStorage'
 
 const router = useRouter()
 
@@ -248,12 +248,17 @@ function editDraft(draft) {
   router.push({ name: 'ai-rewrite-edit' })
 }
 
-async function copyDraft(draft) {
-  try {
-    const tagStr = (draft.tags ?? []).map(t => `#${t}`).join(' ')
-    await navigator.clipboard.writeText(`${draft.title}\n\n${draft.content}\n\n${tagStr}`.trim())
-    message.success('已复制标题 + 正文 + 标签')
-  } catch { message.error('复制失败') }
+function copyDraft(draft) {
+  saveDraft({
+    // 不传 id → storage 自动新建，相当于复制一份
+    sourceUrl: draft.sourceUrl,
+    title: draft.title,
+    content: draft.content,
+    tags: draft.tags ?? [],
+    images: draft.images ?? [],
+  })
+  refresh()
+  message.success('已复制一份草稿')
 }
 
 const deleteModal = ref({ visible: false, draft: null, loading: false })
