@@ -81,7 +81,7 @@
     <div v-if="activeTab === 'product' && productResult" class="product-result-card">
       <div class="product-result-header">
         <span class="product-result-title">{{ productResult.title || '（无标题）' }}</span>
-        <a-button size="small" @click="productResult = null"><CloseOutlined /> 清除</a-button>
+        <a-button size="small" @click="productResult = null; productAiImages = []"><CloseOutlined /> 清除</a-button>
       </div>
       <div v-if="productResult.images?.length" class="product-img-section">
         <div class="product-img-label">商品图片（{{ productResult.images.length }} 张）</div>
@@ -99,11 +99,73 @@
             </div>
           </div>
         </div>
-        <a-button size="small" style="margin-top:8px" @click="downloadAllProductImgs">
-          <DownloadOutlined /> 批量下载
-        </a-button>
+        <div class="product-bottom-actions">
+          <a-button size="small" @click="downloadAllProductImgs">
+            <DownloadOutlined /> 批量下载
+          </a-button>
+          <a-button
+            size="small"
+            type="primary"
+            class="product-ai-btn"
+            :loading="productAiGenerating"
+            :disabled="productAiGenerating"
+            @click="handleProductAiRewrite"
+          >
+            <template #icon><ThunderboltOutlined /></template>
+            AI 二创
+          </a-button>
+        </div>
       </div>
       <div v-else class="product-no-img">未解析到图片，可能商品页需要登录或页面结构不支持</div>
+
+      <!-- AI 二创结果 -->
+      <template v-if="productAiImages.length">
+        <div class="product-ai-divider" />
+        <div class="product-img-section">
+          <div class="product-img-label">
+            AI 二创图片（{{ productAiImages.filter(i => i.status === 'done').length }} / {{ productAiImages.length }} 张完成）
+          </div>
+          <div class="product-img-grid">
+            <div
+              v-for="(img, ii) in productAiImages"
+              :key="ii"
+              class="product-img-item"
+            >
+              <!-- 排队 / 生成中 -->
+              <div v-if="img.status === 'pending' || img.status === 'running'" class="img-placeholder">
+                <a-spin size="small" />
+                <span class="img-placeholder-text">{{ img.status === 'pending' ? '排队中' : '生成中' }}</span>
+              </div>
+              <!-- 失败 -->
+              <div v-else-if="img.status === 'error'" class="img-error">
+                <ExclamationCircleOutlined />
+                <span>生成失败</span>
+                <a-button size="small" class="img-retry-btn" @click.stop="retryProductAiImage(img)">
+                  <ReloadOutlined /> 重试
+                </a-button>
+              </div>
+              <!-- 完成 -->
+              <template v-else>
+                <img :src="img.url" :alt="`AI二创 ${ii + 1}`" class="img-preview" />
+                <div class="img-overlay">
+                  <a-button size="small" type="primary" ghost :loading="img.downloading" @click.prevent="downloadProductAiImage(img, ii)">
+                    <DownloadOutlined /> 下载
+                  </a-button>
+                </div>
+              </template>
+            </div>
+          </div>
+          <a-button
+            v-if="productAiImages.some(i => i.status === 'done')"
+            size="small"
+            :loading="productAiBatchDownloading"
+            @click="downloadAllProductAiImages"
+            style="margin-top:8px"
+          >
+            <DownloadOutlined /> 批量下载 AI 图
+          </a-button>
+        </div>
+      </template>
     </div>
 
     <!-- 改写任务列表 -->
@@ -385,6 +447,9 @@ import { processImageForDownload, triggerBlobDownload } from '@/utils/imageProce
 const links = ref('')
 const productUrl = ref('')
 const productResult = ref(null)   // { title, images: string[] }
+const productAiImages = ref([])   // [{ src, url, status, downloading }]
+const productAiGenerating = ref(false)
+const productAiBatchDownloading = ref(false)
 const activeTab = ref('link')    // 'link' | 'product'
 const submitting = ref(false)
 const showPromptDrawer = ref(false)
@@ -529,6 +594,7 @@ async function onRewrite() {
     if (!url) { message.warning('请输入商品链接'); return }
     submitting.value = true
     productResult.value = null
+    productAiImages.value = []
     try {
       const result = await parseProductLink({ url })
       productResult.value = result
@@ -729,6 +795,87 @@ async function downloadAllProductImgs() {
   }
   hide()
   message.success(`已下载 ${ok} / ${imgs.length} 张`)
+}
+
+// ─── 商品图片 AI 二创 ──────────────────────────────────────
+
+/** 单张商品图执行 AI 二创（先代理到 R2，再调 AI 绘图） */
+async function _doProductAiOne(imgObj) {
+  imgObj.status = 'running'
+  imgObj.url = ''
+  try {
+    // 上传到 R2（绕过 XHS CDN 防外链；若已是 R2 URL 则直接用）
+    let publicSrc = imgObj.src
+    if (/xhscdn\.com|xiaohongshu\.com/i.test(imgObj.src)) {
+      const uploaded = await uploadXhsImageViaWorker(imgObj.src)
+      publicSrc = uploaded.url
+    }
+    const res = await rewriteImage({ src: publicSrc, prompt: '' })
+    imgObj.url = res.url
+    imgObj.status = 'done'
+  } catch (e) {
+    imgObj.status = 'error'
+    imgObj.errMsg = e.message || '绘图失败'
+  }
+}
+
+/** AI 二创全部商品图 */
+async function handleProductAiRewrite() {
+  const srcs = productResult.value?.images ?? []
+  if (!srcs.length) { message.warning('请先解析到商品图片'); return }
+
+  productAiGenerating.value = true
+  // 初始化（重新生成时重置）
+  productAiImages.value = srcs.map(src => ({
+    src, url: '', status: 'pending', downloading: false, errMsg: '',
+  }))
+
+  for (const imgObj of productAiImages.value) {
+    await _doProductAiOne(imgObj)
+  }
+
+  productAiGenerating.value = false
+  const done = productAiImages.value.filter(i => i.status === 'done').length
+  message.success(`AI 二创完成：${done} / ${productAiImages.value.length} 张`)
+}
+
+/** 单张失败重试 */
+async function retryProductAiImage(imgObj) {
+  await _doProductAiOne(imgObj)
+}
+
+/** 下载单张 AI 二创图 */
+async function downloadProductAiImage(img, idx) {
+  if (img.downloading) return
+  img.downloading = true
+  try {
+    const blob = await _getProcessedBlob(img.url)
+    triggerBlobDownload(blob, `product_ai_${idx + 1}.jpg`)
+  } catch (e) {
+    message.error(e.message || '下载失败')
+  } finally {
+    img.downloading = false
+  }
+}
+
+/** 批量下载全部已完成的 AI 二创图 */
+async function downloadAllProductAiImages() {
+  const doneImgs = productAiImages.value.filter(i => i.status === 'done')
+  if (!doneImgs.length) return
+  productAiBatchDownloading.value = true
+  const hide = message.loading(`下载 ${doneImgs.length} 张 AI 图中…`, 0)
+  let ok = 0
+  for (let i = 0; i < doneImgs.length; i++) {
+    try {
+      const blob = await _getProcessedBlob(doneImgs[i].url)
+      triggerBlobDownload(blob, `product_ai_${i + 1}.jpg`)
+      ok++
+      if (i < doneImgs.length - 1) await new Promise(r => setTimeout(r, 600))
+    } catch { /* 单张失败不中断 */ }
+  }
+  hide()
+  productAiBatchDownloading.value = false
+  message.success(`已下载 ${ok} / ${doneImgs.length} 张 AI 图（已处理去重指纹）`)
 }
 
 // ─── 操作函数 ─────────────────────────────────────────────
@@ -1571,5 +1718,29 @@ async function onEditGenerate() {
   color: #9ca3af;
   padding: 20px 0;
   text-align: center;
+}
+
+/* 商品底部操作行 */
+.product-bottom-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.product-ai-btn {
+  background: #ff2442 !important;
+  border-color: #ff2442 !important;
+}
+.product-ai-btn:hover:not(:disabled) {
+  background: #e01f3b !important;
+  border-color: #e01f3b !important;
+}
+
+/* AI 二创结果分隔线 */
+.product-ai-divider {
+  height: 1px;
+  background: #f0f0f0;
+  margin: 16px 0 12px;
 }
 </style>
