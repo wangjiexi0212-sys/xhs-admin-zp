@@ -45,6 +45,34 @@
         >
           <template #prefix><LinkOutlined style="color:#9ca3af" /></template>
         </a-input>
+
+        <!-- 本地上传图片（商品链接 tab） -->
+        <template v-if="activeTab === 'product'">
+          <div class="upload-or-divider"><span class="or-label">或 直接上传图片</span></div>
+          <div
+            class="local-upload-area"
+            :class="{ uploading: localUploading }"
+            @click="triggerLocalUpload"
+          >
+            <input
+              ref="localFileInput"
+              type="file"
+              accept="image/*"
+              multiple
+              style="display:none"
+              @change="handleLocalImageUpload"
+            />
+            <template v-if="localUploading">
+              <a-spin size="small" />
+              <span class="local-upload-tip">上传中，请稍候…</span>
+            </template>
+            <template v-else>
+              <UploadOutlined class="local-upload-icon" />
+              <span class="local-upload-tip">点击选择图片（支持多选）</span>
+              <span class="local-upload-hint">JPG · PNG · WEBP · 上传后自动进入 AI 二创</span>
+            </template>
+          </div>
+        </template>
         <div class="card-actions">
           <div class="action-left">
             <template v-if="activeTab === 'link'">
@@ -61,7 +89,7 @@
             size="large"
             class="rewrite-btn"
             :loading="submitting"
-            :disabled="activeTab === 'link' ? !links.trim() : !productUrl.trim()"
+            :disabled="activeTab === 'link' ? !links.trim() : (!productUrl.trim() && !productResult)"
             @click="onRewrite"
           >
             <template #icon><ThunderboltOutlined /></template>
@@ -438,7 +466,7 @@ import {
   ThunderboltOutlined, ArrowRightOutlined, InfoCircleOutlined,
   CopyOutlined, DownloadOutlined, ReloadOutlined, ExclamationCircleOutlined,
   LoadingOutlined, CheckCircleFilled, CloseCircleFilled, BarsOutlined, DownOutlined,
-  EditOutlined, PlusOutlined, CloseOutlined,
+  EditOutlined, PlusOutlined, CloseOutlined, UploadOutlined,
 } from '@ant-design/icons-vue'
 import RewritePromptPanel from './RewritePrompt.vue'
 import { parseXhsLink, rewriteContent, rewriteImage, uploadXhsImageViaWorker, uploadLocalImageToR2, proxyImageForDownload, parseProductLink } from '@/api/xhsRewrite'
@@ -455,6 +483,10 @@ const submitting = ref(false)
 const showPromptDrawer = ref(false)
 const jobs = ref([])
 const directRewrite = ref(true)
+
+// 本地图片上传
+const localFileInput = ref(null)
+const localUploading = ref(false)
 
 const router = useRouter()
 
@@ -762,6 +794,46 @@ async function processJob(job) {
       job.error = e.message || '改写失败，请检查链接或 Cookie 配置'
       job.totalMs = Date.now() - t0
     }
+  }
+}
+
+// ─── 本地图片上传（直接进 AI 二创） ──────────────────────────
+
+function triggerLocalUpload() {
+  localFileInput.value?.click()
+}
+
+async function handleLocalImageUpload(e) {
+  const files = [...(e.target.files ?? [])]
+  e.target.value = ''   // 允许重复选同一批文件
+  if (!files.length) return
+
+  localUploading.value = true
+  const hide = message.loading(`上传 ${files.length} 张图片中…`, 0)
+  let uploaded = 0
+
+  try {
+    const urls = await Promise.all(
+      files.map(async (file) => {
+        const res = await uploadLocalImageToR2(file)
+        uploaded++
+        return res.url
+      })
+    )
+    // 追加到现有图片（或新建）
+    const prev = productResult.value
+    productResult.value = {
+      title: prev?.title || '',
+      images: [...(prev?.images ?? []), ...urls],
+    }
+    productAiImages.value = []   // 新图加入，清空旧的 AI 二创结果
+    hide()
+    message.success(`已上传 ${urls.length} 张图片，点击「AI 二创」开始生成`)
+  } catch (err) {
+    hide()
+    message.error(err.message || '图片上传失败')
+  } finally {
+    localUploading.value = false
   }
 }
 
@@ -1648,6 +1720,47 @@ async function onEditGenerate() {
   padding: 10px 0;
 }
 .product-url-input :deep(.ant-input) { font-size: 14px; }
+
+/* ─── 本地上传图片 ───────────────────────────────────────── */
+.upload-or-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #d1d5db;
+  font-size: 12px;
+  margin: 2px 0;
+}
+.upload-or-divider::before,
+.upload-or-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #f0f0f0;
+}
+.or-label { white-space: nowrap; color: #9ca3af; }
+
+.local-upload-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1.5px dashed #e5e7eb;
+  border-radius: 8px;
+  padding: 16px 20px;
+  cursor: pointer;
+  background: #fafafa;
+  transition: border-color .2s, background .2s;
+  min-height: 80px;
+}
+.local-upload-area:hover { border-color: #ff2442; background: #fff5f6; }
+.local-upload-area.uploading { border-color: #1677ff; cursor: default; background: #f0f7ff; }
+
+.local-upload-icon { font-size: 22px; color: #9ca3af; }
+.local-upload-area:hover .local-upload-icon { color: #ff2442; }
+
+.local-upload-tip { font-size: 13px; color: #374151; font-weight: 500; }
+.local-upload-hint { font-size: 11px; color: #9ca3af; }
 
 /* ─── 商品解析结果卡片 ──────────────────────────────────── */
 .product-result-card {
