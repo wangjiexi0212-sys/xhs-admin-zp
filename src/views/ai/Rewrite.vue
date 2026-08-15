@@ -10,7 +10,7 @@
     <!-- 输入卡片 -->
     <div class="input-card">
       <div class="card-tabs">
-        <div class="card-tab active">
+        <div class="card-tab" :class="{ active: activeTab === 'link' }" @click="activeTab = 'link'">
           <LinkOutlined />
           小红书链接
         </div>
@@ -18,17 +18,28 @@
           <PictureOutlined />
           上传图片
         </div>
-        <div class="card-tab disabled" title="即将开放">
+        <div class="card-tab" :class="{ active: activeTab === 'product' }" @click="activeTab = 'product'">
           <ShoppingOutlined />
-          商品笔记
+          商品详情
         </div>
       </div>
 
       <div class="card-body">
+        <!-- 小红书链接输入 -->
         <a-textarea
+          v-if="activeTab === 'link'"
           v-model:value="links"
           class="link-input"
           placeholder="在此粘贴小红书笔记链接...&#10;支持标准链接、xhslink 短链、App 分享文字"
+          :rows="5"
+          :bordered="false"
+        />
+        <!-- 商品详情输入 -->
+        <a-textarea
+          v-else
+          v-model:value="productInfo"
+          class="link-input"
+          placeholder="在此输入商品详情，例如：&#10;商品名称：超保湿玻尿酸面霜&#10;核心卖点：72小时保湿、温和无刺激、适合敏感肌&#10;价格：199元&#10;使用体验：质地轻薄、吸收快、无油腻感&#10;适合人群：干性/混合肌、大学生党"
           :rows="5"
           :bordered="false"
         />
@@ -46,17 +57,18 @@
             size="large"
             class="rewrite-btn"
             :loading="submitting"
-            :disabled="!links.trim()"
+            :disabled="activeTab === 'link' ? !links.trim() : !productInfo.trim()"
             @click="onRewrite"
           >
             <template #icon><ThunderboltOutlined /></template>
-            一键 AI 改写
+            {{ activeTab === 'link' ? '一键 AI 改写' : 'AI 生成笔记' }}
             <ArrowRightOutlined />
           </a-button>
         </div>
         <div class="card-footer-tip">
           <InfoCircleOutlined />
-          支持多链接批量改写 · 每行一条链接 · 最多 10 条
+          <template v-if="activeTab === 'link'">支持多链接批量改写 · 每行一条链接 · 最多 10 条</template>
+          <template v-else>输入商品名称、卖点、价格等信息 · AI 自动生成小红书种草笔记</template>
         </div>
       </div>
     </div>
@@ -338,6 +350,8 @@ import { parseXhsLink, rewriteContent, rewriteImage, uploadXhsImageViaWorker, up
 import { processImageForDownload, triggerBlobDownload } from '@/utils/imageProcess'
 
 const links = ref('')
+const productInfo = ref('')
+const activeTab = ref('link')    // 'link' | 'product'
 const submitting = ref(false)
 const showPromptDrawer = ref(false)
 const jobs = ref([])
@@ -346,6 +360,18 @@ const directRewrite = ref(true)
 const router = useRouter()
 
 let _jobId = 0
+
+// ─── 商品详情模式的专属提示词 ──────────────────────────────
+const PRODUCT_TITLE_PROMPT =
+  `根据以下商品信息，生成一条吸引人的小红书标题。` +
+  `要求：真实自然的用户视角、突出核心亮点、长度 15-30 字、可带 1-2 个 emoji 增强视觉感、只输出标题文本。`
+
+const PRODUCT_CONTENT_PROMPT =
+  `根据以下商品信息，生成一篇适合小红书发布的商品种草笔记正文。` +
+  `要求：1. 用真实自然的第一人称用户视角，像朋友推荐一样亲切；` +
+  `2. 突出产品核心卖点和使用体验，内容具体生动；` +
+  `3. 适当融入生活场景，让读者产生代入感；` +
+  `4. 结尾加 3-5 个相关 #标签；5. 只输出正文，不要标题。`
 
 // 默认图片提示词（与 RewritePrompt.vue 中保持一致，用于「附上系统提示词」功能）
 const DEFAULT_IMAGE_PROMPT = `基于输入图片进行轻度重绘，生成一张风格自然、适合小红书发布的新图。
@@ -436,6 +462,56 @@ async function typewrite(step, text, msPerChar = 18) {
 // ─── 主流程 ───────────────────────────────────────────────
 
 async function onRewrite() {
+  // ── 商品详情模式 ─────────────────────────────────────────
+  if (activeTab.value === 'product') {
+    const info = productInfo.value.trim()
+    if (!info) { message.warning('请输入商品详情信息'); return }
+    submitting.value = true
+
+    if (!directRewrite.value) {
+      // 关闭直接改写：先用 LLM 生成初稿再跳编辑页
+      try {
+        const result = await rewriteContent({
+          title: '',
+          content: info,
+          title_prompt: PRODUCT_TITLE_PROMPT,
+          content_prompt: PRODUCT_CONTENT_PROMPT,
+        })
+        sessionStorage.setItem('xhs_rewrite_draft', JSON.stringify({
+          sourceUrl: '商品详情',
+          title: result.title,
+          content: result.content,
+          images: [],
+        }))
+        router.push({ name: 'ai-rewrite-edit' })
+      } catch (e) {
+        message.error(e.message || '生成失败，请检查 LLM 配置')
+      } finally {
+        submitting.value = false
+      }
+      return
+    }
+
+    // 直接改写：在页面内展示结果
+    const newJob = {
+      id: ++_jobId,
+      sourceUrl: '商品详情',
+      status: 'running',
+      result: null,
+      error: null,
+      totalMs: null,
+      logsCollapsed: true,
+      steps: [
+        makeStep('generate', '🤖  AI 生成种草笔记', { streaming: '' }),
+      ],
+    }
+    jobs.value = [newJob, ...jobs.value]
+    submitting.value = false
+    processProductJob(jobs.value[0], info)
+    return
+  }
+
+  // ── 小红书链接模式（原有逻辑） ────────────────────────────
   const urlList = parseLinks(links.value)
   if (!urlList.length) { message.warning('请先填写小红书链接'); return }
   submitting.value = true
@@ -482,6 +558,43 @@ async function onRewrite() {
   // 必须从 jobs.value 取响应式 Proxy，直接用 newJobs 原始对象赋值不会触发 Vue 响应式
   for (let i = 0; i < newJobs.length; i++) {
     processJob(jobs.value[i])
+  }
+}
+
+// ─── 商品详情模式：AI 直接生成种草笔记 ──────────────────────
+async function processProductJob(job, productText) {
+  const t0 = Date.now()
+  try {
+    const endGen = startStep(job, 'generate')
+    addStepLog(job, 'generate', '调用 LLM 生成种草笔记中…')
+    const genStep = job.steps.find(s => s.key === 'generate')
+
+    let result
+    try {
+      result = await rewriteContent({
+        title: '',
+        content: productText,
+        title_prompt: PRODUCT_TITLE_PROMPT,
+        content_prompt: PRODUCT_CONTENT_PROMPT,
+      })
+      // 打字动画：先展示标题，再展示正文片段
+      await typewrite(genStep, result.title, 22)
+      endGen(true)
+      addStepLog(job, 'generate', `已生成标题：${result.title}`)
+      addStepLog(job, 'generate', `正文共 ${result.content?.length ?? 0} 字`)
+    } catch (e) {
+      endGen(false, e.message || '生成失败')
+      throw e
+    }
+
+    job.result = { title: result.title, content: result.content, images: [] }
+    job.status = 'done'
+    job.totalMs = Date.now() - t0
+    job.logsCollapsed = false
+  } catch (e) {
+    job.status = 'error'
+    job.error = e.message || '生成失败，请检查 LLM 配置'
+    job.totalMs = Date.now() - t0
   }
 }
 
