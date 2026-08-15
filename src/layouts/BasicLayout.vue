@@ -52,6 +52,7 @@
           <template #title>小红书AI</template>
           <a-menu-item key="/ai/rewrite">全能改写</a-menu-item>
           <a-menu-item key="/ai/rewrite-prompt">改写提示词</a-menu-item>
+          <a-menu-item key="/ai/publish-list">发布列表</a-menu-item>
         </a-sub-menu>
         <a-sub-menu key="system">
           <template #icon>
