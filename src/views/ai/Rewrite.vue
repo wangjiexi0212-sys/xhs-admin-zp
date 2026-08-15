@@ -186,6 +186,9 @@
                   <div v-else-if="img.status === 'error'" class="img-error">
                     <ExclamationCircleOutlined />
                     <span>生成失败</span>
+                    <a-button size="small" class="img-retry-btn" @click.stop="retryImage(job, img, ii)">
+                      <ReloadOutlined /> 重试
+                    </a-button>
                   </div>
                   <template v-else>
                     <img :src="img.url" :alt="`图片${ii + 1}`" class="img-preview" />
@@ -195,6 +198,9 @@
                           <DownloadOutlined /> 下载
                         </a-button>
                       </a>
+                      <a-button size="small" type="primary" ghost @click.prevent="openEditModal(job, img, ii)">
+                        <EditOutlined /> AI 编辑
+                      </a-button>
                     </div>
                   </template>
                 </div>
@@ -230,6 +236,77 @@
       </div>
     </div>
 
+    <!-- 单图 AI 编辑 Modal -->
+    <a-modal
+      v-model:open="editState.visible"
+      title="编辑图片提示词"
+      :footer="null"
+      :width="560"
+      :mask-closable="!editState.generating"
+      destroy-on-close
+    >
+      <p class="edit-modal-sub">AI 会结合当前编辑及系统预设提示词生成新图</p>
+
+      <div class="edit-modal-body">
+        <!-- 左：提示词输入 -->
+        <a-textarea
+          v-model:value="editState.customPrompt"
+          class="edit-prompt-ta"
+          placeholder="描述你希望如何改动这张图，例如：换成浅色背景、参考这张图的色调风格…"
+          :maxlength="500"
+          :rows="7"
+          show-count
+        />
+
+        <!-- 右：参考图上传 -->
+        <div class="edit-ref-col">
+          <div class="edit-ref-label">上传参考图</div>
+          <div
+            class="edit-ref-area"
+            :class="{ 'has-img': editState.refPreview }"
+            @click="triggerRefUpload"
+          >
+            <template v-if="editState.refPreview">
+              <img :src="editState.refPreview" class="edit-ref-img" />
+              <div class="edit-ref-change">更换</div>
+              <button class="edit-ref-rm" @click.stop="removeRefImage">×</button>
+            </template>
+            <template v-else>
+              <PlusOutlined class="edit-ref-plus" />
+              <span class="edit-ref-hint">点击上传</span>
+            </template>
+          </div>
+          <div class="edit-ref-tip"><InfoCircleOutlined /> 学习图片风格</div>
+        </div>
+      </div>
+
+      <input
+        ref="refFileInput"
+        type="file"
+        accept="image/*"
+        style="display:none"
+        @change="handleRefImageChange"
+      />
+
+      <div class="edit-modal-footer">
+        <div class="edit-footer-left">
+          <a-switch v-model:checked="editState.attachSysPrompt" size="small" />
+          <span class="edit-footer-label">附上系统提示词</span>
+        </div>
+        <div class="edit-footer-right">
+          <a-button @click="closeEditModal">取消</a-button>
+          <a-button
+            type="primary"
+            class="edit-gen-btn"
+            :loading="editState.generating"
+            @click="onEditGenerate"
+          >
+            立即生成
+          </a-button>
+        </div>
+      </div>
+    </a-modal>
+
     <!-- 提示词 Drawer -->
     <a-drawer
       v-model:open="showPromptDrawer"
@@ -244,16 +321,17 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, reactive } from 'vue'
 import { message } from 'ant-design-vue'
 import {
   LinkOutlined, PictureOutlined, ShoppingOutlined, SettingOutlined,
   ThunderboltOutlined, ArrowRightOutlined, InfoCircleOutlined,
   CopyOutlined, DownloadOutlined, ReloadOutlined, ExclamationCircleOutlined,
   LoadingOutlined, CheckCircleFilled, CloseCircleFilled, BarsOutlined, DownOutlined,
+  EditOutlined, PlusOutlined,
 } from '@ant-design/icons-vue'
 import RewritePromptPanel from './RewritePrompt.vue'
-import { parseXhsLink, rewriteContent, rewriteImage, uploadXhsImageViaWorker } from '@/api/xhsRewrite'
+import { parseXhsLink, rewriteContent, rewriteImage, uploadXhsImageViaWorker, uploadLocalImageToR2 } from '@/api/xhsRewrite'
 
 const links = ref('')
 const submitting = ref(false)
@@ -261,6 +339,30 @@ const showPromptDrawer = ref(false)
 const jobs = ref([])
 
 let _jobId = 0
+
+// 默认图片提示词（与 RewritePrompt.vue 中保持一致，用于「附上系统提示词」功能）
+const DEFAULT_IMAGE_PROMPT = `基于输入图片进行轻度重绘，生成一张风格自然、适合小红书发布的新图。
+
+要求：
+1. 保持主体、产品、人物和核心构图基本不变
+2. 可以调整色调、背景细节、光线感和氛围，让画面更清新、更有质感
+3. 风格贴近小红书流行审美：明亮、干净、真实生活感
+4. 不添加文字水印或 logo
+5. 输出比例与原图一致`
+
+// 单图 AI 编辑弹窗状态
+const editState = reactive({
+  visible: false,
+  job: null,
+  img: null,
+  imgIdx: -1,
+  customPrompt: '',
+  attachSysPrompt: true,
+  refFile: null,
+  refPreview: '',
+  generating: false,
+})
+const refFileInput = ref(null)
 
 // ─── 工具函数 ──────────────────────────────────────────────
 
@@ -506,6 +608,160 @@ function rewriteAgain(job) {
   }
   jobs.value.splice(idx, 1, newJob)
   processJob(jobs.value[idx]) // 使用响应式 Proxy
+}
+
+/** 对单张失败图片发起重新生成 */
+async function retryImage(job, img, idx) {
+  img.status = 'running'
+  img.url = ''
+
+  const stepKey = `img_${idx}`
+  const imgStep = job.steps.find(s => s.key === stepKey)
+  if (imgStep) {
+    imgStep.status = 'running'
+    imgStep.imgUrl = ''
+    imgStep.errMsg = ''
+    imgStep.logs.push({ time: nowTime(), text: '重新发起绘图…', type: 'info' })
+  }
+
+  try {
+    // 重新上传原图到 R2（原中转文件已被删除）
+    addStepLog(job, stepKey, `浏览器中转上传中…`)
+    let publicSrc
+    try {
+      const uploaded = await uploadXhsImageViaWorker(img.src)
+      publicSrc = uploaded.url
+      addStepLog(job, stepKey, `原图已上传：${publicSrc?.slice(0, 50)}…`)
+    } catch (uploadErr) {
+      throw new Error(`原图上传失败：${uploadErr.message}`)
+    }
+
+    // 重新调 AI 绘图
+    const res = await rewriteImage({ src: publicSrc, prompt: '' })
+    img.url = res.url
+    img.status = 'done'
+    if (imgStep) {
+      imgStep.status = 'done'
+      imgStep.imgUrl = res.url
+      imgStep.logs.push({ time: nowTime(), text: `✓ 重新生成成功`, type: 'success' })
+    }
+  } catch (e) {
+    img.status = 'error'
+    if (imgStep) {
+      imgStep.status = 'error'
+      imgStep.errMsg = e.message || '绘图失败'
+      imgStep.logs.push({ time: nowTime(), text: `✗ ${e.message || '绘图失败'}`, type: 'error' })
+    }
+  }
+}
+
+// ─── 单图 AI 编辑 ─────────────────────────────────────────
+
+function openEditModal(job, img, idx) {
+  Object.assign(editState, {
+    visible: true,
+    job, img, imgIdx: idx,
+    customPrompt: '',
+    attachSysPrompt: true,
+    refFile: null,
+    refPreview: '',
+    generating: false,
+    _srcSnapshot: img.url,  // 打开弹窗时快照当前生成图 URL，提交后 img.url 会被清空
+  })
+}
+
+function closeEditModal() {
+  if (editState.generating) return
+  editState.visible = false
+}
+
+function triggerRefUpload() {
+  refFileInput.value?.click()
+}
+
+function handleRefImageChange(e) {
+  const file = e.target.files?.[0]
+  if (!file) return
+  editState.refFile = file
+  const reader = new FileReader()
+  reader.onload = () => { editState.refPreview = reader.result }
+  reader.readAsDataURL(file)
+  e.target.value = '' // 允许重复选同一文件
+}
+
+function removeRefImage() {
+  editState.refFile = null
+  editState.refPreview = ''
+}
+
+async function onEditGenerate() {
+  const { job, img, imgIdx, customPrompt, attachSysPrompt, refFile } = editState
+  if (!customPrompt.trim() && !refFile) {
+    message.warning('请输入提示词或上传参考图')
+    return
+  }
+
+  editState.generating = true
+  const stepKey = `img_${imgIdx}`
+  const imgStep = job.steps.find(s => s.key === stepKey)
+
+  // 组合最终提示词
+  let finalPrompt = customPrompt.trim()
+  if (attachSysPrompt) {
+    finalPrompt = finalPrompt
+      ? `${finalPrompt}\n\n${DEFAULT_IMAGE_PROMPT}`
+      : DEFAULT_IMAGE_PROMPT
+  }
+
+  try {
+    // 上传参考图到 R2（如有）
+    let refSrc
+    if (refFile) {
+      const uploaded = await uploadLocalImageToR2(refFile)
+      refSrc = uploaded.url
+    }
+
+    // 关弹窗，更新图片状态为生成中
+    editState.visible = false
+    img.status = 'running'
+    img.url = ''
+    if (imgStep) {
+      imgStep.status = 'running'
+      imgStep.imgUrl = ''
+      imgStep.errMsg = ''
+      imgStep.logs.push({ time: nowTime(), text: 'AI 编辑中…', type: 'info' })
+      if (refSrc) addStepLog(job, stepKey, `参考图已上传：${refSrc.slice(0, 50)}…`)
+    }
+
+    // 以当前 AI 生成图（img.url 更新前的最后已知 URL）为底图进行编辑
+    // 注意：img.url 在上面已被清空为 ''，需要从 img.src 降级；
+    // 但实际上我们应使用编辑前的生成图，为此提前暂存。
+    // → 实际解法：在关弹窗前先读取，见 editState 存储的 img 引用
+    //   (img.url 清空前已被 rewriteImage 用作 src，故在 openEditModal 时快照即可)
+    const res = await rewriteImage({
+      src: editState._srcSnapshot,     // 打开弹窗时的快照 URL
+      image_prompt: finalPrompt || undefined,
+      ref_src: refSrc,
+    })
+
+    img.url = res.url
+    img.status = 'done'
+    if (imgStep) {
+      imgStep.status = 'done'
+      imgStep.imgUrl = res.url
+      imgStep.logs.push({ time: nowTime(), text: '✓ AI 编辑完成', type: 'success' })
+    }
+  } catch (e) {
+    img.status = 'error'
+    if (imgStep) {
+      imgStep.status = 'error'
+      imgStep.errMsg = e.message || 'AI 编辑失败'
+      imgStep.logs.push({ time: nowTime(), text: `✗ ${e.message || 'AI 编辑失败'}`, type: 'error' })
+    }
+    message.error(e.message || 'AI 编辑失败')
+  } finally {
+    editState.generating = false
+  }
 }
 </script>
 
@@ -852,12 +1108,20 @@ function rewriteAgain(job) {
   font-size: 11px; color: #ef4444;
 }
 
+.img-retry-btn {
+  margin-top: 2px;
+  font-size: 11px !important;
+  height: 22px !important;
+  padding: 0 7px !important;
+  line-height: 1 !important;
+}
+
 .img-preview { width: 100%; height: 100%; object-fit: cover; }
 
 .img-overlay {
   position: absolute; inset: 0;
-  background: rgba(0,0,0,.4);
-  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,.45);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
   opacity: 0; transition: opacity .2s;
 }
 .image-item:hover .img-overlay { opacity: 1; }
@@ -867,5 +1131,133 @@ function rewriteAgain(job) {
   display: flex; gap: 8px;
   margin-top: 16px; padding-top: 14px;
   border-top: 1px solid #f0f0f0;
+}
+
+/* ─── 单图 AI 编辑 Modal ────────────────────────────────── */
+.edit-modal-sub {
+  font-size: 13px;
+  color: #6b7280;
+  margin: -8px 0 16px;
+}
+
+.edit-modal-body {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.edit-prompt-ta {
+  flex: 1;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+/* 右侧参考图列 */
+.edit-ref-col {
+  width: 118px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.edit-ref-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #374151;
+}
+
+.edit-ref-area {
+  width: 118px;
+  height: 158px;
+  border: 1.5px dashed #d1d5db;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  background: #f9fafb;
+  transition: border-color .2s;
+}
+.edit-ref-area:hover,
+.edit-ref-area.has-img { border-color: #ff2442; }
+
+.edit-ref-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.edit-ref-change {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  background: rgba(0,0,0,.5);
+  color: #fff;
+  text-align: center;
+  font-size: 12px;
+  padding: 4px 0;
+}
+
+.edit-ref-rm {
+  position: absolute;
+  top: 4px; right: 4px;
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  background: rgba(0,0,0,.5);
+  border: none;
+  color: #fff;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.edit-ref-plus { font-size: 22px; color: #9ca3af; }
+.edit-ref-hint { font-size: 12px; color: #9ca3af; }
+
+.edit-ref-tip {
+  font-size: 11px;
+  color: #9ca3af;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* 弹窗底部 */
+.edit-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.edit-footer-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.edit-footer-label {
+  font-size: 13px;
+  color: #374151;
+}
+
+.edit-footer-right { display: flex; gap: 8px; }
+
+.edit-gen-btn {
+  background: #ff2442 !important;
+  border-color: #ff2442 !important;
+}
+.edit-gen-btn:hover:not(:disabled) {
+  background: #e01f3b !important;
+  border-color: #e01f3b !important;
 }
 </style>

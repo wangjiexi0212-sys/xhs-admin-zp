@@ -24,15 +24,23 @@ export const rewriteContent = (data) =>
   request('/api/xhs-rewrite/content', { method: 'POST', body: withLlm(data) })
 
 /**
- * 把 XHS CDN 图片在浏览器侧转为 base64，上传到 Worker R2，返回公开 URL。
- * XHS CDN 防外链，Worker 无法直接下载，必须由浏览器中转。
+ * 把 XHS CDN 图片通过 Worker 服务端代理存入 R2，返回公开 URL。
+ * 优先走服务端（绕过浏览器 CORS）；若服务端也被 CDN 拒绝，降级到浏览器 fetch 方案。
  */
 export async function uploadXhsImageViaWorker(xhsUrl) {
-  // 1. 浏览器 fetch（无 CORS 模式，只读 response，不读 body 内容）
-  //    改用 Image + Canvas 方案：可绕过 CORS 读取限制
+  // 优先尝试服务端代理（Worker 用 XHS Cookie 拉取，无 CORS 限制）
+  try {
+    const proxyRes = await request('/api/xhs-rewrite/proxy-to-r2', {
+      method: 'POST',
+      body: { url: xhsUrl },
+    })
+    // request() 已解包 data.data，proxyRes 即 { url: '...' }
+    if (proxyRes?.url) return proxyRes
+  } catch (_) { /* 服务端失败时降级到浏览器方案 */ }
+
+  // 降级：浏览器 fetch + base64 上传
   const dataUrl = await loadImageAsDataUrl(xhsUrl)
   const mimeType = dataUrl.match(/^data:([^;]+)/)?.[1] || 'image/jpeg'
-  // 2. 上传到 Worker
   return request('/api/xhs-rewrite/upload-image', {
     method: 'POST',
     body: { dataUrl, mimeType },
@@ -46,9 +54,11 @@ export async function uploadXhsImageViaWorker(xhsUrl) {
  * 因此改用 fetch + blob → createObjectURL 方案（不污染 canvas，可读 blob）。
  */
 async function loadImageAsDataUrl(url) {
+  // 强制升级到 HTTPS，避免 Mixed Content 被浏览器拦截
+  const secureUrl = url.replace(/^http:\/\//i, 'https://')
   // fetch 在浏览器中对同一 CDN 的请求不受跨域 canvas 限制（只要不操作 canvas 像素）
   // 但 XHS CDN 对直接 fetch 也可能 403，此时给出明确错误
-  const res = await fetch(url, {
+  const res = await fetch(secureUrl, {
     headers: {
       Referer: 'https://www.xiaohongshu.com/',
     },
@@ -73,4 +83,22 @@ async function loadImageAsDataUrl(url) {
 /** 用 AI 绘图改写图片（单张），返回新图 URL */
 export const rewriteImage = (data) =>
   request('/api/xhs-rewrite/image', { method: 'POST', body: data })
+
+/**
+ * 把本地 File 对象上传到 R2，返回公开 URL。
+ * 用于「单图 AI 编辑」时上传用户选择的参考图。
+ */
+export async function uploadLocalImageToR2(file) {
+  const dataUrl = await new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result)
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+  const mimeType = file.type || 'image/jpeg'
+  return request('/api/xhs-rewrite/upload-image', {
+    method: 'POST',
+    body: { dataUrl, mimeType },
+  })
+}
 
