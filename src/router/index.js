@@ -136,6 +136,16 @@ const router = createRouter({
           component: () => import('../views/ai/Rewrite.vue'),
         },
         {
+          path: 'ai/rewrite/edit',
+          name: 'ai-rewrite-edit',
+          component: () => import('../views/ai/RewriteEdit.vue'),
+        },
+        {
+          path: 'ai/publish-list',
+          name: 'ai-publish-list',
+          component: () => import('../views/ai/PublishList.vue'),
+        },
+        {
           path: 'ai/rewrite-prompt',
           name: 'ai-rewrite-prompt',
           component: () => import('../views/ai/RewritePrompt.vue'),

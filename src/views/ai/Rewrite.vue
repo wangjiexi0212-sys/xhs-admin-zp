@@ -33,10 +33,14 @@
           :bordered="false"
         />
         <div class="card-actions">
-          <a-button type="link" size="small" class="prompt-btn" @click="showPromptDrawer = true">
-            <SettingOutlined />
-            提示词配置
-          </a-button>
+          <div class="action-left">
+            <a-switch v-model:checked="directRewrite" size="small" />
+            <span class="direct-label" :class="{ off: !directRewrite }">直接改写</span>
+            <a-button type="link" size="small" class="prompt-btn" @click="showPromptDrawer = true">
+              <SettingOutlined />
+              提示词配置
+            </a-button>
+          </div>
           <a-button
             type="primary"
             size="large"
@@ -320,6 +324,7 @@
 
 <script setup>
 import { ref, reactive } from 'vue'
+import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import {
   LinkOutlined, PictureOutlined, ShoppingOutlined, SettingOutlined,
@@ -336,6 +341,9 @@ const links = ref('')
 const submitting = ref(false)
 const showPromptDrawer = ref(false)
 const jobs = ref([])
+const directRewrite = ref(true)
+
+const router = useRouter()
 
 let _jobId = 0
 
@@ -432,6 +440,26 @@ async function onRewrite() {
   if (!urlList.length) { message.warning('请先填写小红书链接'); return }
   submitting.value = true
 
+  // 关闭"直接改写"时：解析第一条链接后跳转编辑页
+  if (!directRewrite.value) {
+    try {
+      const parsed = await parseXhsLink({ url: urlList[0] })
+      sessionStorage.setItem('xhs_rewrite_draft', JSON.stringify({
+        sourceUrl: urlList[0],
+        title: parsed.title,
+        content: parsed.content,
+        images: parsed.images ?? [],
+      }))
+      router.push({ name: 'ai-rewrite-edit' })
+    } catch (e) {
+      message.error(e.message || '解析链接失败，请检查链接或 Cookie 配置')
+    } finally {
+      submitting.value = false
+    }
+    return
+  }
+
+  // 直接改写：批量处理全部链接
   const newJobs = urlList.map(url => ({
     id: ++_jobId,
     sourceUrl: url,
@@ -896,6 +924,15 @@ async function onEditGenerate() {
 .link-input :deep(textarea) { padding: 0; }
 
 .card-actions { display: flex; align-items: center; justify-content: space-between; }
+
+.action-left { display: flex; align-items: center; gap: 10px; }
+
+.direct-label {
+  font-size: 13px;
+  color: #374151;
+  font-weight: 500;
+}
+.direct-label.off { color: #9ca3af; }
 
 .prompt-btn { color: #6b7280 !important; font-size: 13px; padding: 0; }
 .prompt-btn:hover { color: #ff2442 !important; }
