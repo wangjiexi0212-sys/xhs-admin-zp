@@ -367,9 +367,11 @@ function nowTime() {
   return new Date().toLocaleTimeString('zh-CN', { hour12: false })
 }
 function addLog(text, type = 'info', detail = '') {
-  logs.value.unshift({ time: nowTime(), type, text, detail })
+  const entry = { time: nowTime(), type, text, detail }
+  logs.value.unshift(entry)
   // 有新日志时自动展开
   if (!logsVisible.value) logsVisible.value = true
+  return entry   // 返回引用，调用方可就地更新 type/text/detail
 }
 
 // ─── 标签输入 ─────────────────────────────────────────────
@@ -463,15 +465,18 @@ function getPromptExtra() {
 async function onRewriteTitle() {
   if (rewriting.value || rewritingTitle.value) return
   rewritingTitle.value = true
-  addLog('AI 改写标题中…', 'running')
+  const log = addLog('AI 改写标题中…', 'running')
   const t0 = Date.now()
   try {
     const result = await rewriteContent({ title: title.value, content: content.value, ...getPromptExtra() })
     title.value     = result.title ?? title.value
     aiTitleDirty.value = true
-    addLog(`标题改写完成`, 'success', `耗时 ${((Date.now()-t0)/1000).toFixed(1)}s · ${title.value.slice(0,20)}…`)
+    log.type   = 'success'
+    log.text   = '标题改写完成'
+    log.detail = `耗时 ${((Date.now()-t0)/1000).toFixed(1)}s · ${title.value.slice(0,20)}…`
   } catch (e) {
-    addLog(`标题改写失败：${e.message}`, 'error')
+    log.type   = 'error'
+    log.text   = `标题改写失败：${e.message}`
     message.error(e.message || '标题改写失败')
   } finally {
     rewritingTitle.value = false
@@ -482,16 +487,19 @@ async function onRewriteTitle() {
 async function onRewriteContent() {
   if (rewriting.value || rewritingContent.value) return
   rewritingContent.value = true
-  addLog('AI 改写正文中…', 'running')
+  const log = addLog('AI 改写正文中…', 'running')
   const t0 = Date.now()
   try {
     const result = await rewriteContent({ title: title.value, content: content.value, ...getPromptExtra() })
     content.value        = result.content ?? content.value
     aiContentDirty.value = true
     tags.value = extractTags(content.value)
-    addLog(`正文改写完成`, 'success', `耗时 ${((Date.now()-t0)/1000).toFixed(1)}s · ${content.value.length} 字`)
+    log.type   = 'success'
+    log.text   = '正文改写完成'
+    log.detail = `耗时 ${((Date.now()-t0)/1000).toFixed(1)}s · ${content.value.length} 字`
   } catch (e) {
-    addLog(`正文改写失败：${e.message}`, 'error')
+    log.type   = 'error'
+    log.text   = `正文改写失败：${e.message}`
     message.error(e.message || '正文改写失败')
   } finally {
     rewritingContent.value = false
@@ -515,31 +523,38 @@ function rejectContent() {
 async function onAiRewriteAll() {
   if (rewriting.value) return
   rewriting.value = true
-  addLog('一键 AI 改写开始…', 'running', `提示词：${selectedPrompt.value?.name ?? '系统默认'}`)
+  const mainLog = addLog('一键 AI 改写开始…', 'running', `提示词：${selectedPrompt.value?.name ?? '系统默认'}`)
   const t0 = Date.now()
   try {
     // 1. 文案改写（并行标题+正文）
-    addLog('AI 改写标题 + 正文中…', 'running')
+    const textLog = addLog('AI 改写标题 + 正文中…', 'running')
     const result = await rewriteContent({ title: title.value, content: content.value, ...getPromptExtra() })
     title.value   = result.title   ?? title.value
     content.value = result.content ?? content.value
     aiTitleDirty.value   = true
     aiContentDirty.value = true
     tags.value = extractTags(content.value)
-    addLog('文案改写完成', 'success', `标题+正文 · 耗时 ${((Date.now()-t0)/1000).toFixed(1)}s`)
+    textLog.type   = 'success'
+    textLog.text   = '文案改写完成'
+    textLog.detail = `标题+正文 · 耗时 ${((Date.now()-t0)/1000).toFixed(1)}s`
 
     // 2. 图片批量生成（并行）
     if (images.value.length) {
-      addLog(`开始批量生成 ${images.value.length} 张图片…`, 'running')
+      const imgLog = addLog(`开始批量生成 ${images.value.length} 张图片…`, 'running')
       await Promise.allSettled(images.value.map((img, ii) => generateSingleImg(img, ii)))
       const ok = images.value.filter(i => i.status === 'done').length
-      addLog(`图片生成完成 ${ok}/${images.value.length}`, ok === images.value.length ? 'success' : 'info')
+      imgLog.type   = ok === images.value.length ? 'success' : 'info'
+      imgLog.text   = `图片生成完成 ${ok}/${images.value.length}`
+      imgLog.detail = ''
     }
 
-    addLog(`一键改写完成`, 'success', `总耗时 ${((Date.now()-t0)/1000).toFixed(1)}s`)
+    mainLog.type   = 'success'
+    mainLog.text   = '一键改写完成'
+    mainLog.detail = `总耗时 ${((Date.now()-t0)/1000).toFixed(1)}s`
     message.success('一键 AI 改写完成')
   } catch (e) {
-    addLog(`一键改写出错：${e.message}`, 'error')
+    mainLog.type   = 'error'
+    mainLog.text   = `一键改写出错：${e.message}`
     message.error(e.message || 'AI 改写失败')
   } finally {
     rewriting.value = false
@@ -567,10 +582,12 @@ async function onBatchGenerate() {
   const targets = images.value.filter(i => i.status !== 'running')
   if (!targets.length) return
   batchGenerating.value = true
-  addLog(`开始批量生成 ${targets.length} 张图片…`, 'running')
+  const batchLog = addLog(`开始批量生成 ${targets.length} 张图片…`, 'running')
   await Promise.allSettled(targets.map(img => generateSingleImg(img, img.idx)))
   const ok = images.value.filter(i => i.status === 'done').length
-  addLog(`批量生成完成 ${ok}/${images.value.length}`, ok === images.value.length ? 'success' : 'info')
+  batchLog.type   = ok === images.value.length ? 'success' : 'info'
+  batchLog.text   = `批量生成完成 ${ok}/${images.value.length}`
+  batchLog.detail = ''
   batchGenerating.value = false
 }
 
@@ -578,19 +595,24 @@ async function generateSingleImg(img, idx) {
   if (img.status === 'running') return
   img.status = 'running'
   img.aiUrl  = ''
-  const t0 = Date.now()
-  addLog(`图片 ${idx + 1}：上传原图中…`, 'info')
+  const t0  = Date.now()
+  // 单条日志贯穿整个生命周期：上传 → 生成中 → 完成/失败
+  const log = addLog(`图片 ${idx + 1}：上传原图中…`, 'running')
   try {
     const uploaded = await uploadXhsImageViaWorker(img.src)
     const imagePrompt = selectedPrompt.value?.image_prompt ?? ''
-    addLog(`图片 ${idx + 1}：AI 生成中…`, 'running')
+    log.text = `图片 ${idx + 1}：AI 生成中…`
     const res = await rewriteImage({ src: uploaded.url, prompt: imagePrompt })
     img.aiUrl  = res.url
     img.status = 'done'
-    addLog(`图片 ${idx + 1} 生成完成`, 'success', `耗时 ${((Date.now()-t0)/1000).toFixed(1)}s`)
+    log.type   = 'success'
+    log.text   = `图片 ${idx + 1} 生成完成`
+    log.detail = `耗时 ${((Date.now()-t0)/1000).toFixed(1)}s`
   } catch (e) {
     img.status = 'error'
-    addLog(`图片 ${idx + 1} 生成失败：${e.message}`, 'error')
+    log.type   = 'error'
+    log.text   = `图片 ${idx + 1} 生成失败`
+    log.detail = e.message
   }
 }
 
