@@ -368,7 +368,7 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import {
@@ -392,6 +392,45 @@ const jobs = ref([])
 const directRewrite = ref(true)
 
 const router = useRouter()
+
+// ─── 从 Chrome 插件跳转时自动填充商品数据 ─────────────────────
+onMounted(async () => {
+  let raw = null
+  try {
+    const xhsGoods = new URLSearchParams(location.search).get('xhs_goods')
+    if (!xhsGoods) return
+    raw = JSON.parse(decodeURIComponent(xhsGoods))
+  } catch {
+    return
+  }
+
+  if (!raw || (!raw.images?.length && !raw.title)) return
+
+  // 先用原始 URL 展示（立刻可见），避免空白
+  productResult.value = { title: raw.title || '', images: raw.images || [] }
+  activeTab.value = 'product'
+  window.history.replaceState({}, '', location.pathname)
+
+  // 若有图片，尝试通过 worker 代理到 R2（绕过 XHS CDN 防外链）
+  if (raw.images?.length) {
+    message.info(`正在代理 ${raw.images.length} 张图片…`, 2)
+    const proxied = await Promise.all(
+      raw.images.map(async (url) => {
+        try {
+          const res = await proxyImageForDownload(url)
+          return res?.url || url   // 代理成功用 R2 URL，失败降级原 URL
+        } catch {
+          return url
+        }
+      })
+    )
+    // 更新为 R2 可访问的地址
+    productResult.value = { title: raw.title || '', images: proxied }
+    message.success(`已填充商品数据：${proxied.length} 张图片`)
+  } else {
+    message.success(`已填充商品数据（仅标题，未找到图片）`)
+  }
+})
 
 let _jobId = 0
 
