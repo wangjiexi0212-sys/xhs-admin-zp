@@ -204,6 +204,8 @@
               <a-button
                 v-if="job.result.images.some(i => i.status === 'done')"
                 size="small"
+                :loading="job.batchDownloading"
+                :disabled="job.batchDownloading"
                 @click="downloadAllImages(job)"
               >
                 <DownloadOutlined /> 批量下载
@@ -620,6 +622,7 @@ async function downloadAllImages(job) {
   const doneImgs = job.result.images.filter(i => i.status === 'done' && !i.downloading)
   if (!doneImgs.length) return
 
+  job.batchDownloading = true
   const hideMsg = message.loading(`处理 ${doneImgs.length} 张图片中…`, 0)
   let success = 0
 
@@ -640,6 +643,7 @@ async function downloadAllImages(job) {
   }
 
   hideMsg()
+  job.batchDownloading = false
   message.success(`已下载 ${success} / ${doneImgs.length} 张（已处理去重指纹）`)
 }
 
