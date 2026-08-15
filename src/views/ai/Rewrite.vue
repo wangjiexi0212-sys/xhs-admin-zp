@@ -39,7 +39,7 @@
           v-else
           v-model:value="productUrl"
           class="product-url-input"
-          placeholder="粘贴淘宝、天猫、京东、拼多多等商品链接，支持短链"
+          placeholder="粘贴小红书商品页链接，支持 xhslink 短链和 App 分享文字"
           :bordered="false"
           allow-clear
         >
@@ -72,7 +72,7 @@
         <div class="card-footer-tip">
           <InfoCircleOutlined />
           <template v-if="activeTab === 'link'">支持多链接批量改写 · 每行一条链接 · 最多 10 条</template>
-          <template v-else>支持淘宝 / 天猫 / 京东 / 拼多多商品链接 · 自动解析商品标题和图片</template>
+          <template v-else>支持小红书商品页链接 · 自动提取商品标题和主图、详情图</template>
         </div>
       </div>
     </div>
