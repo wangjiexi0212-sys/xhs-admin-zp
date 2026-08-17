@@ -124,6 +124,9 @@
               <a-button size="small" type="primary" ghost @click="downloadProductImg(img, ii)">
                 <DownloadOutlined />
               </a-button>
+              <a-button size="small" danger ghost @click.stop="deleteProductImg(ii)">
+                <DeleteOutlined />
+              </a-button>
             </div>
           </div>
         </div>
@@ -466,7 +469,7 @@ import {
   ThunderboltOutlined, ArrowRightOutlined, InfoCircleOutlined,
   CopyOutlined, DownloadOutlined, ReloadOutlined, ExclamationCircleOutlined,
   LoadingOutlined, CheckCircleFilled, CloseCircleFilled, BarsOutlined, DownOutlined,
-  EditOutlined, PlusOutlined, CloseOutlined, UploadOutlined,
+  EditOutlined, PlusOutlined, CloseOutlined, UploadOutlined, DeleteOutlined,
 } from '@ant-design/icons-vue'
 import RewritePromptPanel from './RewritePrompt.vue'
 import { parseXhsLink, rewriteContent, rewriteImage, uploadXhsImageViaWorker, uploadLocalImageToR2, proxyImageForDownload, parseProductLink } from '@/api/xhsRewrite'
@@ -838,6 +841,16 @@ async function handleLocalImageUpload(e) {
 }
 
 // ─── 商品图片下载 ─────────────────────────────────────────
+
+/** 删除单张商品图片 */
+function deleteProductImg(idx) {
+  productResult.value = {
+    ...productResult.value,
+    images: productResult.value.images.filter((_, i) => i !== idx),
+  }
+  // 图片来源变化，清空旧的 AI 二创结果
+  productAiImages.value = []
+}
 
 async function downloadProductImg(url, idx) {
   try {
@@ -1821,6 +1834,7 @@ async function onEditGenerate() {
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 6px;
   opacity: 0;
   transition: opacity .2s;
 }
