@@ -78,6 +78,11 @@
             <template v-if="activeTab === 'link'">
               <a-switch v-model:checked="directRewrite" size="small" />
               <span class="direct-label" :class="{ off: !directRewrite }">直接改写</span>
+              <template v-if="directRewrite">
+                <a-divider type="vertical" style="margin: 0 2px;" />
+                <a-switch v-model:checked="imgTextRewrite" size="small" />
+                <span class="direct-label" :class="{ off: !imgTextRewrite }">图片文字二创</span>
+              </template>
             </template>
             <a-button type="link" size="small" class="prompt-btn" @click="showPromptDrawer = true">
               <SettingOutlined />
@@ -461,7 +466,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import {
@@ -486,6 +491,10 @@ const submitting = ref(false)
 const showPromptDrawer = ref(false)
 const jobs = ref([])
 const directRewrite = ref(true)
+const imgTextRewrite = ref(false)   // 图片文字二创，默认关闭
+
+// 直接改写关闭时，联动重置图片文字二创
+watch(directRewrite, (val) => { if (!val) imgTextRewrite.value = false })
 
 // 本地图片上传
 const localFileInput = ref(null)
@@ -779,7 +788,13 @@ async function processJob(job) {
         }
 
         // Step 2：调 AI 绘图
-        const res = await rewriteImage({ src: publicSrc, prompt: '' })
+        const res = await rewriteImage({
+          src: publicSrc,
+          prompt: '',
+          image_prompt: imgTextRewrite.value
+            ? '保持图片整体构图和主体内容不变，对图片中出现的所有覆盖文字进行改写，更换措辞和表达方式，文字风格与原图保持一致，其余内容轻度重绘，风格清新自然，适合小红书发布。'
+            : '',
+        })
         img.url = res.url
         img.status = 'done'
         if (imgStep) imgStep.imgUrl = res.url
