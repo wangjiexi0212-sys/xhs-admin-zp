@@ -9,6 +9,10 @@
       </a-button>
       <span class="page-title">商品详情</span>
       <a-space>
+        <a-button @click="openExamCard">
+          <template #icon><PictureOutlined /></template>
+          生图
+        </a-button>
         <a-button type="primary" ghost @click="openGenerate">
           <template #icon>
             <FileTextOutlined />
@@ -945,6 +949,72 @@
         </a-button>
       </div>
     </a-drawer>
+
+    <!-- 备考海报生图抽屉 -->
+    <a-drawer
+      v-model:open="examCardState.visible"
+      title="备考海报生成"
+      placement="right"
+      width="60%"
+      :body-style="{ padding: '24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px', background: '#f5f5f5', overflow: 'auto' }"
+    >
+      <!-- 生成中 -->
+      <div
+        v-if="examCardState.step === 'llm' || examCardState.step === 'drawing'"
+        style="display:flex;flex-direction:column;align-items:center;gap:14px;margin-top:60px;width:100%"
+      >
+        <a-spin size="large" />
+        <span style="color:#555;font-size:14px">{{ examCardState.statusMsg }}</span>
+        <!-- 备考建议已生成时提前展示 -->
+        <div
+          v-if="examCardState.advice"
+          style="max-width:500px;width:100%;background:#fff;border-radius:8px;padding:12px 16px;
+                 font-size:13px;color:#333;line-height:1.8;box-shadow:0 1px 6px rgba(0,0,0,0.08)"
+        >
+          <div style="font-weight:500;color:#ff2d55;margin-bottom:6px">📝 备考建议（已生成，等待绘图…）</div>
+          {{ examCardState.advice }}
+        </div>
+      </div>
+
+      <!-- 生成完成 -->
+      <template v-else-if="examCardState.step === 'done' && examCardState.imageUrl">
+        <!-- 备考建议 -->
+        <div style="width:100%;max-width:560px;background:#fff;border-radius:8px;
+                    padding:12px 16px;font-size:13px;color:#333;line-height:1.8;
+                    box-shadow:0 1px 6px rgba(0,0,0,0.08);flex-shrink:0">
+          <div style="font-weight:500;color:#ff2d55;margin-bottom:6px">📝 备考建议</div>
+          {{ examCardState.advice }}
+        </div>
+        <!-- 海报预览 -->
+        <img
+          :src="examCardState.imageUrl"
+          style="max-width:min(100%,560px);border-radius:12px;
+                 box-shadow:0 6px 28px rgba(0,0,0,0.18);display:block;flex-shrink:0"
+        />
+        <!-- 操作按钮 -->
+        <div style="display:flex;gap:12px;flex-shrink:0">
+          <a-button
+            type="primary"
+            size="large"
+            :loading="examCardState.downloading"
+            @click="downloadExamCard"
+          >⬇ 下载海报</a-button>
+          <a-button size="large" @click="generateExamCard">🔄 重新生成</a-button>
+        </div>
+      </template>
+
+      <!-- 出错 -->
+      <div
+        v-else-if="examCardState.step === 'error'"
+        style="display:flex;flex-direction:column;align-items:center;gap:14px;margin-top:60px"
+      >
+        <span style="color:#ff4d4f;font-size:14px">{{ examCardState.errorMsg }}</span>
+        <a-button @click="generateExamCard">🔄 重试</a-button>
+      </div>
+
+      <!-- idle 初始 -->
+      <div v-else style="color:#999;margin-top:60px;font-size:14px">准备就绪，正在启动…</div>
+    </a-drawer>
   </div>
 </template>
 
@@ -952,7 +1022,7 @@
 import { ref, reactive, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
-import { LeftOutlined, EditOutlined, FileTextOutlined, DownloadOutlined, BulbOutlined, FileWordOutlined, SyncOutlined, CheckCircleOutlined, CloseCircleOutlined, ClockCircleOutlined, FormOutlined, StopOutlined, CopyOutlined } from '@ant-design/icons-vue'
+import { LeftOutlined, EditOutlined, FileTextOutlined, DownloadOutlined, BulbOutlined, FileWordOutlined, SyncOutlined, CheckCircleOutlined, CloseCircleOutlined, ClockCircleOutlined, FormOutlined, StopOutlined, CopyOutlined, PictureOutlined } from '@ant-design/icons-vue'
 import { getProductDetail } from '@/api/products'
 import { getContentTemplateList } from '@/api/contentTemplates'
 import { getPromptList } from '@/api/prompts'
@@ -997,6 +1067,17 @@ const coverPromptUsed = ref('')
 const titlePromptUsed = ref(null) // { system: string, user: string } | null
 const titlePromptVisible = ref(false)
 const templateModalVisible = ref(false)
+
+// ─── 备考海报一键生图 ──────────────────────────────────────
+const examCardState = reactive({
+  visible: false,       // 抽屉开关
+  step: 'idle',         // 'idle'|'llm'|'drawing'|'done'|'error'
+  statusMsg: '',        // 进度提示
+  advice: '',           // LLM 生成的备考建议（≤100字）
+  imageUrl: '',         // 生成图片 URL
+  downloading: false,
+  errorMsg: '',
+})
 
 const BODY_TEMPLATES = [
   {
@@ -1541,6 +1622,148 @@ function openGenerate() {
   }
   generatedTags.value = tags
   generateVisible.value = true
+}
+
+// ─── 备考海报一键生图 ──────────────────────────────────────
+
+function openExamCard() {
+  Object.assign(examCardState, {
+    step: 'idle', statusMsg: '', advice: '',
+    imageUrl: '', downloading: false, errorMsg: '',
+  })
+  examCardState.visible = true
+  generateExamCard()
+}
+
+async function generateExamCard() {
+  const active = llmStore.active
+  if (!active) {
+    Modal.warning({
+      title: '提示',
+      content: '请先在「系统设置 → 大模型」中设置使用中的模型',
+      okText: '去设置',
+      onOk: () => router.push('/system/llm'),
+    })
+    return
+  }
+  await aiImageStore.ensureLoaded()
+  if (!aiImageStore.activeProvider) {
+    Modal.warning({
+      title: '提示',
+      content: '请先在「系统设置 → AI绘图」中将某个渠道设为使用中',
+      okText: '去设置',
+      onOk: () => router.push('/system/ai-image'),
+    })
+    return
+  }
+
+  const d = data.value
+
+  // ① LLM 生成备考建议（≤100字）
+  examCardState.step = 'llm'
+  examCardState.statusMsg = '正在生成备考建议…'
+  const userPrompt = [
+    d.company_name       ? `单位：${d.company_name}` : '',
+    d.job_type_name      ? `招聘岗位类型：${d.job_type_name}` : '',
+    d.recruit_count      ? `招聘人数：${d.recruit_count}` : '',
+    d.written_exam_time  ? `笔试时间：${d.written_exam_time}` : '',
+    d.written_exam_content ? `笔试内容：${d.written_exam_content}` : '',
+    '请根据以上信息，生成一段不超过100字的笔试备考建议，内容要有针对性，输出纯文字，不带Markdown。',
+  ].filter(Boolean).join('\n')
+
+  try {
+    const llmRes = await chatLlm({
+      provider:    active.provider,
+      api_format:  active.api_format,
+      api_key:     active.api_key,
+      base_url:    active.base_url || '',
+      model:       active.default_model,
+      messages: [
+        { role: 'system', content: '你是一名专业的考试辅导老师，根据笔试信息输出简洁实用的备考建议，不超过100字，不使用Markdown，输出纯文字。' },
+        { role: 'user',   content: userPrompt },
+      ],
+      max_tokens:  200,
+      temperature: 0.7,
+    })
+    examCardState.advice = (llmRes.content || '').trim().slice(0, 120)
+  } catch (e) {
+    examCardState.step = 'error'
+    examCardState.errorMsg = '备考建议生成失败：' + (e.message || '未知')
+    return
+  }
+
+  // ② 组装 card_text
+  const yearMatch = (d.written_exam_time || '').match(/\d{4}/)
+  const year = yearMatch ? yearMatch[0] : new Date().getFullYear()
+  const cardText = [
+    `${d.company_name || ''}笔试`,
+    `${year}招聘${d.recruit_count || ''}人`,
+    '',
+    '【时间安排】',
+    d.apply_time        ? `报名时间：${d.apply_time}` : '',
+    d.written_exam_time ? `笔试时间：${d.written_exam_time}` : '',
+    '',
+    '【笔试内容】',
+    d.written_exam_content || '',
+    '',
+    '【笔试备考建议】',
+    examCardState.advice,
+    '',
+    '备考攻略+真题资料分享！',
+  ].filter(s => s !== null).join('\n').trim()
+
+  // ③ 调用全能AI绘图（quanneng 渠道）
+  examCardState.step = 'drawing'
+  examCardState.statusMsg = '正在生成备考海报…'
+
+  await drawCoverStream({
+    product_id:     id.value,
+    card_text:      cardText,
+    llm_provider:   active.provider,
+    llm_api_format: active.api_format,
+    llm_api_key:    active.api_key,
+    llm_base_url:   active.base_url || '',
+    llm_model:      active.default_model,
+  }, {
+    onProgress(event) {
+      if      (event.step === 'llm')      examCardState.statusMsg = '正在适配绘图提示词…'
+      else if (event.step === 'llm_done') examCardState.statusMsg = '提示词就绪，正在绘图…'
+      else if (event.step === 'draw')     examCardState.statusMsg = 'AI绘图中，请稍候…'
+    },
+    onDone(res) {
+      const urls = Array.isArray(res?.urls) ? res.urls.filter(Boolean) : []
+      examCardState.imageUrl = urls[0] || res?.url || ''
+      examCardState.step = 'done'
+      examCardState.statusMsg = '生成完成'
+    },
+    onError(e) {
+      examCardState.step = 'error'
+      examCardState.errorMsg = '绘图失败：' + (e.message || '未知')
+    },
+  })
+}
+
+/** 下载备考海报（去重 + 去AI处理） */
+async function downloadExamCard() {
+  if (!examCardState.imageUrl || examCardState.downloading) return
+  examCardState.downloading = true
+  const filename = `exam-card-${data.value.id || Date.now()}.jpg`
+  try {
+    const blob = await processImageForDownload(examCardState.imageUrl)
+    triggerBlobDownload(blob, filename)
+  } catch {
+    // CORS 场景：先代理再处理
+    try {
+      const { proxyImageForDownload } = await import('@/api/xhsRewrite')
+      const proxied = await proxyImageForDownload(examCardState.imageUrl)
+      const blob    = await processImageForDownload(proxied.url)
+      triggerBlobDownload(blob, filename)
+    } catch (e2) {
+      message.error('下载失败：' + (e2.message || '未知'))
+    }
+  } finally {
+    examCardState.downloading = false
+  }
 }
 
 async function generateCoverImage(useEditedPrompt = false) {
