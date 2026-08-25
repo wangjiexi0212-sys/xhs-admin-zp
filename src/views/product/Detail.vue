@@ -279,6 +279,10 @@
           <a-button @click="downloadCompositeImage" :disabled="!dirDrawer.previewUrl">下载目录图</a-button>
           <a-button @click="downloadPdfPage" :disabled="!dirDrawer.pdfPreviewUrl">下载PDF首页</a-button>
           <a-divider type="vertical" style="height:20px" />
+          <span style="font-size:13px;color:#555;white-space:nowrap">PDF拼图模式：</span>
+          <a-switch v-model:checked="dirDrawer.pdfGridMode" />
+          <span v-if="dirDrawer.pdfGridMode" style="font-size:12px;color:#1677ff;white-space:nowrap">点击PDF可查看4页拼图</span>
+          <a-divider type="vertical" style="height:20px" />
           <a-button
             :type="mosaicMode ? 'primary' : 'default'"
             size="small"
@@ -329,7 +333,7 @@
               <div
                 v-for="f in dirDrawer.files.filter(f => f.isdir === 0)"
                 :key="f.fs_id"
-                @click="renderPdfFirstPage(f)"
+                @click="onPdfFileClick(f)"
                 style="display:flex; align-items:center; justify-content:space-between; padding:8px 12px; cursor:pointer; border-bottom:1px solid #f0f0f0; font-size:13px; transition:background 0.15s"
                 :style="{ background: dirDrawer.pdfFsid === f.fs_id ? '#fff7e6' : '' }"
                 @mouseenter="$event.currentTarget.style.background = dirDrawer.pdfFsid === f.fs_id ? '#fff7e6' : '#f5f5f5'"
@@ -355,6 +359,132 @@
             </div>
           </div>
         </div>
+      </a-drawer>
+
+      <!-- PDF 4页拼图预览抽屉 -->
+      <a-drawer
+        v-model:open="pdfGridDrawer.visible"
+        :title="`PDF 4页拼图 · ${pdfGridDrawer.file?.name || ''}`"
+        placement="right"
+        width="80%"
+        :body-style="{ padding: '24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px', background: '#f0f0f0', overflow: 'auto' }"
+      >
+        <!-- 加载中 -->
+        <div v-if="pdfGridDrawer.loading" style="display:flex;flex-direction:column;align-items:center;gap:16px;margin-top:80px">
+          <a-spin size="large" />
+          <span style="color:#666;font-size:14px">正在渲染 PDF 前 4 页，请稍候…</span>
+        </div>
+
+        <!-- 合成图预览 -->
+        <template v-else-if="pdfGridDrawer.gridUrl">
+
+          <!-- ① 标题文案面板 -->
+          <div style="width:100%;background:#fff;border-radius:10px;padding:14px 20px;box-shadow:0 1px 6px rgba(0,0,0,0.08);flex-shrink:0">
+            <!-- 开关 + 文本输入 -->
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+              <span style="font-size:13px;color:#555;white-space:nowrap;font-weight:500">标题文案</span>
+              <a-switch v-model:checked="pdfGridDrawer.titleEnabled" size="small" @change="refreshGridComposite" />
+              <a-input
+                v-model:value="pdfGridDrawer.titleText"
+                :disabled="!pdfGridDrawer.titleEnabled"
+                placeholder="输入标题文案…"
+                style="flex:1"
+                @input="debouncedRefreshGridComposite"
+              />
+            </div>
+            <!-- 样式选择 -->
+            <div v-if="pdfGridDrawer.titleEnabled" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+              <span style="font-size:12px;color:#888;white-space:nowrap">文字样式：</span>
+              <div
+                v-for="s in PDF_TITLE_STYLES"
+                :key="s.value"
+                @click="pdfGridDrawer.titleStyle = s.value; refreshGridComposite()"
+                :style="{
+                  cursor: 'pointer',
+                  padding: '4px 12px',
+                  borderRadius: '16px',
+                  fontSize: '13px',
+                  border: pdfGridDrawer.titleStyle === s.value ? '2px solid #1677ff' : '2px solid #e8e8e8',
+                  background: pdfGridDrawer.titleStyle === s.value ? '#e6f4ff' : '#fafafa',
+                  color: pdfGridDrawer.titleStyle === s.value ? '#1677ff' : '#555',
+                  userSelect: 'none',
+                  transition: 'all 0.15s',
+                  fontWeight: pdfGridDrawer.titleStyle === s.value ? '500' : '400',
+                }"
+              >{{ s.label }}</div>
+            </div>
+            <!-- 垂直位置滑道 -->
+            <div v-if="pdfGridDrawer.titleEnabled" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <span style="font-size:12px;color:#888;white-space:nowrap">垂直位置：</span>
+              <input
+                type="range"
+                v-model.number="pdfGridDrawer.titleY"
+                min="10"
+                max="90"
+                step="1"
+                style="width:140px;accent-color:#1677ff;cursor:pointer"
+                @input="debouncedRefreshGridComposite"
+              />
+              <span style="font-size:12px;color:#1677ff;min-width:36px;font-variant-numeric:tabular-nums">
+                {{ pdfGridDrawer.titleY === 50 ? '居中' : `${pdfGridDrawer.titleY}%` }}
+              </span>
+              <span style="font-size:12px;color:#888;white-space:nowrap;margin-left:8px">字体大小：</span>
+              <input
+                type="range"
+                v-model.number="pdfGridDrawer.titleSize"
+                min="36"
+                max="180"
+                step="2"
+                style="width:140px;accent-color:#ff6b35;cursor:pointer"
+                @input="debouncedRefreshGridComposite"
+              />
+              <span style="font-size:12px;color:#ff6b35;min-width:40px;font-variant-numeric:tabular-nums">{{ pdfGridDrawer.titleSize }} px</span>
+            </div>
+          </div>
+
+          <!-- ② 模糊 + 下载控制行 -->
+          <div style="display:flex;align-items:center;gap:12px;flex-shrink:0;background:#fff;padding:10px 20px;border-radius:8px;box-shadow:0 1px 6px rgba(0,0,0,0.08)">
+            <span style="font-size:13px;color:#555;white-space:nowrap">模糊程度：</span>
+            <input
+              type="range"
+              v-model.number="pdfGridDrawer.blurAmount"
+              min="0"
+              max="20"
+              step="0.5"
+              style="width:160px;accent-color:#1677ff;cursor:pointer"
+            />
+            <span style="font-size:13px;color:#1677ff;min-width:44px;font-variant-numeric:tabular-nums">
+              {{ pdfGridDrawer.blurAmount === 0 ? '不模糊' : `${pdfGridDrawer.blurAmount} px` }}
+            </span>
+            <a-divider type="vertical" style="height:20px" />
+            <span style="font-size:13px;color:#555;white-space:nowrap">边框颜色：</span>
+            <input
+              type="color"
+              v-model="pdfGridDrawer.gridBorderColor"
+              @input="onGridBorderColorChange"
+              style="width:36px;height:32px;border:1px solid #d9d9d9;border-radius:4px;cursor:pointer;padding:2px"
+            />
+            <a-button type="primary" size="large" @click="downloadPdfGrid">
+              ⬇ 下载拼图（PNG）
+            </a-button>
+          </div>
+
+          <!-- ③ 预览图 -->
+          <img
+            :src="pdfGridDrawer.displayUrl || pdfGridDrawer.gridUrl"
+            :style="{
+              maxWidth: 'min(100%, 560px)',
+              boxShadow: '0 6px 28px rgba(0,0,0,0.18)',
+              borderRadius: '12px',
+              display: 'block',
+              flexShrink: 0,
+              filter: pdfGridDrawer.blurAmount > 0 ? `blur(${pdfGridDrawer.blurAmount}px)` : 'none',
+            }"
+          />
+        </template>
+
+        <!-- 空状态 -->
+        <div v-else style="color:#999;margin-top:80px;font-size:14px">暂无预览</div>
       </a-drawer>
 
       <a-card title="记录信息" :bordered="false" style="margin-top: 12px">
@@ -1945,7 +2075,39 @@ const dirDrawer = reactive({
   pdfPageDataUrl: '',
   // 自定义目录专用：记录当前操作的条目下标
   customIndex: -1,
+  // PDF 拼图模式开关：打开后点击 PDF 文件弹出 4 页拼图预览抽屉
+  pdfGridMode: false,
 })
+
+// PDF 4页拼图预览抽屉状态
+const pdfGridDrawer = reactive({
+  visible: false,
+  file: null,          // 当前选中的 PDF 文件 { name, path, fs_id }
+  loading: false,
+  gridUrl: '',         // 原始合成拼图 dataURL（无标题）
+  displayUrl: '',      // 标题叠加后的预览 dataURL
+  blurAmount: 0,       // 模糊程度（px），0 = 不模糊
+  // 标题覆层
+  titleEnabled: true,  // 是否显示标题
+  titleText: '',       // 标题文案（默认继承 dirDrawer.title）
+  titleStyle: 'solidRed', // 文字样式预设
+  titleY: 50,          // 垂直位置（百分比，0~100，50=居中）
+  titleSize: 82,       // 字体大小（px，基于 1242px 画布）
+  gridBorderColor: '#FF2D55', // 拼图外围边框颜色
+})
+
+// 标题样式预设列表
+const PDF_TITLE_STYLES = [
+  { value: 'shadow',    label: '✨ 白字阴影' },
+  { value: 'pill',      label: '🏷️ 深底胶囊' },
+  { value: 'stroke',    label: '🖋️ 描边字体' },
+  { value: 'gradient',  label: '🌈 渐变暖色' },
+  { value: 'card',      label: '📌 白底卡片' },
+  { value: 'solidRed',  label: '🔴 红底白字' },
+  { value: 'gradBg',    label: '🌅 彩底白字' },
+  { value: 'stamp',     label: '🔖 印章红框' },
+  { value: 'neon',      label: '💫 霓虹发光' },
+]
 
 // 自定义目录各条目的 loading 状态（按 idx 隔离，不影响固定目录的 dirDrawer.loading）
 const customLoading = ref(-1)
@@ -2571,6 +2733,402 @@ function downloadPdfPage() {
   const a = document.createElement('a')
   a.href = dirDrawer.pdfPreviewUrl
   a.download = `${dirDrawer.pdfFileName.replace(/\.pdf$/i, '')}-首页.png`
+  a.click()
+}
+
+// ─── PDF 文件列表点击分支 ─────────────────────────────────
+function onPdfFileClick(f) {
+  if (dirDrawer.pdfGridMode) {
+    openPdfGridDrawer(f)
+  } else {
+    renderPdfFirstPage(f)
+  }
+}
+
+// ─── PDF 4页拼图预览 ──────────────────────────────────────
+
+async function openPdfGridDrawer(file) {
+  pdfGridDrawer.file = file
+  pdfGridDrawer.gridUrl = ''
+  pdfGridDrawer.displayUrl = ''
+  pdfGridDrawer.titleText = dirDrawer.title  // 继承外层标题文案
+  pdfGridDrawer.visible = true
+  pdfGridDrawer.loading = true
+  try {
+    pdfGridDrawer.gridUrl = await renderPdfGridImage(file)
+    await refreshGridComposite()  // 叠加标题生成预览
+  } catch (e) {
+    message.error('PDF拼图生成失败：' + (e.message || '未知错误'))
+  } finally {
+    pdfGridDrawer.loading = false
+  }
+}
+
+/** 重新合成带标题覆层的预览图（gridUrl + title → displayUrl） */
+async function refreshGridComposite() {
+  if (!pdfGridDrawer.gridUrl) return
+  if (!pdfGridDrawer.titleEnabled || !pdfGridDrawer.titleText.trim()) {
+    pdfGridDrawer.displayUrl = pdfGridDrawer.gridUrl
+    return
+  }
+  const img = await loadImage(pdfGridDrawer.gridUrl)
+  const c = document.createElement('canvas')
+  c.width = img.width
+  c.height = img.height
+  const ctx = c.getContext('2d')
+  ctx.drawImage(img, 0, 0)
+  _drawTitleOnCanvas(ctx, c.width, c.height, pdfGridDrawer.titleText, pdfGridDrawer.titleStyle, pdfGridDrawer.titleY, pdfGridDrawer.titleSize)
+  pdfGridDrawer.displayUrl = c.toDataURL('image/png')
+}
+
+let _gridTitleTimer = null
+function debouncedRefreshGridComposite() {
+  clearTimeout(_gridTitleTimer)
+  _gridTitleTimer = setTimeout(refreshGridComposite, 240)
+}
+
+/** 边框颜色改变：需重新合成底图（borderColor 烧在 buildPdfGridComposite 里）*/
+let _gridBorderTimer = null
+async function onGridBorderColorChange() {
+  clearTimeout(_gridBorderTimer)
+  _gridBorderTimer = setTimeout(async () => {
+    if (!pdfGridDrawer.file) return
+    pdfGridDrawer.loading = true
+    try {
+      pdfGridDrawer.gridUrl = await renderPdfGridImage(pdfGridDrawer.file)
+      await refreshGridComposite()
+    } catch (e) {
+      message.error('边框重绘失败：' + (e.message || '未知'))
+    } finally {
+      pdfGridDrawer.loading = false
+    }
+  }, 300)
+}
+
+/**
+ * 在 canvas 上绘制标题覆层
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {number} w  canvas 宽（px）
+ * @param {number} h  canvas 高（px）
+ * @param {string} text 标题文案
+ * @param {string} style  样式预设 key
+ * @param {number} yPct  垂直位置百分比（0~100）
+ */
+function _drawTitleOnCanvas(ctx, w, h, text, style, yPct = 50, fontSize = 82) {
+  const cx = w / 2
+  const cy = h * (yPct / 100)
+
+  ctx.save()
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.font = `bold ${fontSize}px "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif`
+
+  const tw = ctx.measureText(text).width
+
+  if (style === 'shadow') {
+    // 白色大字 + 多层深色阴影（适合深色/渐变背景）
+    ctx.shadowColor = 'rgba(0,0,0,0.88)'
+    ctx.shadowBlur = 30
+    ctx.shadowOffsetX = 0
+    ctx.shadowOffsetY = 5
+    ctx.fillStyle = '#ffffff'
+    ctx.fillText(text, cx, cy)
+    ctx.shadowBlur = 12
+    ctx.shadowOffsetY = 2
+    ctx.fillText(text, cx, cy)
+
+  } else if (style === 'pill') {
+    // 深色半透明胶囊 + 白字
+    const padX = fontSize * 0.65
+    const padY = fontSize * 0.42
+    const bw = tw + padX * 2
+    const bh = fontSize + padY * 2
+    ctx.fillStyle = 'rgba(20,20,20,0.62)'
+    ctx.beginPath()
+    ctx.roundRect(cx - bw / 2, cy - bh / 2, bw, bh, bh / 2)
+    ctx.fill()
+    ctx.fillStyle = '#ffffff'
+    ctx.fillText(text, cx, cy)
+
+  } else if (style === 'stroke') {
+    // 白字 + 黑色粗描边
+    ctx.lineWidth = Math.max(4, fontSize * 0.09)
+    ctx.strokeStyle = 'rgba(0,0,0,0.90)'
+    ctx.lineJoin = 'round'
+    ctx.strokeText(text, cx, cy)
+    ctx.fillStyle = '#ffffff'
+    ctx.fillText(text, cx, cy)
+
+  } else if (style === 'gradient') {
+    // 小红书品牌色斜向渐变（红→橙→黄）
+    const grad = ctx.createLinearGradient(cx - tw / 2, cy - fontSize / 2, cx + tw / 2, cy + fontSize / 2)
+    grad.addColorStop(0,   '#FF2D55')
+    grad.addColorStop(0.5, '#FF6B35')
+    grad.addColorStop(1,   '#FFC300')
+    ctx.shadowColor = 'rgba(255,60,0,0.42)'
+    ctx.shadowBlur = 20
+    ctx.fillStyle = grad
+    ctx.fillText(text, cx, cy)
+
+  } else if (style === 'card') {
+    // 白底圆角卡片 + 顶部彩条 + 红色边框
+    const padX = fontSize * 1.0
+    const padY = fontSize * 0.6
+    const bw = Math.max(tw + padX * 2, w * 0.38)
+    const bh = fontSize + padY * 2
+    const r = 20
+    const accentH = Math.round(fontSize * 0.28)
+    ctx.shadowColor = 'rgba(0,0,0,0.22)'
+    ctx.shadowBlur = 24
+    ctx.shadowOffsetY = 12
+    ctx.fillStyle = '#ffffff'
+    ctx.beginPath()
+    ctx.roundRect(cx - bw / 2, cy - bh / 2, bw, bh, r)
+    ctx.fill()
+    ctx.shadowColor = 'transparent'
+    ctx.shadowBlur = 0
+    ctx.shadowOffsetY = 0
+    ctx.fillStyle = '#FF2D55'
+    ctx.save()
+    ctx.beginPath()
+    ctx.roundRect(cx - bw / 2, cy - bh / 2, bw, accentH, [r, r, 0, 0])
+    ctx.fill()
+    ctx.restore()
+    ctx.strokeStyle = '#FF2D55'
+    ctx.lineWidth = 4
+    ctx.beginPath()
+    ctx.roundRect(cx - bw / 2 + 2, cy - bh / 2 + 2, bw - 4, bh - 4, r - 2)
+    ctx.stroke()
+    ctx.fillStyle = '#1a1a1a'
+    ctx.fillText(text, cx, cy + fontSize * 0.13)
+
+  } else if (style === 'solidRed') {
+    // 🔴 纯色实底胶囊 + 白字（白底PDF上最显眼）
+    const padX = fontSize * 0.72
+    const padY = fontSize * 0.44
+    const bw = tw + padX * 2
+    const bh = fontSize + padY * 2
+    // 底色阴影
+    ctx.shadowColor = 'rgba(255,45,85,0.45)'
+    ctx.shadowBlur = 22
+    ctx.shadowOffsetY = 8
+    ctx.fillStyle = '#FF2D55'
+    ctx.beginPath()
+    ctx.roundRect(cx - bw / 2, cy - bh / 2, bw, bh, bh / 2)
+    ctx.fill()
+    ctx.shadowColor = 'transparent'
+    ctx.shadowBlur = 0
+    ctx.shadowOffsetY = 0
+    ctx.fillStyle = '#ffffff'
+    ctx.fillText(text, cx, cy)
+
+  } else if (style === 'gradBg') {
+    // 🌅 渐变色实底（橙→粉）胶囊 + 白字 + 装饰亮边
+    const padX = fontSize * 0.72
+    const padY = fontSize * 0.44
+    const bw = tw + padX * 2
+    const bh = fontSize + padY * 2
+    const bgGrad = ctx.createLinearGradient(cx - bw / 2, cy, cx + bw / 2, cy)
+    bgGrad.addColorStop(0, '#FF6B35')
+    bgGrad.addColorStop(1, '#FF2D82')
+    ctx.shadowColor = 'rgba(255,80,50,0.4)'
+    ctx.shadowBlur = 24
+    ctx.shadowOffsetY = 10
+    ctx.fillStyle = bgGrad
+    ctx.beginPath()
+    ctx.roundRect(cx - bw / 2, cy - bh / 2, bw, bh, bh / 2)
+    ctx.fill()
+    ctx.shadowColor = 'transparent'
+    ctx.shadowBlur = 0
+    ctx.shadowOffsetY = 0
+    // 顶部亮线（高光感）
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)'
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.roundRect(cx - bw / 2 + 6, cy - bh / 2 + 4, bw - 12, bh / 2 - 4, [bh / 2, bh / 2, 0, 0])
+    ctx.stroke()
+    ctx.fillStyle = '#ffffff'
+    ctx.fillText(text, cx, cy)
+
+  } else if (style === 'stamp') {
+    // 🔖 印章风格：双矩形边框 + 鲜红文字（无背景，不遮挡PDF）
+    const padX = fontSize * 0.55
+    const padY = fontSize * 0.38
+    const bw = tw + padX * 2
+    const bh = fontSize + padY * 2
+    const r = 10
+    // 外框
+    ctx.strokeStyle = '#E8001A'
+    ctx.lineWidth = Math.max(5, fontSize * 0.07)
+    ctx.beginPath()
+    ctx.roundRect(cx - bw / 2, cy - bh / 2, bw, bh, r)
+    ctx.stroke()
+    // 内框（内缩）
+    const inset = ctx.lineWidth + 4
+    ctx.lineWidth = Math.max(2, fontSize * 0.03)
+    ctx.beginPath()
+    ctx.roundRect(cx - bw / 2 + inset, cy - bh / 2 + inset, bw - inset * 2, bh - inset * 2, Math.max(2, r - 4))
+    ctx.stroke()
+    // 文字
+    ctx.fillStyle = '#E8001A'
+    ctx.fillText(text, cx, cy)
+
+  } else if (style === 'neon') {
+    // 💫 霓虹发光：青色→紫色渐变 + 多层外发光
+    const neonGrad = ctx.createLinearGradient(cx - tw / 2, cy, cx + tw / 2, cy)
+    neonGrad.addColorStop(0,   '#00F5FF')
+    neonGrad.addColorStop(0.5, '#BF5FFF')
+    neonGrad.addColorStop(1,   '#FF2D82')
+    // 大光晕（最外层）
+    ctx.shadowColor = 'rgba(0,220,255,0.7)'
+    ctx.shadowBlur = 40
+    ctx.fillStyle = neonGrad
+    ctx.fillText(text, cx, cy)
+    // 中层光晕
+    ctx.shadowColor = 'rgba(180,80,255,0.8)'
+    ctx.shadowBlur = 20
+    ctx.fillText(text, cx, cy)
+    // 内核高亮
+    ctx.shadowColor = 'rgba(255,255,255,0.9)'
+    ctx.shadowBlur = 8
+    ctx.fillStyle = '#ffffff'
+    ctx.fillText(text, cx, cy)
+  }
+
+  ctx.restore()
+}
+
+/** 加载 PDF 前 4 页，每页渲染为 dataURL，再合成 2×2 拼图 */
+async function renderPdfGridImage(file) {
+  const lib = await ensurePdfjs()
+  const pdf = await lib.getDocument({
+    url: `/api/baidu/proxy-pdf?path=${encodeURIComponent(file.path)}`,
+    httpHeaders: { Authorization: `Bearer ${getToken()}` },
+  }).promise
+
+  const totalPages = Math.min(pdf.numPages, 4)
+  const pageDataUrls = []
+  for (let p = 1; p <= totalPages; p++) {
+    const page = await pdf.getPage(p)
+    const viewport = page.getViewport({ scale: 2 })
+    const c = document.createElement('canvas')
+    c.width = viewport.width
+    c.height = viewport.height
+    await page.render({ canvasContext: c.getContext('2d'), viewport }).promise
+    pageDataUrls.push(c.toDataURL('image/png'))
+  }
+
+  return buildPdfGridComposite(pageDataUrls, pdfGridDrawer.gridBorderColor)
+}
+
+/** 把最多 4 页 PDF 的 dataURL 拼成 1242×1656 的小红书笔记图 */
+async function buildPdfGridComposite(dataUrls, borderColor = '#FF2D55') {
+  const CANVAS_W = 1242
+  const CANVAS_H = 1656
+  const BORDER = 10           // 外围边框宽度（固定 10px）
+  const OUTER_PAD = 32        // 外边距（含边框）
+  const GAP = 20              // 两格之间的间距
+  const RADIUS = 20           // 每格圆角
+  const SHADOW_BLUR = 8       // 阴影模糊半径（4~8px）
+  const SHADOW_COLOR = 'rgba(0,0,0,0.22)'
+
+  const cellW = Math.floor((CANVAS_W - OUTER_PAD * 2 - GAP) / 2)
+  const cellH = Math.floor((CANVAS_H - OUTER_PAD * 2 - GAP) / 2)
+
+  // 四格坐标：左上 / 右上 / 左下 / 右下
+  const cells = [
+    { x: OUTER_PAD,              y: OUTER_PAD },
+    { x: OUTER_PAD + cellW + GAP, y: OUTER_PAD },
+    { x: OUTER_PAD,              y: OUTER_PAD + cellH + GAP },
+    { x: OUTER_PAD + cellW + GAP, y: OUTER_PAD + cellH + GAP },
+  ]
+
+  const canvas = document.createElement('canvas')
+  canvas.width = CANVAS_W
+  canvas.height = CANVAS_H
+  const ctx = canvas.getContext('2d')
+
+  // 整体浅灰背景
+  ctx.fillStyle = '#f2f2f2'
+  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H)
+
+  // 外围边框（10px，紧贴画布四边）
+  ctx.strokeStyle = borderColor
+  ctx.lineWidth = BORDER
+  ctx.strokeRect(BORDER / 2, BORDER / 2, CANVAS_W - BORDER, CANVAS_H - BORDER)
+
+  for (let i = 0; i < 4; i++) {
+    const { x, y } = cells[i]
+    const dataUrl = dataUrls[i]
+
+    if (!dataUrl) {
+      // 不足 4 页：灰色占位格
+      ctx.save()
+      ctx.fillStyle = '#e0e0e0'
+      ctx.beginPath()
+      ctx.roundRect(x, y, cellW, cellH, RADIUS)
+      ctx.fill()
+      ctx.restore()
+      continue
+    }
+
+    const img = await loadImage(dataUrl)  // 复用 Detail.vue 内已有的 loadImage()
+
+    // ① 先画阴影（在 clip 外，用白底圆角矩形承载阴影）
+    ctx.save()
+    ctx.shadowColor = SHADOW_COLOR
+    ctx.shadowBlur = SHADOW_BLUR
+    ctx.shadowOffsetX = 0
+    ctx.shadowOffsetY = 4
+    ctx.fillStyle = '#ffffff'
+    ctx.beginPath()
+    ctx.roundRect(x, y, cellW, cellH, RADIUS)
+    ctx.fill()
+    ctx.restore()
+
+    // ② clip 圆角后绘制 PDF 页面（contain 等比缩放居中）
+    ctx.save()
+    ctx.beginPath()
+    ctx.roundRect(x, y, cellW, cellH, RADIUS)
+    ctx.clip()
+    // 白色底（防透明 PDF）
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(x, y, cellW, cellH)
+    // contain 缩放
+    const scale = Math.min(cellW / img.width, cellH / img.height)
+    const dw = img.width * scale
+    const dh = img.height * scale
+    const dx = x + (cellW - dw) / 2
+    const dy = y + (cellH - dh) / 2
+    ctx.drawImage(img, dx, dy, dw, dh)
+    ctx.restore()
+  }
+
+  return canvas.toDataURL('image/png')
+}
+
+/** 下载 PDF 4页拼图（带标题、若有模糊则烧进 canvas 导出） */
+async function downloadPdfGrid() {
+  const src = pdfGridDrawer.displayUrl || pdfGridDrawer.gridUrl
+  if (!src) return
+  const name = pdfGridDrawer.file?.name?.replace(/\.pdf$/i, '') || 'pdf_grid'
+  const a = document.createElement('a')
+
+  if (pdfGridDrawer.blurAmount > 0) {
+    // 将模糊效果烧入 canvas，使下载文件与预览一致
+    const img = await loadImage(src)
+    const c = document.createElement('canvas')
+    c.width = img.width
+    c.height = img.height
+    const ctx = c.getContext('2d')
+    ctx.filter = `blur(${pdfGridDrawer.blurAmount}px)`
+    ctx.drawImage(img, 0, 0)
+    a.href = c.toDataURL('image/png')
+  } else {
+    a.href = src
+  }
+
+  a.download = `${name}_4页拼图.png`
   a.click()
 }
 

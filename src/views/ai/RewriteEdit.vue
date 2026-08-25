@@ -597,12 +597,19 @@ async function generateSingleImg(img, idx) {
   img.aiUrl  = ''
   const t0  = Date.now()
   // 单条日志贯穿整个生命周期：上传 → 生成中 → 完成/失败
-  const log = addLog(`图片 ${idx + 1}：上传原图中…`, 'running')
+  const log = addLog(
+    img.publicSrc ? `图片 ${idx + 1}：AI 生成中…` : `图片 ${idx + 1}：上传原图中…`,
+    'running',
+  )
   try {
-    const uploaded = await uploadXhsImageViaWorker(img.src)
+    // 优先复用已上传的 R2 地址，避免重复走浏览器中转
+    if (!img.publicSrc) {
+      const uploaded = await uploadXhsImageViaWorker(img.src)
+      img.publicSrc = uploaded.url // 缓存，重试复用
+      log.text = `图片 ${idx + 1}：AI 生成中…`
+    }
     const imagePrompt = selectedPrompt.value?.image_prompt ?? ''
-    log.text = `图片 ${idx + 1}：AI 生成中…`
-    const res = await rewriteImage({ src: uploaded.url, prompt: imagePrompt })
+    const res = await rewriteImage({ src: img.publicSrc, prompt: imagePrompt })
     img.aiUrl  = res.url
     img.status = 'done'
     log.type   = 'success'
@@ -619,6 +626,7 @@ async function generateSingleImg(img, idx) {
 async function retrySingleImg(img, idx) {
   img.status = 'pending'
   img.aiUrl  = ''
+  // 注意：不重置 img.publicSrc，保留已上传的 R2 地址供复用
   await generateSingleImg(img, idx)
 }
 

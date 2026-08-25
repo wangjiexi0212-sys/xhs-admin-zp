@@ -777,14 +777,20 @@ async function processJob(job) {
 
       try {
         // Step 1：浏览器下载原图 → 上传到 R2（绕过 XHS CDN 防外链）
-        addStepLog(job, `img_${i}`, `浏览器中转上传中…`)
-        let publicSrc
-        try {
-          const uploaded = await uploadXhsImageViaWorker(img.src)
-          publicSrc = uploaded.url
-          addStepLog(job, `img_${i}`, `原图已上传：${publicSrc?.slice(0, 50)}…`)
-        } catch (uploadErr) {
-          throw new Error(`原图上传失败：${uploadErr.message}`)
+        // 若已有缓存的 publicSrc（重试时复用），跳过重新上传
+        let publicSrc = img.publicSrc || ''
+        if (!publicSrc) {
+          addStepLog(job, `img_${i}`, `浏览器中转上传中…`)
+          try {
+            const uploaded = await uploadXhsImageViaWorker(img.src)
+            publicSrc = uploaded.url
+            img.publicSrc = publicSrc // 缓存，供重试复用
+            addStepLog(job, `img_${i}`, `原图已上传：${publicSrc?.slice(0, 50)}…`)
+          } catch (uploadErr) {
+            throw new Error(`原图上传失败：${uploadErr.message}`)
+          }
+        } else {
+          addStepLog(job, `img_${i}`, `复用已上传原图：${publicSrc?.slice(0, 50)}…`)
         }
 
         // Step 2：调 AI 绘图
@@ -904,11 +910,12 @@ async function _doProductAiOne(imgObj) {
   imgObj.status = 'running'
   imgObj.url = ''
   try {
-    // 上传到 R2（绕过 XHS CDN 防外链；若已是 R2 URL 则直接用）
-    let publicSrc = imgObj.src
-    if (/xhscdn\.com|xiaohongshu\.com/i.test(imgObj.src)) {
+    // 优先复用已上传的 R2 地址（重试时跳过中转）
+    let publicSrc = imgObj.publicSrc || imgObj.src
+    if (!imgObj.publicSrc && /xhscdn\.com|xiaohongshu\.com/i.test(imgObj.src)) {
       const uploaded = await uploadXhsImageViaWorker(imgObj.src)
       publicSrc = uploaded.url
+      imgObj.publicSrc = publicSrc // 缓存，重试复用
     }
     const res = await rewriteImage({ src: publicSrc, prompt: '' })
     imgObj.url = res.url
@@ -1097,15 +1104,20 @@ async function retryImage(job, img, idx) {
   }
 
   try {
-    // 重新上传原图到 R2（原中转文件已被删除）
-    addStepLog(job, stepKey, `浏览器中转上传中…`)
-    let publicSrc
-    try {
-      const uploaded = await uploadXhsImageViaWorker(img.src)
-      publicSrc = uploaded.url
-      addStepLog(job, stepKey, `原图已上传：${publicSrc?.slice(0, 50)}…`)
-    } catch (uploadErr) {
-      throw new Error(`原图上传失败：${uploadErr.message}`)
+    // 优先复用首次已上传的 R2 地址，避免重复走浏览器中转
+    let publicSrc = img.publicSrc || ''
+    if (!publicSrc) {
+      addStepLog(job, stepKey, `浏览器中转上传中…`)
+      try {
+        const uploaded = await uploadXhsImageViaWorker(img.src)
+        publicSrc = uploaded.url
+        img.publicSrc = publicSrc // 缓存，下次重试继续复用
+        addStepLog(job, stepKey, `原图已上传：${publicSrc?.slice(0, 50)}…`)
+      } catch (uploadErr) {
+        throw new Error(`原图上传失败：${uploadErr.message}`)
+      }
+    } else {
+      addStepLog(job, stepKey, `复用已上传原图：${publicSrc?.slice(0, 50)}…`)
     }
 
     // 重新调 AI 绘图
