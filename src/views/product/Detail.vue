@@ -1757,72 +1757,72 @@ async function generateExamCard(useEditedPrompt = false) {
     }
   }
 
-  // ② 组装 card_text（结构化，供后端 LLM 转绘图提示词）
+  // ② 前端直接构造绘图提示词（参照参考图布局，不走后端随机模版）
   const yearMatch = (d.written_exam_time || '').match(/\d{4}/)
   const year = yearMatch ? yearMatch[0] : new Date().getFullYear()
-  const cardText = [
-    `标题：${d.company_name || ''}笔试`,
-    `副标题：${year}招聘${d.recruit_count || ''}人`,
-    '',
-    '【时间安排】',
-    d.apply_time        ? `报名时间：${d.apply_time}` : '',
-    d.written_exam_time ? `笔试时间：${d.written_exam_time}` : '',
-    '',
-    '【考试详情】',
-    d.job_type_name     ? `岗位类型：${d.job_type_name}` : '',
-    d.recruit_count     ? `招聘人数：${d.recruit_count}人` : '',
-    '',
-    '【笔试内容】',
-    d.written_exam_content || '',
-    '',
-    '【笔试备考建议】',
-    examCardState.advice,
-    '',
-    '备考攻略+真题资料分享！',
-    '',
-    '视觉风格要求：小红书竖版信息图海报，红色+白色为主色调，各区块用色彩分区（深红色标题栏、白色内容区），排版清晰，字体加粗醒目，整体简洁干净',
-  ].filter(s => s !== null && s !== undefined).join('\n').trim()
 
-  // ③ 调用全能AI绘图（先取提示词审核，再生图）
+  if (!useEditedPrompt) {
+    // 按参考图布局精确描述：深红标题区 + 橙色区块头 + 白底内容 + 金色高亮建议 + 红底底栏
+    const timeLines = [
+      d.apply_time        ? `报名时间：${d.apply_time}` : '',
+      d.written_exam_time ? `笔试时间：${d.written_exam_time}` : '',
+    ].filter(Boolean).join('，')
+
+    const detailLines = [
+      d.job_type_name  ? `岗位类型：${d.job_type_name}` : '',
+      d.recruit_count  ? `招聘人数：${d.recruit_count}人` : '',
+    ].filter(Boolean).join('，')
+
+    const examContent = (d.written_exam_content || '').trim()
+    const advice = examCardState.advice || ''
+
+    examCardState.promptText = [
+      `Design a vertical Chinese exam preparation info-graphic poster (1080×1440px), NO cartoon mascot, NO illustrations, pure text-based layout, professional and clean.`,
+      ``,
+      `Layout from top to bottom:`,
+      `1. [Header] Dark crimson red gradient background (height ~180px). Large white bold Chinese text centered: "${d.company_name || ''}笔试". Below it: orange text "${year}招聘${d.recruit_count || ''}人".`,
+      `2. [Section 时间安排] White background. Left: orange rounded-rectangle label "时间安排". Content: ${timeLines || '暂定'}`,
+      `3. [Section 考试详情] White background. Left: orange rounded-rectangle label "考试详情". Content: ${detailLines || examContent.slice(0, 60)}`,
+      `4. [Section 笔试内容] White background. Left: orange rounded-rectangle label "笔试内容". Gold/yellow sub-header rectangle: "${d.job_type_name || '综合知识与专业知识'}". Then exam content text: ${examContent.slice(0, 100)}`,
+      `5. [Advice box] Light gold/yellow background box. Text content (exam prep advice): ${advice.slice(0, 150)}`,
+      `6. [Footer] Dark red background bar. Gold bold text: "备考攻略+真题资料分享！"`,
+      ``,
+      `Color palette: dark red #8B0000, orange #FF6600, gold #FFD700, white #FFFFFF, light gray #F5F5F5.`,
+      `Style: flat design, no gradients except header, information-dense, Chinese typography, clean section dividers, no border decorations, structured data visualization card.`,
+    ].join('\n')
+
+    // 直接跳到提示词审核步骤，不再调用 prompt_only
+    examCardState.step = 'prompt_ready'
+    examCardState.statusMsg = '提示词已就绪，请确认后生成海报'
+    return
+  }
+
+  // ③ 用编辑后的提示词正式绘图
   examCardState.step = 'drawing'
-  examCardState.statusMsg = useEditedPrompt ? '正在使用编辑后的提示词生成海报…' : '正在生成绘图提示词…'
+  examCardState.statusMsg = '正在生成备考海报…'
 
-  const params = {
-    product_id:     id.value,
-    card_text:      cardText,
-    llm_provider:   active.provider,
-    llm_api_format: active.api_format,
-    llm_api_key:    active.api_key,
-    llm_base_url:   active.base_url || '',
-    llm_model:      active.default_model,
-  }
+  const refImageUrl = `${window.location.origin}/exam-card-ref.png`
 
-  // 「用此提示词生成」时直接用编辑后的 prompt，否则先 prompt_only 获取提示词
-  if (useEditedPrompt && examCardState.promptText) {
-    params.prompt = examCardState.promptText
-  } else {
-    params.prompt_only = true
-  }
-
-  await drawCoverStream(params, {
+  await drawCoverStream({
+    product_id:            id.value,
+    card_text:             `${d.company_name || ''}笔试备考海报`,
+    prompt:                examCardState.promptText,
+    reference_image_url:   refImageUrl,
+    llm_provider:          active.provider,
+    llm_api_format:        active.api_format,
+    llm_api_key:           active.api_key,
+    llm_base_url:          active.base_url || '',
+    llm_model:             active.default_model,
+  }, {
     onProgress(event) {
-      if      (event.step === 'llm')      examCardState.statusMsg = '正在适配绘图提示词…'
-      else if (event.step === 'llm_done') examCardState.statusMsg = '提示词就绪，可审核后生成…'
-      else if (event.step === 'draw')     examCardState.statusMsg = 'AI绘图中，请稍候…'
+      if (event.step === 'draw') examCardState.statusMsg = 'AI绘图中，请稍候…'
     },
     onDone(res) {
-      if (res?.prompt_only) {
-        // 仅返回提示词：展示供审核，不清除旧图
-        examCardState.promptText = res.prompt || ''
-        examCardState.step = 'prompt_ready'
-        examCardState.statusMsg = '提示词已生成，请审核后确认生成图片'
-      } else {
-        const urls = Array.isArray(res?.urls) ? res.urls.filter(Boolean) : []
-        examCardState.imageUrl = urls[0] || res?.url || ''
-        examCardState.promptText = res?.prompt || examCardState.promptText
-        examCardState.step = 'done'
-        examCardState.statusMsg = '生成完成'
-      }
+      const urls = Array.isArray(res?.urls) ? res.urls.filter(Boolean) : []
+      examCardState.imageUrl = urls[0] || res?.url || ''
+      examCardState.promptText = res?.prompt || examCardState.promptText
+      examCardState.step = 'done'
+      examCardState.statusMsg = '生成完成'
     },
     onError(e) {
       examCardState.step = 'error'
