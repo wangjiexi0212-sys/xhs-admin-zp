@@ -958,7 +958,7 @@
       width="60%"
       :body-style="{ padding: '24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px', background: '#f5f5f5', overflow: 'auto' }"
     >
-      <!-- 生成中 -->
+      <!-- 生成中（LLM 备考建议 / 获取绘图提示词 / 实际绘图） -->
       <div
         v-if="examCardState.step === 'llm' || examCardState.step === 'drawing'"
         style="display:flex;flex-direction:column;align-items:center;gap:14px;margin-top:60px;width:100%"
@@ -976,6 +976,37 @@
         </div>
       </div>
 
+      <!-- 提示词审核（prompt_ready）：可编辑后用此提示词生成 -->
+      <template v-else-if="examCardState.step === 'prompt_ready'">
+        <!-- 备考建议展示 -->
+        <div style="width:100%;max-width:700px;background:#fff;border-radius:8px;
+                    padding:12px 16px;font-size:13px;color:#333;line-height:1.8;
+                    box-shadow:0 1px 6px rgba(0,0,0,0.08);flex-shrink:0">
+          <div style="font-weight:500;color:#ff2d55;margin-bottom:6px">📝 备考建议</div>
+          {{ examCardState.advice }}
+        </div>
+        <!-- 绘图提示词编辑区 -->
+        <div style="width:100%;max-width:700px;background:#fff;border-radius:8px;
+                    padding:14px 16px;box-shadow:0 1px 6px rgba(0,0,0,0.08);flex-shrink:0">
+          <div style="font-size:12px;color:#999;margin-bottom:6px">
+            绘图提示词（可编辑后点击「用此提示词生成」）：
+          </div>
+          <a-textarea
+            v-model:value="examCardState.promptText"
+            :auto-size="{ minRows: 8, maxRows: 20 }"
+            style="font-size:12px;resize:none"
+          />
+          <div style="display:flex;gap:10px;margin-top:10px">
+            <a-button type="primary" @click="generateExamCard(true)">
+              ✅ 用此提示词生成
+            </a-button>
+            <a-button @click="generateExamCard(false)">
+              🔄 重新生成提示词
+            </a-button>
+          </div>
+        </div>
+      </template>
+
       <!-- 生成完成 -->
       <template v-else-if="examCardState.step === 'done' && examCardState.imageUrl">
         <!-- 备考建议 -->
@@ -984,6 +1015,25 @@
                     box-shadow:0 1px 6px rgba(0,0,0,0.08);flex-shrink:0">
           <div style="font-weight:500;color:#ff2d55;margin-bottom:6px">📝 备考建议</div>
           {{ examCardState.advice }}
+        </div>
+        <!-- 绘图提示词（可折叠查看 / 再次编辑） -->
+        <div
+          v-if="examCardState.promptText"
+          style="width:100%;max-width:560px;background:#fff;border-radius:8px;
+                 padding:10px 14px;box-shadow:0 1px 6px rgba(0,0,0,0.08);flex-shrink:0"
+        >
+          <div style="font-size:12px;color:#999;margin-bottom:4px">提示词（可编辑后重新生成）：</div>
+          <a-textarea
+            v-model:value="examCardState.promptText"
+            :auto-size="{ minRows: 4, maxRows: 12 }"
+            style="font-size:12px;resize:none"
+          />
+          <a-button
+            type="link"
+            size="small"
+            style="padding:4px 0"
+            @click="generateExamCard(true)"
+          >用此提示词生成</a-button>
         </div>
         <!-- 海报预览 -->
         <img
@@ -998,8 +1048,8 @@
             size="large"
             :loading="examCardState.downloading"
             @click="downloadExamCard"
-          >⬇ 下载海报</a-button>
-          <a-button size="large" @click="generateExamCard">🔄 重新生成</a-button>
+          >⬇ 下载海报（去重处理）</a-button>
+          <a-button size="large" @click="generateExamCard(false)">🔄 重新生成</a-button>
         </div>
       </template>
 
@@ -1009,7 +1059,7 @@
         style="display:flex;flex-direction:column;align-items:center;gap:14px;margin-top:60px"
       >
         <span style="color:#ff4d4f;font-size:14px">{{ examCardState.errorMsg }}</span>
-        <a-button @click="generateExamCard">🔄 重试</a-button>
+        <a-button @click="generateExamCard(false)">🔄 重试</a-button>
       </div>
 
       <!-- idle 初始 -->
@@ -1071,9 +1121,10 @@ const templateModalVisible = ref(false)
 // ─── 备考海报一键生图 ──────────────────────────────────────
 const examCardState = reactive({
   visible: false,       // 抽屉开关
-  step: 'idle',         // 'idle'|'llm'|'drawing'|'done'|'error'
+  step: 'idle',         // 'idle'|'llm'|'prompt_ready'|'drawing'|'done'|'error'
   statusMsg: '',        // 进度提示
-  advice: '',           // LLM 生成的备考建议（≤100字）
+  advice: '',           // LLM 生成的备考建议
+  promptText: '',       // 后端 LLM 生成的绘图提示词（可编辑后用此生成）
   imageUrl: '',         // 生成图片 URL
   downloading: false,
   errorMsg: '',
@@ -1629,13 +1680,13 @@ function openGenerate() {
 function openExamCard() {
   Object.assign(examCardState, {
     step: 'idle', statusMsg: '', advice: '',
-    imageUrl: '', downloading: false, errorMsg: '',
+    promptText: '', imageUrl: '', downloading: false, errorMsg: '',
   })
   examCardState.visible = true
   generateExamCard()
 }
 
-async function generateExamCard() {
+async function generateExamCard(useEditedPrompt = false) {
   const active = llmStore.active
   if (!active) {
     Modal.warning({
@@ -1659,61 +1710,67 @@ async function generateExamCard() {
 
   const d = data.value
 
-  // ① LLM 生成备考建议
-  examCardState.step = 'llm'
-  examCardState.statusMsg = '正在生成备考建议…'
-  const userPrompt = [
-    d.company_name        ? `单位：${d.company_name}` : '',
-    d.job_type_name       ? `招聘岗位类型：${d.job_type_name}` : '',
-    d.recruit_count       ? `招聘人数：${d.recruit_count}` : '',
-    d.written_exam_time   ? `笔试时间：${d.written_exam_time}` : '',
-    d.written_exam_content ? `笔试内容：${d.written_exam_content}` : '',
-    '',
-    '请严格按照以下格式输出笔试备考建议，只输出纯文字，不带任何Markdown符号：',
-    '',
-    '笔试备考建议',
-    '第1-4天夯实基础：[根据笔试内容，具体说明综合知识和专业知识各自的备考重点，结合单位行业特点]',
-    '第5-6天刷题冲刺：[根据笔试时长，说明刷题节奏、查漏补缺方向、分数线目标]',
-    '第7天复盘核心考点、调整状态，[补充面试准备建议]',
-    '',
-    '注意：',
-    '1. 内容必须结合实际笔试内容（如燃气行业则聚焦燃气专业，IT行业聚焦技术知识等），不得生成与笔试无关的通用内容',
-    '2. 严禁出现任何涉及政治人物、领导人姓名、中央政府政策文件名称、党政纪律等政治敏感内容',
-    '3. 若笔试含"时事政治"，只写"关注近期社会热点、民生经济动态"等通用表述，不得提及具体政治人物或文件',
-    '4. 输出纯文字，总字数不超过200字',
-  ].filter(s => s !== null).join('\n')
+  // ① LLM 生成备考建议（仅首次，或非 useEditedPrompt 时重新生成）
+  if (!useEditedPrompt) {
+    examCardState.step = 'llm'
+    examCardState.statusMsg = '正在生成备考建议…'
+    const userPrompt = [
+      d.company_name        ? `单位：${d.company_name}` : '',
+      d.job_type_name       ? `招聘岗位类型：${d.job_type_name}` : '',
+      d.recruit_count       ? `招聘人数：${d.recruit_count}` : '',
+      d.written_exam_time   ? `笔试时间：${d.written_exam_time}` : '',
+      d.written_exam_content ? `笔试内容：${d.written_exam_content}` : '',
+      '',
+      '请严格按照以下格式输出笔试备考建议，只输出纯文字，不带任何Markdown符号：',
+      '',
+      '笔试备考建议',
+      '第1-4天夯实基础：[根据笔试内容，具体说明综合知识和专业知识各自的备考重点，结合单位行业特点]',
+      '第5-6天刷题冲刺：[根据笔试时长，说明刷题节奏、查漏补缺方向、分数线目标]',
+      '第7天复盘核心考点、调整状态，[补充面试准备建议]',
+      '',
+      '注意：',
+      '1. 内容必须结合实际笔试内容（如燃气行业则聚焦燃气专业，IT行业聚焦技术知识等），不得生成与笔试无关的通用内容',
+      '2. 严禁出现任何涉及政治人物、领导人姓名、中央政府政策文件名称、党政纪律等政治敏感内容',
+      '3. 若笔试含"时事政治"，只写"关注近期社会热点、民生经济动态"等通用表述，不得提及具体政治人物或文件',
+      '4. 输出纯文字，总字数不超过200字',
+    ].filter(s => s !== null).join('\n')
 
-  try {
-    const llmRes = await chatLlm({
-      provider:    active.provider,
-      api_format:  active.api_format,
-      api_key:     active.api_key,
-      base_url:    active.base_url || '',
-      model:       active.default_model,
-      messages: [
-        { role: 'system', content: '你是一名专业的企业招聘考试辅导老师，擅长根据笔试科目制定实用的分天备考计划。你的输出必须是纯文字，按照用户指定格式，内容具体、实用、有针对性。严禁涉及政治人物、领导人姓名、党政文件名称等政治敏感内容。' },
-        { role: 'user',   content: userPrompt },
-      ],
-      max_tokens:  500,
-      temperature: 0.7,
-    })
-    examCardState.advice = (llmRes.content || '').trim()
-  } catch (e) {
-    examCardState.step = 'error'
-    examCardState.errorMsg = '备考建议生成失败：' + (e.message || '未知')
-    return
+    try {
+      const llmRes = await chatLlm({
+        provider:    active.provider,
+        api_format:  active.api_format,
+        api_key:     active.api_key,
+        base_url:    active.base_url || '',
+        model:       active.default_model,
+        messages: [
+          { role: 'system', content: '你是一名专业的企业招聘考试辅导老师，擅长根据笔试科目制定实用的分天备考计划。你的输出必须是纯文字，按照用户指定格式，内容具体、实用、有针对性。严禁涉及政治人物、领导人姓名、党政文件名称等政治敏感内容。' },
+          { role: 'user',   content: userPrompt },
+        ],
+        max_tokens:  500,
+        temperature: 0.7,
+      })
+      examCardState.advice = (llmRes.content || '').trim()
+    } catch (e) {
+      examCardState.step = 'error'
+      examCardState.errorMsg = '备考建议生成失败：' + (e.message || '未知')
+      return
+    }
   }
 
-  // ② 组装 card_text
+  // ② 组装 card_text（结构化，供后端 LLM 转绘图提示词）
   const yearMatch = (d.written_exam_time || '').match(/\d{4}/)
   const year = yearMatch ? yearMatch[0] : new Date().getFullYear()
   const cardText = [
-    `${d.company_name || ''}笔试`,
-    `${year}招聘${d.recruit_count || ''}人`,
+    `标题：${d.company_name || ''}笔试`,
+    `副标题：${year}招聘${d.recruit_count || ''}人`,
     '',
     '【时间安排】',
     d.apply_time        ? `报名时间：${d.apply_time}` : '',
     d.written_exam_time ? `笔试时间：${d.written_exam_time}` : '',
+    '',
+    '【考试详情】',
+    d.job_type_name     ? `岗位类型：${d.job_type_name}` : '',
+    d.recruit_count     ? `招聘人数：${d.recruit_count}人` : '',
     '',
     '【笔试内容】',
     d.written_exam_content || '',
@@ -1722,13 +1779,15 @@ async function generateExamCard() {
     examCardState.advice,
     '',
     '备考攻略+真题资料分享！',
-  ].filter(s => s !== null).join('\n').trim()
+    '',
+    '视觉风格要求：小红书竖版信息图海报，红色+白色为主色调，各区块用色彩分区（深红色标题栏、白色内容区），排版清晰，字体加粗醒目，整体简洁干净',
+  ].filter(s => s !== null && s !== undefined).join('\n').trim()
 
-  // ③ 调用全能AI绘图（quanneng 渠道）
+  // ③ 调用全能AI绘图（先取提示词审核，再生图）
   examCardState.step = 'drawing'
-  examCardState.statusMsg = '正在生成备考海报…'
+  examCardState.statusMsg = useEditedPrompt ? '正在使用编辑后的提示词生成海报…' : '正在生成绘图提示词…'
 
-  await drawCoverStream({
+  const params = {
     product_id:     id.value,
     card_text:      cardText,
     llm_provider:   active.provider,
@@ -1736,17 +1795,34 @@ async function generateExamCard() {
     llm_api_key:    active.api_key,
     llm_base_url:   active.base_url || '',
     llm_model:      active.default_model,
-  }, {
+  }
+
+  // 「用此提示词生成」时直接用编辑后的 prompt，否则先 prompt_only 获取提示词
+  if (useEditedPrompt && examCardState.promptText) {
+    params.prompt = examCardState.promptText
+  } else {
+    params.prompt_only = true
+  }
+
+  await drawCoverStream(params, {
     onProgress(event) {
       if      (event.step === 'llm')      examCardState.statusMsg = '正在适配绘图提示词…'
-      else if (event.step === 'llm_done') examCardState.statusMsg = '提示词就绪，正在绘图…'
+      else if (event.step === 'llm_done') examCardState.statusMsg = '提示词就绪，可审核后生成…'
       else if (event.step === 'draw')     examCardState.statusMsg = 'AI绘图中，请稍候…'
     },
     onDone(res) {
-      const urls = Array.isArray(res?.urls) ? res.urls.filter(Boolean) : []
-      examCardState.imageUrl = urls[0] || res?.url || ''
-      examCardState.step = 'done'
-      examCardState.statusMsg = '生成完成'
+      if (res?.prompt_only) {
+        // 仅返回提示词：展示供审核，不清除旧图
+        examCardState.promptText = res.prompt || ''
+        examCardState.step = 'prompt_ready'
+        examCardState.statusMsg = '提示词已生成，请审核后确认生成图片'
+      } else {
+        const urls = Array.isArray(res?.urls) ? res.urls.filter(Boolean) : []
+        examCardState.imageUrl = urls[0] || res?.url || ''
+        examCardState.promptText = res?.prompt || examCardState.promptText
+        examCardState.step = 'done'
+        examCardState.statusMsg = '生成完成'
+      }
     },
     onError(e) {
       examCardState.step = 'error'
