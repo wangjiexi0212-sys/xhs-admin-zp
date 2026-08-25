@@ -1659,17 +1659,29 @@ async function generateExamCard() {
 
   const d = data.value
 
-  // ① LLM 生成备考建议（≤100字）
+  // ① LLM 生成备考建议
   examCardState.step = 'llm'
   examCardState.statusMsg = '正在生成备考建议…'
   const userPrompt = [
-    d.company_name       ? `单位：${d.company_name}` : '',
-    d.job_type_name      ? `招聘岗位类型：${d.job_type_name}` : '',
-    d.recruit_count      ? `招聘人数：${d.recruit_count}` : '',
-    d.written_exam_time  ? `笔试时间：${d.written_exam_time}` : '',
+    d.company_name        ? `单位：${d.company_name}` : '',
+    d.job_type_name       ? `招聘岗位类型：${d.job_type_name}` : '',
+    d.recruit_count       ? `招聘人数：${d.recruit_count}` : '',
+    d.written_exam_time   ? `笔试时间：${d.written_exam_time}` : '',
     d.written_exam_content ? `笔试内容：${d.written_exam_content}` : '',
-    '请根据以上信息，生成一段不超过100字的笔试备考建议，内容要有针对性，输出纯文字，不带Markdown。',
-  ].filter(Boolean).join('\n')
+    '',
+    '请严格按照以下格式输出笔试备考建议，只输出纯文字，不带任何Markdown符号：',
+    '',
+    '笔试备考建议',
+    '第1-4天夯实基础：[根据笔试内容，具体说明综合知识和专业知识各自的备考重点，结合单位行业特点]',
+    '第5-6天刷题冲刺：[根据笔试时长，说明刷题节奏、查漏补缺方向、分数线目标]',
+    '第7天复盘核心考点、调整状态，[补充面试准备建议]',
+    '',
+    '注意：',
+    '1. 内容必须结合实际笔试内容（如燃气行业则聚焦燃气专业，IT行业聚焦技术知识等），不得生成与笔试无关的通用内容',
+    '2. 严禁出现任何涉及政治人物、领导人姓名、中央政府政策文件名称、党政纪律等政治敏感内容',
+    '3. 若笔试含"时事政治"，只写"关注近期社会热点、民生经济动态"等通用表述，不得提及具体政治人物或文件',
+    '4. 输出纯文字，总字数不超过200字',
+  ].filter(s => s !== null).join('\n')
 
   try {
     const llmRes = await chatLlm({
@@ -1679,13 +1691,13 @@ async function generateExamCard() {
       base_url:    active.base_url || '',
       model:       active.default_model,
       messages: [
-        { role: 'system', content: '你是一名专业的考试辅导老师，根据笔试信息输出简洁实用的备考建议，不超过100字，不使用Markdown，输出纯文字。' },
+        { role: 'system', content: '你是一名专业的企业招聘考试辅导老师，擅长根据笔试科目制定实用的分天备考计划。你的输出必须是纯文字，按照用户指定格式，内容具体、实用、有针对性。严禁涉及政治人物、领导人姓名、党政文件名称等政治敏感内容。' },
         { role: 'user',   content: userPrompt },
       ],
-      max_tokens:  200,
+      max_tokens:  500,
       temperature: 0.7,
     })
-    examCardState.advice = (llmRes.content || '').trim().slice(0, 120)
+    examCardState.advice = (llmRes.content || '').trim()
   } catch (e) {
     examCardState.step = 'error'
     examCardState.errorMsg = '备考建议生成失败：' + (e.message || '未知')
