@@ -1769,7 +1769,6 @@ async function generateExamCard(useEditedPrompt = false) {
     ].filter(Boolean).join('，')
 
     const detailLines = [
-      d.job_type_name  ? `岗位类型：${d.job_type_name}` : '',
       d.recruit_count  ? `招聘人数：${d.recruit_count}人` : '',
     ].filter(Boolean).join('，')
 
@@ -1783,7 +1782,7 @@ async function generateExamCard(useEditedPrompt = false) {
       `1. [Header] Dark crimson red gradient background (height ~180px). Large white bold Chinese text centered: "${d.company_name || ''}笔试". Below it: orange text "${year}招聘${d.recruit_count || ''}人".`,
       `2. [Section 时间安排] White background. Left: orange rounded-rectangle label "时间安排". Content: ${timeLines || '暂定'}`,
       `3. [Section 考试详情] White background. Left: orange rounded-rectangle label "考试详情". Content: ${detailLines || examContent.slice(0, 60)}`,
-      `4. [Section 笔试内容] White background. Left: orange rounded-rectangle label "笔试内容". Gold/yellow sub-header rectangle: "${d.job_type_name || '综合知识与专业知识'}". Then exam content text: ${examContent.slice(0, 100)}`,
+      `4. [Section 笔试内容] White background. Left: orange rounded-rectangle label "笔试内容". Then exam content text: ${examContent.slice(0, 100)}`,
       `5. [Advice box] Light gold/yellow background box. Text content (exam prep advice): ${advice.slice(0, 150)}`,
       `6. [Footer] Dark red background bar. Gold bold text: "备考攻略+真题资料分享！"`,
       ``,
