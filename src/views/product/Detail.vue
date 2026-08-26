@@ -456,6 +456,7 @@
               max="20"
               step="0.5"
               style="width:160px;accent-color:#1677ff;cursor:pointer"
+              @input="debouncedRefreshGridComposite"
             />
             <span style="font-size:13px;color:#1677ff;min-width:44px;font-variant-numeric:tabular-nums">
               {{ pdfGridDrawer.blurAmount === 0 ? '不模糊' : `${pdfGridDrawer.blurAmount} px` }}
@@ -482,7 +483,6 @@
               borderRadius: '12px',
               display: 'block',
               flexShrink: 0,
-              filter: pdfGridDrawer.blurAmount > 0 ? `blur(${pdfGridDrawer.blurAmount}px)` : 'none',
             }"
           />
         </template>
@@ -1715,24 +1715,25 @@ async function generateExamCard(useEditedPrompt = false) {
     examCardState.step = 'llm'
     examCardState.statusMsg = '正在生成备考建议…'
     const userPrompt = [
+      '【强制要求】全部内容总字数必须严格在200字以内，不得超出。',
+      '',
       d.company_name        ? `单位：${d.company_name}` : '',
       d.job_type_name       ? `招聘岗位类型：${d.job_type_name}` : '',
       d.recruit_count       ? `招聘人数：${d.recruit_count}` : '',
       d.written_exam_time   ? `笔试时间：${d.written_exam_time}` : '',
       d.written_exam_content ? `笔试内容：${d.written_exam_content}` : '',
       '',
-      '请严格按照以下格式输出笔试备考建议，只输出纯文字，不带任何Markdown符号：',
+      '请根据以下信息输出笔试备考建议，只输出纯文字，不带任何Markdown符号，不要出现"第X天"等按天拆分的内容：',
       '',
       '笔试备考建议',
-      '第1-4天夯实基础：[根据笔试内容，具体说明综合知识和专业知识各自的备考重点，结合单位行业特点]',
-      '第5-6天刷题冲刺：[根据笔试时长，说明刷题节奏、查漏补缺方向、分数线目标]',
-      '第7天复盘核心考点、调整状态，[补充面试准备建议]',
+      '[结合笔试内容和单位行业特点，整体说明备考重点、核心知识方向、刷题建议及备考注意事项]',
       '',
       '注意：',
       '1. 内容必须结合实际笔试内容（如燃气行业则聚焦燃气专业，IT行业聚焦技术知识等），不得生成与笔试无关的通用内容',
       '2. 严禁出现任何涉及政治人物、领导人姓名、中央政府政策文件名称、党政纪律等政治敏感内容',
       '3. 若笔试含"时事政治"，只写"关注近期社会热点、民生经济动态"等通用表述，不得提及具体政治人物或文件',
-      '4. 输出纯文字，总字数不超过200字',
+      '4. 输出纯文字，总字数严格不超过200字，超出200字即视为不合格，宁可删减也不超字数',
+      '5. 再次强调：全文必须在200字以内',
     ].filter(s => s !== null).join('\n')
 
     try {
@@ -1743,10 +1744,10 @@ async function generateExamCard(useEditedPrompt = false) {
         base_url:    active.base_url || '',
         model:       active.default_model,
         messages: [
-          { role: 'system', content: '你是一名专业的企业招聘考试辅导老师，擅长根据笔试科目制定实用的分天备考计划。你的输出必须是纯文字，按照用户指定格式，内容具体、实用、有针对性。严禁涉及政治人物、领导人姓名、党政文件名称等政治敏感内容。' },
+          { role: 'system', content: '你是一名专业的企业招聘考试辅导老师，擅长根据笔试科目制定实用的分天备考计划。你的输出必须是纯文字，按照用户指定格式，内容具体、实用、有针对性。严禁涉及政治人物、领导人姓名、党政文件名称等政治敏感内容。【核心约束】你的全部回复总字数必须严格控制在200字以内，这是最高优先级要求，任何情况下都不得超过200字，宁可内容精简也不能超字数。' },
           { role: 'user',   content: userPrompt },
         ],
-        max_tokens:  500,
+        max_tokens:  350,
         temperature: 0.7,
       })
       examCardState.advice = (llmRes.content || '').trim()
@@ -3074,20 +3075,36 @@ async function openPdfGridDrawer(file) {
   }
 }
 
-/** 重新合成带标题覆层的预览图（gridUrl + title → displayUrl） */
+/** 重新合成带标题覆层的预览图（gridUrl + blur(仅底图) + title → displayUrl） */
 async function refreshGridComposite() {
   if (!pdfGridDrawer.gridUrl) return
-  if (!pdfGridDrawer.titleEnabled || !pdfGridDrawer.titleText.trim()) {
+  const hasBlur  = pdfGridDrawer.blurAmount > 0
+  const hasTitle = pdfGridDrawer.titleEnabled && pdfGridDrawer.titleText.trim()
+
+  // 无需合成：直接用底图
+  if (!hasBlur && !hasTitle) {
     pdfGridDrawer.displayUrl = pdfGridDrawer.gridUrl
     return
   }
+
   const img = await loadImage(pdfGridDrawer.gridUrl)
   const c = document.createElement('canvas')
   c.width = img.width
   c.height = img.height
   const ctx = c.getContext('2d')
+
+  // ① 绘制 PDF 拼图底图（只对底图应用模糊）
+  if (hasBlur) {
+    ctx.filter = `blur(${pdfGridDrawer.blurAmount}px)`
+  }
   ctx.drawImage(img, 0, 0)
-  _drawTitleOnCanvas(ctx, c.width, c.height, pdfGridDrawer.titleText, pdfGridDrawer.titleStyle, pdfGridDrawer.titleY, pdfGridDrawer.titleSize)
+  ctx.filter = 'none'   // 重置，避免影响后续绘制
+
+  // ② 叠加标题（清晰，不受模糊影响）
+  if (hasTitle) {
+    _drawTitleOnCanvas(ctx, c.width, c.height, pdfGridDrawer.titleText, pdfGridDrawer.titleStyle, pdfGridDrawer.titleY, pdfGridDrawer.titleSize)
+  }
+
   pdfGridDrawer.displayUrl = c.toDataURL('image/png')
 }
 
@@ -3417,27 +3434,13 @@ async function buildPdfGridComposite(dataUrls, borderColor = '#FF2D55') {
   return canvas.toDataURL('image/png')
 }
 
-/** 下载 PDF 4页拼图（带标题、若有模糊则烧进 canvas 导出） */
+/** 下载 PDF 4页拼图（模糊已烧进 displayUrl，直接导出） */
 async function downloadPdfGrid() {
   const src = pdfGridDrawer.displayUrl || pdfGridDrawer.gridUrl
   if (!src) return
   const name = pdfGridDrawer.file?.name?.replace(/\.pdf$/i, '') || 'pdf_grid'
   const a = document.createElement('a')
-
-  if (pdfGridDrawer.blurAmount > 0) {
-    // 将模糊效果烧入 canvas，使下载文件与预览一致
-    const img = await loadImage(src)
-    const c = document.createElement('canvas')
-    c.width = img.width
-    c.height = img.height
-    const ctx = c.getContext('2d')
-    ctx.filter = `blur(${pdfGridDrawer.blurAmount}px)`
-    ctx.drawImage(img, 0, 0)
-    a.href = c.toDataURL('image/png')
-  } else {
-    a.href = src
-  }
-
+  a.href = src
   a.download = `${name}_4页拼图.png`
   a.click()
 }
