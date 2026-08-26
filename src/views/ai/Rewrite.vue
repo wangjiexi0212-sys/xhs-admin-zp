@@ -124,7 +124,7 @@
             :key="ii"
             class="product-img-item"
           >
-            <img :src="img" class="product-img-thumb" @error="e => e.target.style.display='none'" />
+            <img :src="xhsImgProxyUrl(img)" class="product-img-thumb" @error="e => e.target.style.display='none'" />
             <div class="product-img-overlay">
               <a-button size="small" type="primary" ghost @click="downloadProductImg(img, ii)">
                 <DownloadOutlined />
@@ -490,7 +490,7 @@ import {
   EditOutlined, PlusOutlined, CloseOutlined, UploadOutlined, DeleteOutlined, EyeOutlined,
 } from '@ant-design/icons-vue'
 import RewritePromptPanel from './RewritePrompt.vue'
-import { parseXhsLink, rewriteContent, rewriteImage, uploadXhsImageViaWorker, uploadLocalImageToR2, proxyImageForDownload, parseProductLink } from '@/api/xhsRewrite'
+import { parseXhsLink, rewriteContent, rewriteImage, uploadXhsImageViaWorker, uploadLocalImageToR2, proxyImageForDownload, parseProductLink, xhsImgProxyUrl } from '@/api/xhsRewrite'
 import { processImageForDownload, triggerBlobDownload } from '@/utils/imageProcess'
 
 const links = ref('')

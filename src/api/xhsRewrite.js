@@ -1,6 +1,20 @@
 import { request } from './request'
 import { getActiveLlmConfig } from './llmConfig'
 
+const API_BASE = import.meta.env.VITE_API_BASE || ''
+
+/**
+ * 把 XHS CDN URL（sns-webpic-qc.xhscdn.com 等）转为经 Worker 代理的地址，
+ * 绕过防盗链 403。非 XHS CDN URL 原样返回。
+ */
+export function xhsImgProxyUrl(url) {
+  if (!url) return url
+  if (/xhscdn\.com|xiaohongshu\.com/i.test(url)) {
+    return `${API_BASE}/api/xhs-rewrite/img-proxy?url=${encodeURIComponent(url)}`
+  }
+  return url
+}
+
 /** 把当前激活的 LLM 配置注入到请求体 */
 function withLlm(data = {}) {
   const llm = getActiveLlmConfig()

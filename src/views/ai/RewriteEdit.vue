@@ -185,7 +185,7 @@
             <div v-for="(img, ii) in images" :key="ii" class="img-cell">
               <!-- 原图 -->
               <div class="img-slot original">
-                <img :src="img.src" class="img-thumb" />
+                <img :src="xhsImgProxyUrl(img.src)" class="img-thumb" />
                 <div class="img-label">原图</div>
               </div>
               <!-- AI 生成图 -->
@@ -328,7 +328,7 @@ import {
   AppstoreOutlined,
 } from '@ant-design/icons-vue'
 import RewritePromptPanel from './RewritePrompt.vue'
-import { rewriteContent, rewriteImage, uploadXhsImageViaWorker, proxyImageForDownload } from '@/api/xhsRewrite'
+import { rewriteContent, rewriteImage, uploadXhsImageViaWorker, proxyImageForDownload, xhsImgProxyUrl } from '@/api/xhsRewrite'
 import { getRewritePromptList } from '@/api/rewritePrompts'
 import { processImageForDownload, triggerBlobDownload } from '@/utils/imageProcess'
 import { saveDraft as saveDraftFn } from '@/utils/draftStorage'
