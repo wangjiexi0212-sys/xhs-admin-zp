@@ -184,6 +184,9 @@
               <template v-else>
                 <img :src="img.url" :alt="`AI二创 ${ii + 1}`" class="img-preview" />
                 <div class="img-overlay">
+                  <a-button size="small" type="primary" ghost @click.prevent="previewImg.url = img.url; previewImg.visible = true">
+                    <EyeOutlined /> 查看大图
+                  </a-button>
                   <a-button size="small" type="primary" ghost :loading="img.downloading" @click.prevent="downloadProductAiImage(img, ii)">
                     <DownloadOutlined /> 下载
                   </a-button>
@@ -338,6 +341,9 @@
                   <template v-else>
                     <img :src="img.url" :alt="`图片${ii + 1}`" class="img-preview" />
                     <div class="img-overlay">
+                      <a-button size="small" type="primary" ghost @click.prevent="previewImg.url = img.url; previewImg.visible = true">
+                        <EyeOutlined /> 查看大图
+                      </a-button>
                       <a-button size="small" type="primary" ghost :loading="img.downloading" @click.prevent="downloadSingleImage(img, ii)">
                         <DownloadOutlined /> 下载
                       </a-button>
@@ -463,6 +469,13 @@
       <RewritePromptPanel />
     </a-drawer>
   </div>
+
+  <!-- 大图预览（全局，受控模式） -->
+  <a-image
+    v-show="false"
+    :src="previewImg.url"
+    :preview="{ visible: previewImg.visible, onVisibleChange: (v) => (previewImg.visible = v) }"
+  />
 </template>
 
 <script setup>
@@ -474,7 +487,7 @@ import {
   ThunderboltOutlined, ArrowRightOutlined, InfoCircleOutlined,
   CopyOutlined, DownloadOutlined, ReloadOutlined, ExclamationCircleOutlined,
   LoadingOutlined, CheckCircleFilled, CloseCircleFilled, BarsOutlined, DownOutlined,
-  EditOutlined, PlusOutlined, CloseOutlined, UploadOutlined, DeleteOutlined,
+  EditOutlined, PlusOutlined, CloseOutlined, UploadOutlined, DeleteOutlined, EyeOutlined,
 } from '@ant-design/icons-vue'
 import RewritePromptPanel from './RewritePrompt.vue'
 import { parseXhsLink, rewriteContent, rewriteImage, uploadXhsImageViaWorker, uploadLocalImageToR2, proxyImageForDownload, parseProductLink } from '@/api/xhsRewrite'
@@ -492,6 +505,7 @@ const showPromptDrawer = ref(false)
 const jobs = ref([])
 const directRewrite = ref(true)
 const imgTextRewrite = ref(false)   // 图片文字二创，默认关闭
+const previewImg = reactive({ visible: false, url: '' })  // 大图预览状态
 
 // 直接改写关闭时，联动重置图片文字二创
 watch(directRewrite, (val) => { if (!val) imgTextRewrite.value = false })
