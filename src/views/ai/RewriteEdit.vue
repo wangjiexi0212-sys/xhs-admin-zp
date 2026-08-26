@@ -317,12 +317,21 @@
       <RewritePromptPanel />
     </a-drawer>
 
-  <!-- 大图预览（全局，受控模式） -->
-  <a-image
-    v-show="false"
-    :src="previewImg.url"
-    :preview="{ visible: previewImg.visible, onVisibleChange: (v) => (previewImg.visible = v) }"
-  />
+  <!-- 大图预览 Modal -->
+  <a-modal
+    v-model:open="previewImg.visible"
+    :footer="null"
+    :body-style="{ padding: 0, lineHeight: 0, background: '#000' }"
+    centered
+    width="auto"
+    wrap-class-name="img-preview-modal"
+  >
+    <img
+      v-if="previewImg.visible"
+      :src="previewImg.url"
+      style="max-width: 90vw; max-height: 90vh; display: block; object-fit: contain"
+    />
+  </a-modal>
 </div>
 </template>
 
