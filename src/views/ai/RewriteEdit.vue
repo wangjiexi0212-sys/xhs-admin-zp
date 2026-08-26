@@ -194,6 +194,9 @@
                   <img :src="img.aiUrl" class="img-thumb" />
                   <div class="img-label ai">AI 二创</div>
                   <div class="img-overlay-actions">
+                    <a-button size="small" type="primary" ghost @click="previewImg.url = img.aiUrl; previewImg.visible = true">
+                      <EyeOutlined />
+                    </a-button>
                     <a-button size="small" type="primary" ghost :loading="img.downloading" @click="downloadImg(img, ii)">
                       <DownloadOutlined />
                     </a-button>
@@ -313,11 +316,18 @@
     >
       <RewritePromptPanel />
     </a-drawer>
-  </div>
+
+  <!-- 大图预览（全局，受控模式） -->
+  <a-image
+    v-show="false"
+    :src="previewImg.url"
+    :preview="{ visible: previewImg.visible, onVisibleChange: (v) => (previewImg.visible = v) }"
+  />
+</div>
 </template>
 
 <script setup>
-import { ref, computed, nextTick, onMounted } from 'vue'
+import { ref, computed, nextTick, onMounted, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import {
@@ -325,7 +335,7 @@ import {
   LoadingOutlined, MinusCircleOutlined, SettingOutlined, UnorderedListOutlined,
   DownOutlined, PlusOutlined, DownloadOutlined, ReloadOutlined, RollbackOutlined,
   ExclamationCircleOutlined, PictureOutlined, CopyOutlined, SaveOutlined,
-  AppstoreOutlined,
+  AppstoreOutlined, EyeOutlined,
 } from '@ant-design/icons-vue'
 import RewritePromptPanel from './RewritePrompt.vue'
 import { rewriteContent, rewriteImage, uploadXhsImageViaWorker, proxyImageForDownload, xhsImgProxyUrl } from '@/api/xhsRewrite'
@@ -342,6 +352,8 @@ const title   = ref('')
 const content = ref('')
 const tags    = ref([])
 const images  = ref([])   // { src, aiUrl, status:'pending'|'running'|'done'|'error', idx, downloading }
+
+const previewImg = reactive({ visible: false, url: '' })  // 大图预览状态
 
 // 原始内容快照（用于"撤销"）
 const origTitle   = ref('')
