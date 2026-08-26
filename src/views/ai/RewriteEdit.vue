@@ -191,12 +191,13 @@
               <!-- AI 生成图 -->
               <div class="img-slot ai-slot">
                 <template v-if="img.status === 'done' && img.aiUrl">
-                  <img :src="img.aiUrl" class="img-thumb" />
+                  <img
+                    :src="img.aiUrl" class="img-thumb"
+                    style="cursor:zoom-in"
+                    @click="previewImg.url = img.aiUrl; previewImg.visible = true"
+                  />
                   <div class="img-label ai">AI 二创</div>
                   <div class="img-overlay-actions">
-                    <a-button size="small" type="primary" ghost @click="previewImg.url = img.aiUrl; previewImg.visible = true">
-                      <EyeOutlined />
-                    </a-button>
                     <a-button size="small" type="primary" ghost :loading="img.downloading" @click="downloadImg(img, ii)">
                       <DownloadOutlined />
                     </a-button>

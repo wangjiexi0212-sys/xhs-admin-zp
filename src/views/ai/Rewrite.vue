@@ -182,11 +182,12 @@
               </div>
               <!-- 完成 -->
               <template v-else>
-                <img :src="img.url" :alt="`AI二创 ${ii + 1}`" class="img-preview" />
+                <img
+                  :src="img.url" :alt="`AI二创 ${ii + 1}`" class="img-preview"
+                  style="cursor:zoom-in"
+                  @click.stop="previewImg.url = img.url; previewImg.visible = true"
+                />
                 <div class="img-overlay">
-                  <a-button size="small" type="primary" ghost @click.prevent="previewImg.url = img.url; previewImg.visible = true">
-                    <EyeOutlined /> 查看大图
-                  </a-button>
                   <a-button size="small" type="primary" ghost :loading="img.downloading" @click.prevent="downloadProductAiImage(img, ii)">
                     <DownloadOutlined /> 下载
                   </a-button>
@@ -339,11 +340,12 @@
                     </a-button>
                   </div>
                   <template v-else>
-                    <img :src="img.url" :alt="`图片${ii + 1}`" class="img-preview" />
+                    <img
+                      :src="img.url" :alt="`图片${ii + 1}`" class="img-preview"
+                      style="cursor:zoom-in"
+                      @click.stop="previewImg.url = img.url; previewImg.visible = true"
+                    />
                     <div class="img-overlay">
-                      <a-button size="small" type="primary" ghost @click.prevent="previewImg.url = img.url; previewImg.visible = true">
-                        <EyeOutlined /> 查看大图
-                      </a-button>
                       <a-button size="small" type="primary" ghost :loading="img.downloading" @click.prevent="downloadSingleImage(img, ii)">
                         <DownloadOutlined /> 下载
                       </a-button>
