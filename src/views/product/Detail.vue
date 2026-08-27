@@ -598,19 +598,13 @@
                 <a-button v-if="generatedTitle" type="link" size="small" @click="copyText(generatedTitle)">
                   <CopyOutlined /> 复制
                 </a-button>
-                <a-button type="link" size="small" :loading="titleGenerating" @click="generateTitle">
+                <a-button type="link" size="small" @click="generateTitle">
                   {{ generatedTitle ? '重新生成' : '生成标题' }}
-                </a-button>
-                <a-button v-if="titlePromptUsed" type="link" size="small" @click="titlePromptVisible = true">
-                  提示词
                 </a-button>
               </a-space>
             </div>
           </template>
-          <div v-if="titleGenerating" class="field-placeholder loading-box">
-            <a-spin /> <span style="margin-left: 8px; color: #999">正在生成标题...</span>
-          </div>
-          <div v-else-if="generatedTitle">
+          <div v-if="generatedTitle">
             <a-input v-model:value="generatedTitle" placeholder="生成的标题" />
             <div style="text-align: right; font-size: 12px; margin-top: 3px;"
               :style="{ color: generatedTitle.length > 20 ? '#ff4d4f' : '#999' }">
@@ -730,25 +724,6 @@
       </div>
     </a-modal>
 
-    <!-- 生成标题 提示词 弹窗 -->
-    <a-modal
-      v-model:open="titlePromptVisible"
-      title="生成标题 · 提示词"
-      :footer="null"
-      width="600px"
-      destroy-on-close
-    >
-      <template v-if="titlePromptUsed">
-        <div style="margin-bottom: 12px;">
-          <div style="font-size: 12px; color: #999; margin-bottom: 4px;">System（系统提示词）</div>
-          <a-textarea :value="titlePromptUsed.system" :auto-size="{ minRows: 4, maxRows: 12 }" readonly />
-        </div>
-        <div>
-          <div style="font-size: 12px; color: #999; margin-bottom: 4px;">User（用户输入）</div>
-          <a-textarea :value="titlePromptUsed.user" :auto-size="{ minRows: 3, maxRows: 10 }" readonly />
-        </div>
-      </template>
-    </a-modal>
 
     <!-- 生成面试题 抽屉 -->
     <a-drawer
@@ -1100,7 +1075,6 @@ const id = computed(() => Number(route.params.id))
 const loading = ref(false)
 const data = ref({})
 const generateVisible = ref(false)
-const titleGenerating = ref(false)
 const generatedTitle = ref('')
 const cardText = ref('')
 const bodyGenerating = ref(false)
@@ -1114,8 +1088,6 @@ const coverStatusMsg = ref('正在生成封面图...')
 const coverImageUrl = ref('')
 const coverImageUrls = ref([])
 const coverPromptUsed = ref('')
-const titlePromptUsed = ref(null) // { system: string, user: string } | null
-const titlePromptVisible = ref(false)
 const templateModalVisible = ref(false)
 
 // ─── 备考海报一键生图 ──────────────────────────────────────
@@ -1961,94 +1933,216 @@ function stripHtml(html = '') {
     .trim()
 }
 
-async function generateTitle() {
-  const active = llmStore.active
-  if (!active) {
-    Modal.warning({
-      title: '提示',
-      content: '请先设置使用中的模型',
-      okText: '去设置',
-      onOk: () => router.push('/system/llm'),
-    })
-    return
-  }
+const TITLE_POOL = [
+  '碎片时间刷题',
+  '通勤间隙悄悄提分',
+  '课间摸鱼学考点',
+  '短时备考效率拉满',
+  '零散时间巧利用',
+  '不用全天埋头苦学',
+  '碎片化速记考点',
+  '轻松挤出备考时长',
+  '抽空学核心考点',
+  '零基础也无备考压力',
+  '碎片化速练题库',
+  '不用整块时间复习',
+  '日常碎片积累知识点',
+  '备考毫不费力',
+  '碎片时段专攻高频题',
+  '低分快速逆袭',
+  '通勤碎片化复盘',
+  '日积月累稳提分',
+  '碎片轻量化学习',
+  '告别长时间苦读',
+  '零碎时间攻克重难点',
+  '备考省时省力',
+  '碎片化记忆口诀',
+  '背诵不用费大脑',
+  '抽空梳理核心考点',
+  '备考轻松无负担',
+  '碎片化专项刷题',
+  '零散时间冲高分',
+  '利用碎片吃透考题',
+  '零基础轻松备考',
+  '考前全套复盘笔记',
+  '避开九成考场失分坑',
+  '考前易错考点合集',
+  '进考场少丢冤枉分',
+  '冲刺终极复盘清单',
+  '高频错题一次性扫清',
+  '考前梳理易混考点',
+  '考场做题不再踩雷',
+  '冲刺复盘核心难点',
+  '规避各类答题误区',
+  '考前错题集中复盘',
+  '减少考场失误失分',
+  '终极冲刺复盘手册',
+  '直击全部易错题型',
+  '考前汇总易丢分考点',
+  '答题正确率飙升',
+  '考前系统复盘重难点',
+  '避开出题人陷阱',
+  '冲刺专属复盘素材',
+  '考场答题少走弯路',
+  '考前梳理高频坑点',
+  '做题不再频频出错',
+  '全套考前复盘干货',
+  '轻松规避答题漏洞',
+  '冲刺复盘易混淆知识点',
+  '做题思路清晰',
+  '考前整理经典错题',
+  '考场直接规避失分',
+  '终极考前复盘攻略',
+  '避开所有考题陷阱',
+  '科学备考新思路',
+  '告别无意义海量刷题',
+  '精准锁定得分核心',
+  '拒绝盲目题海战术',
+  '高效备考底层心法',
+  '刷题只刷必考题',
+  '抓准核心得分考点',
+  '不用盲目大量刷题',
+  '备考精简学习思路',
+  '摒弃低效重复刷题',
+  '高分备考核心技巧',
+  '精准拿捏采分要点',
+  '高效提分学习逻辑',
+  '不做无用刷题消耗',
+  '直击试卷核心得分点',
+  '告别盲目死刷题',
+  '实用备考提分心法',
+  '精准攻克必考题型',
+  '精简高效复习方案',
+  '拒绝无目标刷题',
+  '找准考题得分命脉',
+  '不用盲目刷整套卷',
+  '高分备考实用思路',
+  '刷题直击分值考点',
+  '科学提分备考法则',
+  '远离低效盲目刷题',
+  '精准对标得分要点',
+  '省去海量无用刷题',
+  '备考极简高效心法',
+  '刷题只练高频考题',
+  '深挖历年真题套路',
+  '摸透考官出题思路',
+  '拆解真题底层逻辑',
+  '一眼看透命题方向',
+  '深度剖析历年真题',
+  '掌握固定出题规律',
+  '吃透真题核心套路',
+  '考场答题举一反三',
+  '逐道拆解真题考点',
+  '摸清全部命题逻辑',
+  '深挖真题隐藏考点',
+  '精准预判考试题型',
+  '研究历年真题规律',
+  '读懂出题人侧重点',
+  '吃透全套历年真题',
+  '掌握稳定出题框架',
+  '深度拆解真题题型',
+  '抓住核心命题逻辑',
+  '深挖真题答题思路',
+  '轻松拿捏考试命题',
+  '逐套剖析历年真题',
+  '摸清每年出题走向',
+  '吃透真题底层规律',
+  '考场做题游刃有余',
+  '深挖真题高频命题点',
+  '精准预判考题走向',
+  '拆解真题内在逻辑',
+  '不用瞎猜考试重点',
+  '深耕历年真题题库',
+  '吃透整套命题思路',
+  '分模块专项精准训练',
+  '各科分数稳步上涨',
+  '薄弱项针对性专项突破',
+  '短板快速补齐',
+  '分题型专项强化练习',
+  '各科分值持续提升',
+  '弱项专项集中攻克',
+  '稳步拉高笔试总分',
+  '分科专项精准刷题',
+  '低分稳步冲到高分',
+  '针对性攻克薄弱模块',
+  '成绩持续稳步提升',
+  '高频题型专项特训',
+  '分值一路稳步上涨',
+  '短板专项集中突破',
+  '各科分数稳步提升',
+  '分考点专项针对性练习',
+  '笔试稳涨分',
+  '重难点专项集中攻坚',
+  '总分稳步往上走',
+  '小白零基础上岸攻略',
+  '拒绝长篇死记硬背',
+  '零基础速成通关技巧',
+  '背诵不用死磕书本',
+  '纯小白懒人备考秘籍',
+  '轻松一战顺利上岸',
+  '零基础极简通关方法',
+  '不用大量背诵记忆',
+  '零基础速成提分套路',
+  '告别枯燥死记硬背',
+  '懒人专属上岸干货',
+  '少背书也能稳通关',
+  '零基础简易备考思路',
+  '不用死背厚厚教材',
+  '小白速成上岸心法',
+  '轻松学习不用硬背',
+  '零基础懒人通关指南',
+  '短时复习顺利上岸',
+  '零基础速通备考技巧',
+  '摆脱死记硬背模式',
+  '最新官方考情深度解读',
+  '找准考试核心重点',
+  '全新年度考情分析',
+  '摸清每年分值侧重点',
+  '最新考情完整拆解',
+  '复习备考绝不走弯路',
+  '年度考情全面剖析',
+  '精准锁定高频考点',
+  '全新考势完整解读',
+  '避开无用复习内容',
+  '最新考试趋势拆解',
+  '备考精准直击重点',
+  '深度解读本年度考情',
+  '复习方向不跑偏',
+  '最新考情完整梳理',
+  '精准把握出题侧重点',
+  '考前不用死啃教材',
+  '吃透题库轻松通关',
+  '临时备考不用背书',
+  '刷透真题稳过笔试',
+  '短期冲刺不用啃厚书',
+  '专攻题库就够用',
+  '考前无需通篇背书',
+  '吃透题型轻松上岸',
+  '懒人极简备考方案',
+  '少背书多刷题稳过',
+  '临时突击不用苦背书',
+  '吃透考题轻松进面',
+  '这套高频题库刷熟练',
+  '考场答题少失分',
+  '考前别盲目啃全书',
+  '吃透核心题库足矣',
+  '千万别纯裸考',
+  '吃透核心考点轻松突围',
+  '短期备考听劝',
+  '少啃书本多刷真题',
+  '刷完这套核心题库',
+  '笔试高分稳稳拿捏',
+  '拒绝盲目裸考',
+  '吃透考题侧重点稳进面',
+]
 
-  titleGenerating.value = true
-  try {
-    // 1) 提示词管理：生成标题场景的提示词
-    const promptRes = await getPromptList({
-      scene: 'title',
-      page: 1,
-      pageSize: 1,
-    })
-    const promptItem = promptRes.list?.[0]
-    if (!promptItem) {
-      message.error('未找到「生成标题」场景的提示词')
-      return
-    }
-
-    // 2) 组装用户消息并调用 LLM
-    // 前端随机选类别，避免 AI 每次走同一条路
-    const CATEGORY_NAMES = [
-      '碎片化轻备考',
-      '考前复盘避坑',
-      '高效备考拒绝盲目刷题',
-      '真题深挖吃透出题逻辑',
-      '专项突破稳步提分',
-      '零基础懒人轻松备考',
-      '考情解读抓准重点',
-      '少背书刷题速过',
-    ]
-    const categoryIndex = Math.floor(Math.random() * CATEGORY_NAMES.length)
-    const categoryName = CATEGORY_NAMES[categoryIndex]
-
-    const userContent = [
-      `单位名称：${data.value.company_name || ''}`,
-      `商品类型：${data.value.job_type_name || ''}`,
-      data.value.written_exam_content ? `笔试内容：${data.value.written_exam_content}` : '',
-      data.value.interview_content ? `面试内容：${data.value.interview_content}` : '',
-      `本次必须使用【类别${categoryIndex + 1}：${categoryName}】的风格生成标题，不得使用其他类别风格。`,
-      '注意：标题字数不能超过20个字。',
-    ].filter(Boolean).join('\n')
-
-    // 记录本次使用的提示词，供查看
-    titlePromptUsed.value = { system: promptItem.content, user: userContent }
-    console.log('[generateTitle] messages →', JSON.stringify([
-      { role: 'system', content: promptItem.content },
-      { role: 'user', content: userContent },
-    ], null, 2))
-
-    const res = await chatLlm({
-      provider: active.provider,
-      api_format: active.api_format,
-      api_key: active.api_key,
-      base_url: active.base_url || '',
-      model: active.default_model,
-      messages: [
-        { role: 'system', content: promptItem.content },
-        { role: 'user', content: userContent },
-      ],
-      max_tokens: 512,
-      temperature: 1.0,
-    })
-    console.log('[generateTitle] raw response →', JSON.stringify(res, null, 2))
-    let out = (res.content || '').replace(/^["'「『]+|["'」』]+$/g, '').trim()
-    if (!out) {
-      message.error('模型未返回内容')
-      return
-    }
-    if (out.length > 20) {
-      out = out.slice(0, 20)
-      message.warning('标题超过20字，已自动截断至20字')
-    }
-    generatedTitle.value = out
-    cardText.value = out
-    message.success('标题生成成功')
-  } catch (e) {
-    message.error(e.message || '生成失败')
-  } finally {
-    titleGenerating.value = false
-  }
+function generateTitle() {
+  const companyName = data.value.company_name || ''
+  const randomTitle = TITLE_POOL[Math.floor(Math.random() * TITLE_POOL.length)]
+  const out = `${companyName}笔试，${randomTitle}`
+  generatedTitle.value = out
+  cardText.value = out
+  message.success('标题生成成功')
 }
 
 function pickRandom(arr) {
