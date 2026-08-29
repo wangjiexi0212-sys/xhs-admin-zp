@@ -131,6 +131,11 @@ const router = createRouter({
           component: () => import('../views/system/XhsCookie.vue'),
         },
         {
+          path: 'system/feishu',
+          name: 'system-feishu',
+          component: () => import('../views/system/FeishuConfig.vue'),
+        },
+        {
           path: 'ai/rewrite',
           name: 'ai-rewrite',
           component: () => import('../views/ai/Rewrite.vue'),
