@@ -1198,7 +1198,7 @@ async function runBatchDirImages(onlyDirImages) {
         try {
           const base64 = dataUrl.replace(/^data:image\/\w+;base64,/, '')
           const res = await uploadFeishuBitableImage({ base64, filename })
-          if (res?.data?.file_token) fileTokens.push(res.data.file_token)
+          if (res?.file_token) fileTokens.push(res.file_token)
         } catch (e) {
           dirBatchLogs.value.push({ text: `  └ 图片上传飞书失败（${filename}）：${e.message}`, type: 'warn' })
         }
