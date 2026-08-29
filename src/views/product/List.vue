@@ -47,6 +47,42 @@
       <a-button size="small" style="margin-left: 8px" @click="clearSelection">取消选择</a-button>
     </div>
 
+    <!-- 批量生成目录图 · 设置弹窗 -->
+    <a-modal
+      v-model:open="dirBatchSettingsVisible"
+      title="批量生成目录图"
+      :footer="null"
+      width="520px"
+    >
+      <div style="margin-bottom: 16px">
+        <div style="font-size: 13px; font-weight: 500; color: #555; margin-bottom: 8px">生成方式</div>
+        <a-radio-group v-model:value="dirBatchOnlyDir" style="display: flex; flex-direction: column; gap: 6px">
+          <a-radio :value="false">完整生成（目录图 + 笔记内容 + 卡片图）</a-radio>
+          <a-radio :value="true">只生成目录图（仅真题 / 模拟题目录图）</a-radio>
+        </a-radio-group>
+      </div>
+      <a-divider style="margin: 12px 0" />
+      <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px">
+        <span style="font-size: 13px; font-weight: 500; color: #555">飞书多维表格</span>
+        <a-switch v-model:checked="feishuEnabled" size="small" />
+        <span style="font-size: 12px; color: #999">{{ feishuEnabled ? '开启，生成完成后同步到飞书多维表格' : '关闭' }}</span>
+      </div>
+      <template v-if="feishuEnabled">
+        <div style="padding: 10px 12px; background: #f0f9ff; border: 1px solid #bae0ff; border-radius: 6px; font-size: 12px; color: #555; line-height: 1.8; margin-bottom: 12px">
+          生成完成后将自动把每条笔记的<b>标题、正文、话题、状态</b>写入飞书多维表格。<br />
+          请确保已在「系统设置 → 飞书配置」中填写了多维表格 App Token 和 Table ID。
+        </div>
+      </template>
+      <div style="display: flex; justify-content: flex-end; gap: 8px; padding-top: 4px">
+        <a-button @click="dirBatchSettingsVisible = false">取消</a-button>
+        <a-button
+          type="primary"
+          @click="onConfirmBatchDirSettings"
+        >开始生成</a-button>
+      </div>
+    </a-modal>
+
+    <!-- 批量生成目录图 · 进度弹窗 -->
     <a-modal
       v-model:open="dirBatchVisible"
       title="批量生成目录图"
@@ -171,6 +207,7 @@ import { getContentTemplateList } from '@/api/contentTemplates'
 import { useLlmStore } from '@/stores/llm'
 import { Document, Packer, Paragraph, TextRun, HeadingLevel } from 'docx'
 import { saveAs } from 'file-saver'
+import { writeFeishuBitableRecords, uploadFeishuBitableImage } from '@/api/feishuConfig'
 
 const router = useRouter()
 const llmStore = useLlmStore()
@@ -851,7 +888,151 @@ function buildNoteDocx(title, body, tags) {
   })
 }
 
+// --- 卡片图（CardBasic 风格，与 Detail.vue CardEditor 保持一致）---
+
+const CARD_BASIC_SCHEMES = [
+  { bg: '#d4f7d4', text: '#2d4a2d', accent: '#52c07a' },
+  { bg: '#fff3cd', text: '#5a3a00', accent: '#f5a623' },
+  { bg: '#dde8ff', text: '#1a2f6e', accent: '#4472ca' },
+  { bg: '#ede0ff', text: '#3d1a6e', accent: '#8b5cf6' },
+  { bg: '#fce8e8', text: '#6e1a1a', accent: '#e53e3e' },
+]
+
+function wrapTextLines(ctx, text, maxWidth) {
+  const result = []
+  const paragraphs = String(text || '').split('\n')
+  for (const para of paragraphs) {
+    if (!para) { result.push(''); continue }
+    let current = ''
+    for (const char of para) {
+      const test = current + char
+      if (ctx.measureText(test).width > maxWidth) {
+        if (current) result.push(current)
+        current = char
+      } else {
+        current = test
+      }
+    }
+    if (current) result.push(current)
+  }
+  return result
+}
+
+// 拆分卡片文字：逗号前（高亮）/ 逗号及之后（普通）
+function splitAtFirstComma(text) {
+  const idx = String(text || '').search(/[，,]/)
+  if (idx === -1) return { hlText: text, restText: '' }
+  return { hlText: text.slice(0, idx), restText: text.slice(idx) }
+}
+
+function renderCardBasicImage(text, scheme) {
+  // CardBasic 基础尺寸 360×480，pixelRatio=3 导出 → 1080×1440
+  const SCALE = 3
+  const W = 360 * SCALE   // 1080
+  const H = 480 * SCALE   // 1440
+  const PAD_L = 40 * SCALE
+  const PAD_R = 40 * SCALE
+  const PAD_T = 44 * SCALE
+  const PAD_B = 36 * SCALE
+  const RADIUS = 20 * SCALE
+
+  const canvas = document.createElement('canvas')
+  canvas.width = W
+  canvas.height = H
+  const ctx = canvas.getContext('2d')
+
+  // 圆角背景
+  ctx.fillStyle = scheme.bg
+  ctx.beginPath()
+  ctx.roundRect(0, 0, W, H, RADIUS)
+  ctx.fill()
+
+  // 大引号（" ）
+  const QUOTE_FONT_SIZE = 72 * SCALE
+  ctx.save()
+  ctx.globalAlpha = 0.75
+  ctx.fillStyle = scheme.accent
+  ctx.font = `bold ${QUOTE_FONT_SIZE}px Georgia, serif`
+  ctx.textBaseline = 'top'
+  ctx.fillText('\u201C', PAD_L, PAD_T)
+  ctx.restore()
+
+  // 文字区域（引号下方）
+  const FONT_SIZE = 36 * SCALE
+  const LINE_HEIGHT = FONT_SIZE * 1.75
+  const QUOTE_RENDERED_H = QUOTE_FONT_SIZE * 0.8  // line-height: 0.8
+  const QUOTE_MB = 16 * SCALE
+  const TEXT_TOP = PAD_T + QUOTE_RENDERED_H + QUOTE_MB
+  const TEXT_WIDTH = W - PAD_L - PAD_R
+  const BAR_H = 4 * SCALE
+  const TEXT_BOTTOM = H - PAD_B - BAR_H - 8 * SCALE
+
+  // bg-yellow 高亮色（对应 HL_STYLES 第5个：黄色荧光）
+  const HL_COLOR = '#ffea7a'
+
+  // 拆分高亮部分（逗号前）与普通部分
+  const { hlText } = splitAtFirstComma(text)
+  let hlCharsLeft = hlText.length  // 剩余需要高亮的字符数
+
+  const FONT_NORMAL = `600 ${FONT_SIZE}px "PingFang SC", "Helvetica Neue", sans-serif`
+  const FONT_BOLD = `bold ${FONT_SIZE}px "PingFang SC", "Helvetica Neue", sans-serif`
+
+  ctx.font = FONT_NORMAL
+  ctx.textBaseline = 'top'
+
+  const lines = wrapTextLines(ctx, text, TEXT_WIDTH)
+  let y = TEXT_TOP
+
+  for (const line of lines) {
+    if (y + FONT_SIZE > TEXT_BOTTOM) break
+
+    // 当前行中需要高亮的部分和普通部分
+    const hlLen = Math.min(hlCharsLeft, line.length)
+    const hlPart = line.slice(0, hlLen)
+    const normalPart = line.slice(hlLen)
+    hlCharsLeft -= hlLen
+
+    let x = PAD_L
+
+    // 高亮段：bg-yellow 效果（底部 45% 区域填黄色 + 加粗文字）
+    if (hlPart) {
+      ctx.font = FONT_BOLD
+      const hlW = ctx.measureText(hlPart).width
+      // linear-gradient(transparent 55%, #ffea7a 55%) → 从 55% 处开始到底部
+      const stripY = y + FONT_SIZE * 0.55
+      const stripH = FONT_SIZE * 0.47  // 留少许余量覆盖 45%
+      ctx.fillStyle = HL_COLOR
+      ctx.fillRect(x, stripY, hlW, stripH)
+      // 文字绘制于高亮色之上
+      ctx.fillStyle = scheme.text
+      ctx.fillText(hlPart, x, y)
+      x += hlW
+    }
+
+    // 普通段
+    if (normalPart) {
+      ctx.font = FONT_NORMAL
+      ctx.fillStyle = scheme.text
+      ctx.fillText(normalPart, x, y)
+    }
+
+    y += LINE_HEIGHT
+  }
+
+  // 底部装饰条
+  const BAR_W = 40 * SCALE
+  ctx.fillStyle = scheme.accent
+  ctx.beginPath()
+  ctx.roundRect(PAD_L, H - PAD_B - BAR_H, BAR_W, BAR_H, 2 * SCALE)
+  ctx.fill()
+
+  return canvas.toDataURL('image/png')
+}
+
 // --- 批量生成目录图状态 ---
+const dirBatchSettingsVisible = ref(false)  // 设置弹窗
+const dirBatchOnlyDir = ref(false)          // 只生成目录图模式
+const feishuEnabled = ref(false)            // 飞书文档开关
 const dirBatchVisible = ref(false)
 const dirBatchGenerating = ref(false)
 const dirBatchLogs = ref([])
@@ -863,14 +1044,12 @@ async function onBatchGenerateDirImages() {
     message.warning('请先勾选商品')
     return
   }
-  Modal.confirm({
-    title: '生成方式',
-    content: '是否只生成目录图？\n选「只生成目录图」将仅生成真题和模拟题的目录图；选「完整生成」保持原有逻辑（所有目录图 + 笔记内容）。',
-    okText: '只生成目录图',
-    cancelText: '完整生成',
-    onOk: () => runBatchDirImages(true),
-    onCancel: () => runBatchDirImages(false),
-  })
+  dirBatchSettingsVisible.value = true
+}
+
+function onConfirmBatchDirSettings() {
+  dirBatchSettingsVisible.value = false
+  runBatchDirImages(dirBatchOnlyDir.value)
 }
 
 async function runBatchDirImages(onlyDirImages) {
@@ -896,6 +1075,7 @@ async function runBatchDirImages(onlyDirImages) {
   const zip = new JSZip()
   let totalImages = 0
   let totalNotes = 0
+  const feishuRecords = []   // 收集飞书多维表格行
 
   for (const id of selectedRowKeys.value) {
     const product = list.value.find(p => p.id === id)
@@ -936,6 +1116,7 @@ async function runBatchDirImages(onlyDirImages) {
 
     const folder = zip.folder(company)
     let imgDone = 0
+    const productImages = []  // 收集本商品所有生成图片，用于同步到飞书附件
     for (const task of tasks) {
       try {
         let dataUrl
@@ -968,6 +1149,7 @@ async function runBatchDirImages(onlyDirImages) {
         imgDone++
         totalImages++
         dirBatchLogs.value.push({ text: `  └ ${task.label} ✓`, type: 'success' })
+        productImages.push({ dataUrl, filename: `${task.label}.png` })
       } catch (e) {
         dirBatchLogs.value.push({ text: `  └ ${task.label} 失败：${e.message}`, type: 'error' })
       }
@@ -978,8 +1160,10 @@ async function runBatchDirImages(onlyDirImages) {
 
     // 生成笔记内容并写入 Word
     dirBatchLogs.value.push({ text: `  └ 生成笔记内容中...`, type: 'info' })
+    let noteResult = null
     try {
       const { title, body } = await generateNoteForProduct(detail)
+      noteResult = { title, body }
       const doc = buildNoteDocx(title, body, detail.xhs_tags)
       const docBlob = await Packer.toBlob(doc)
       folder.file('笔记内容.docx', docBlob)
@@ -987,6 +1171,48 @@ async function runBatchDirImages(onlyDirImages) {
       dirBatchLogs.value.push({ text: `  └ 笔记内容 ✓`, type: 'success' })
     } catch (e) {
       dirBatchLogs.value.push({ text: `  └ 笔记内容失败：${e.message}`, type: 'error' })
+    }
+
+    // 生成卡片图（CardBasic 风格，随机配色 + 随机文案）
+    dirBatchLogs.value.push({ text: `  └ 生成卡片图中...`, type: 'info' })
+    try {
+      const cardScheme = CARD_BASIC_SCHEMES[Math.floor(Math.random() * CARD_BASIC_SCHEMES.length)]
+      const cardTitleRandom = TITLE_POOL[Math.floor(Math.random() * TITLE_POOL.length)]
+      const cardText = `${detail.company_name || ''}笔试，${cardTitleRandom}`
+      const cardDataUrl = renderCardBasicImage(cardText, cardScheme)
+      const cardBase64 = cardDataUrl.replace(/^data:image\/png;base64,/, '')
+      folder.file('卡片图.png', cardBase64, { base64: true })
+      totalImages++
+      dirBatchLogs.value.push({ text: `  └ 卡片图 ✓`, type: 'success' })
+      productImages.push({ dataUrl: cardDataUrl, filename: '卡片图.png' })
+    } catch (e) {
+      dirBatchLogs.value.push({ text: `  └ 卡片图失败：${e.message}`, type: 'error' })
+    }
+
+    // 写入飞书多维表格（含图片附件）
+    if (feishuEnabled.value && noteResult) {
+      const nowTs = Date.now()
+      // 先将本商品所有图片上传到飞书素材库，获取 file_token
+      const fileTokens = []
+      for (const { dataUrl, filename } of productImages) {
+        try {
+          const base64 = dataUrl.replace(/^data:image\/\w+;base64,/, '')
+          const res = await uploadFeishuBitableImage({ base64, filename })
+          if (res?.data?.file_token) fileTokens.push(res.data.file_token)
+        } catch (e) {
+          dirBatchLogs.value.push({ text: `  └ 图片上传飞书失败（${filename}）：${e.message}`, type: 'warn' })
+        }
+      }
+      feishuRecords.push({
+        title: noteResult.title,
+        body: noteResult.body,
+        tags: Array.isArray(detail.xhs_tags) ? detail.xhs_tags.join('，') : (detail.xhs_tags || ''),
+        status: '待制作',
+        error_info: '',
+        created_at: nowTs,
+        updated_at: nowTs,
+        file_tokens: fileTokens,
+      })
     }
 
     dirBatchDone.value++
@@ -1004,6 +1230,18 @@ async function runBatchDirImages(onlyDirImages) {
   } else {
     dirBatchLogs.value.push({ text: '无可生成的目录图或笔记内容', type: 'error' })
   }
+
+  // 飞书多维表格同步
+  if (feishuEnabled.value && feishuRecords.length) {
+    dirBatchLogs.value.push({ text: `同步飞书多维表格（${feishuRecords.length} 条）...`, type: 'info' })
+    try {
+      await writeFeishuBitableRecords(feishuRecords)
+      dirBatchLogs.value.push({ text: `✓ 飞书多维表格写入成功，共 ${feishuRecords.length} 条`, type: 'success' })
+    } catch (e) {
+      dirBatchLogs.value.push({ text: `飞书写入失败：${e.message}`, type: 'error' })
+    }
+  }
+
   dirBatchGenerating.value = false
 }
 
