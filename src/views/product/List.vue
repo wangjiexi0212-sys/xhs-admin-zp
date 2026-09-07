@@ -44,6 +44,9 @@
       <a-button size="small" style="margin-left: 8px" :loading="dirBatchGenerating" @click="onBatchGenerateDirImages">
         批量生成目录图
       </a-button>
+      <a-button size="small" danger style="margin-left: 8px" :loading="batchDeleting" @click="onBatchDelete">
+        批量删除
+      </a-button>
       <a-button size="small" style="margin-left: 8px" @click="clearSelection">取消选择</a-button>
     </div>
 
@@ -1501,6 +1504,43 @@ async function onDelete(id) {
   } catch (e) {
     message.error(e.message || '删除失败')
   }
+}
+
+// ---- 批量删除 ----
+const batchDeleting = ref(false)
+
+async function onBatchDelete() {
+  const ids = [...selectedRowKeys.value]
+  if (!ids.length) return
+  Modal.confirm({
+    title: `确定删除选中的 ${ids.length} 条商品？`,
+    content: '删除后不可恢复，请谨慎操作。',
+    okText: '确认删除',
+    okType: 'danger',
+    cancelText: '取消',
+    onOk: async () => {
+      batchDeleting.value = true
+      let successCount = 0
+      const errors = []
+      for (const id of ids) {
+        try {
+          await deleteProduct(id)
+          successCount++
+        } catch (e) {
+          errors.push(id)
+        }
+      }
+      batchDeleting.value = false
+      selectedRowKeys.value = []
+      pagination.current = 1
+      if (errors.length === 0) {
+        message.success(`已成功删除 ${successCount} 条商品`)
+      } else {
+        message.warning(`成功 ${successCount} 条，失败 ${errors.length} 条`)
+      }
+      fetchList()
+    },
+  })
 }
 
 // ---- 报名截止跟进 ----
