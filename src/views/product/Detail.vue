@@ -2999,7 +2999,7 @@ const SENSITIVE_WORD_LIST = [
   '中国共产党', '中共中央', '党中央', '中央', '共产党', '政治局', '总书记',
   '国家主席', '国家副主席', '中央军委', '人民解放军', '武警部队',
   '国务院', '全国人大', '全国政协', '人民代表大会',
-  '中华人民共和国', '政府', '党',
+  '中华人民共和国', '政府', '党', '宪法',
 ]
 const autoMosaicEnabled = ref(true)  // 生图时自动遮盖敏感词开关
 
@@ -3192,47 +3192,51 @@ async function applyPdfSensitiveMosaic(pdfCanvas, page, viewport) {
   const ctx = pdfCanvas.getContext('2d')
   const CW = pdfCanvas.width, CH = pdfCanvas.height
   const BLOCK = 20
-  const [va, vb, vc, vd, ve, vf] = viewport.transform  // viewport 变换矩阵
-
-  // PDF 坐标 → canvas 像素坐标（手动矩阵乘法，兼容各 PDF.js 版本）
+  const [va, vb, vc, vd, ve, vf] = viewport.transform
   const pdfPt = (x, y) => [va * x + vc * y + ve, vb * x + vd * y + vf]
 
+  // 转换所有文字项到 canvas 坐标
+  const items = textContent.items.filter(it => it.str).map(it => {
+    const [cx, cy] = pdfPt(it.transform[4], it.transform[5])
+    const fontSizePdf = Math.sqrt(it.transform[0] ** 2 + it.transform[1] ** 2)
+    return { str: it.str, cx, cy, widthPx: (it.width || 0) * Math.abs(va), fontSizePx: fontSizePdf * Math.abs(va) }
+  })
+
+  // 按基线 y 分行（±3px 容差），解决逐字符拆分 PDF 跨 item 无法检测的问题
+  const lines = []
+  for (const item of items) {
+    let line = lines.find(l => Math.abs(l.baseCy - item.cy) <= 3)
+    if (!line) { line = { baseCy: item.cy, items: [] }; lines.push(line) }
+    line.items.push(item)
+  }
+
   let hitCount = 0
-  for (const item of textContent.items) {
-    if (!item.str) continue
-    const ranges = _findSensitiveRanges(item.str)
-    if (!ranges.length) continue
-
-    // 文字项基线原点 → canvas 坐标
-    const [cx, cy] = pdfPt(item.transform[4], item.transform[5])
-
-    // 字号（PDF points）转 canvas px：取 transform 矩阵 x 轴分量的模
-    const fontSizePdf = Math.sqrt(item.transform[0] ** 2 + item.transform[1] ** 2)
-    const fontSizePx = fontSizePdf * Math.abs(va)  // va = viewport.scale（正值）
-
-    // 文字项总宽度（canvas px）
-    const totalWidthPx = (item.width || 0) * Math.abs(va)
-
+  for (const line of lines) {
+    line.items.sort((a, b) => a.cx - b.cx)
+    // 逐字符展开 x 区间
+    const chars = []
+    for (const item of line.items) {
+      const n = item.str.length || 1
+      for (let k = 0; k < item.str.length; k++) {
+        chars.push({ ch: item.str[k], x0: item.cx + k / n * item.widthPx, x1: item.cx + (k + 1) / n * item.widthPx, fontSizePx: item.fontSizePx })
+      }
+    }
+    const lineText = chars.map(c => c.ch).join('')
+    const ranges = _findSensitiveRanges(lineText)
     for (const { start, end } of ranges) {
-      // 用字符位置比例估算子串在行内的像素偏移（CJK 等宽字体时精度很高）
-      const len = item.str.length || 1
-      const x0r = start / len, x1r = end / len
-      const rx = Math.floor(cx + x0r * totalWidthPx) - 3
-      const ry = Math.floor(cy - fontSizePx * 1.05) - 3
-      const rw = Math.ceil((x1r - x0r) * totalWidthPx) + 6
-      const rh = Math.ceil(fontSizePx * 1.4) + 6
-
-      const bx0 = Math.max(0, rx), by0 = Math.max(0, ry)
-      const bx1 = Math.min(CW, rx + rw), by1 = Math.min(CH, ry + rh)
-      for (let by = by0; by < by1; by += BLOCK) {
-        for (let bx = bx0; bx < bx1; bx += BLOCK) {
-          const bw = Math.min(BLOCK, bx1 - bx), bh = Math.min(BLOCK, by1 - by)
+      if (end > chars.length) continue
+      const rx  = Math.floor(chars[start].x0) - 3
+      const rx1 = Math.ceil(chars[end - 1].x1) + 3
+      const fh  = chars[start].fontSizePx
+      const ry  = Math.floor(line.baseCy - fh * 1.05) - 3
+      const rh  = Math.ceil(fh * 1.4) + 6
+      const x0 = Math.max(0, rx),  y0 = Math.max(0, ry)
+      const x1 = Math.min(CW, rx1), y1 = Math.min(CH, ry + rh)
+      for (let by = y0; by < y1; by += BLOCK) {
+        for (let bx = x0; bx < x1; bx += BLOCK) {
+          const bw = Math.min(BLOCK, x1 - bx), bh = Math.min(BLOCK, y1 - by)
           if (bw <= 0 || bh <= 0) continue
-          const px = ctx.getImageData(
-            Math.min(bx + (bw >> 1), CW - 1),
-            Math.min(by + (bh >> 1), CH - 1),
-            1, 1
-          ).data
+          const px = ctx.getImageData(Math.min(bx + (bw >> 1), CW - 1), Math.min(by + (bh >> 1), CH - 1), 1, 1).data
           ctx.fillStyle = `rgb(${px[0]},${px[1]},${px[2]})`
           ctx.fillRect(bx, by, bw, bh)
         }

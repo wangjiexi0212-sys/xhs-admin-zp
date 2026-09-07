@@ -417,7 +417,7 @@ const SENSITIVE_WORD_LIST = [
   '中国共产党', '中共中央', '党中央', '中央', '共产党', '政治局', '总书记',
   '国家主席', '国家副主席', '中央军委', '人民解放军', '武警部队',
   '国务院', '全国人大', '全国政协', '人民代表大会',
-  '中华人民共和国', '政府', '党',
+  '中华人民共和国', '政府', '党', '宪法',
 ]
 
 function _findSensitiveRanges(text) {
@@ -476,26 +476,44 @@ async function applyPdfSensitiveMosaic(pdfCanvas, page, viewport) {
   const BLOCK = 20
   const [va, vb, vc, vd, ve, vf] = viewport.transform
   const pdfPt = (x, y) => [va * x + vc * y + ve, vb * x + vd * y + vf]
+
+  const items = textContent.items.filter(it => it.str).map(it => {
+    const [cx, cy] = pdfPt(it.transform[4], it.transform[5])
+    const fontSizePdf = Math.sqrt(it.transform[0] ** 2 + it.transform[1] ** 2)
+    return { str: it.str, cx, cy, widthPx: (it.width || 0) * Math.abs(va), fontSizePx: fontSizePdf * Math.abs(va) }
+  })
+
+  const lines = []
+  for (const item of items) {
+    let line = lines.find(l => Math.abs(l.baseCy - item.cy) <= 3)
+    if (!line) { line = { baseCy: item.cy, items: [] }; lines.push(line) }
+    line.items.push(item)
+  }
+
   let hitCount = 0
-  for (const item of textContent.items) {
-    if (!item.str) continue
-    const ranges = _findSensitiveRanges(item.str)
-    if (!ranges.length) continue
-    const [cx, cy] = pdfPt(item.transform[4], item.transform[5])
-    const fontSizePdf = Math.sqrt(item.transform[0] ** 2 + item.transform[1] ** 2)
-    const fontSizePx = fontSizePdf * Math.abs(va)
-    const totalWidthPx = (item.width || 0) * Math.abs(va)
+  for (const line of lines) {
+    line.items.sort((a, b) => a.cx - b.cx)
+    const chars = []
+    for (const item of line.items) {
+      const n = item.str.length || 1
+      for (let k = 0; k < item.str.length; k++) {
+        chars.push({ ch: item.str[k], x0: item.cx + k / n * item.widthPx, x1: item.cx + (k + 1) / n * item.widthPx, fontSizePx: item.fontSizePx })
+      }
+    }
+    const lineText = chars.map(c => c.ch).join('')
+    const ranges = _findSensitiveRanges(lineText)
     for (const { start, end } of ranges) {
-      const len = item.str.length || 1
-      const rx = Math.floor(cx + start / len * totalWidthPx) - 3
-      const ry = Math.floor(cy - fontSizePx * 1.05) - 3
-      const rw = Math.ceil((end - start) / len * totalWidthPx) + 6
-      const rh = Math.ceil(fontSizePx * 1.4) + 6
-      const bx0 = Math.max(0, rx), by0 = Math.max(0, ry)
-      const bx1 = Math.min(CW, rx + rw), by1 = Math.min(CH, ry + rh)
-      for (let by = by0; by < by1; by += BLOCK) {
-        for (let bx = bx0; bx < bx1; bx += BLOCK) {
-          const bw = Math.min(BLOCK, bx1 - bx), bh = Math.min(BLOCK, by1 - by)
+      if (end > chars.length) continue
+      const rx  = Math.floor(chars[start].x0) - 3
+      const rx1 = Math.ceil(chars[end - 1].x1) + 3
+      const fh  = chars[start].fontSizePx
+      const ry  = Math.floor(line.baseCy - fh * 1.05) - 3
+      const rh  = Math.ceil(fh * 1.4) + 6
+      const x0 = Math.max(0, rx),  y0 = Math.max(0, ry)
+      const x1 = Math.min(CW, rx1), y1 = Math.min(CH, ry + rh)
+      for (let by = y0; by < y1; by += BLOCK) {
+        for (let bx = x0; bx < x1; bx += BLOCK) {
+          const bw = Math.min(BLOCK, x1 - bx), bh = Math.min(BLOCK, y1 - by)
           if (bw <= 0 || bh <= 0) continue
           const px = ctx.getImageData(Math.min(bx + (bw >> 1), CW - 1), Math.min(by + (bh >> 1), CH - 1), 1, 1).data
           ctx.fillStyle = `rgb(${px[0]},${px[1]},${px[2]})`
