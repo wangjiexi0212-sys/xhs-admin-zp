@@ -300,6 +300,12 @@
             <span style="font-size:12px;color:#999;min-width:32px">{{ mosaicBlockSize }}px</span>
           </template>
           <a-button v-if="mosaicHasPaint" size="small" danger @click="clearMosaic">清除马赛克</a-button>
+          <a-divider type="vertical" style="height:20px" />
+          <a-switch v-model:checked="autoMosaicEnabled" size="small" />
+          <span style="font-size:12px;color:#555;white-space:nowrap">生图自动遮盖敏感词</span>
+          <a-tooltip v-if="autoMosaicEnabled" title="已内置敏感词列表，生图时自动遮码；切换开关后重新点击「生成目录图」生效">
+            <span style="font-size:12px;color:#1677ff;cursor:default;user-select:none">(?)</span>
+          </a-tooltip>
         </div>
 
         <!-- 两栏主区域 -->
@@ -2646,6 +2652,8 @@ function _drawCompositeContent(ctx, files, title, W, H, BORDER, PADDING, ICON_SI
     }
     if (name !== file.name) name = name.slice(0, -1) + '...'
     ctx.fillText(name, BORDER + PADDING + ICON_SIZE + 12, y + ROW_H / 2 + 6)
+    // 自动遮盖敏感词（ctx 已 scale(DPR,DPR)，坐标/字号均为逻辑像素，blockSize=10 等效物理 20px）
+    _mosaicSensitiveInText(ctx, name, BORDER + PADDING + ICON_SIZE + 12, y + ROW_H / 2 + 6, 15, 10)
 
     if (i < files.length - 1) {
       ctx.strokeStyle = '#f5f5f5'
@@ -2806,6 +2814,8 @@ async function buildHistoryComposite(pdfDataUrl, files, borderColor, title, bgCo
     ctx.fillStyle = '#333333'
     ctx.font = `${FONT_SIZE}px "PingFang SC", "Microsoft YaHei", sans-serif`
     ctx.fillText(file.name, overlayX + OVERLAY_PAD + ICON_SIZE + 10, y + ROW_H / 2 + 6)
+    // 自动遮盖敏感词（此处无 DPR 缩放，坐标为物理像素，blockSize=12）
+    _mosaicSensitiveInText(ctx, file.name, overlayX + OVERLAY_PAD + ICON_SIZE + 10, y + ROW_H / 2 + 6, FONT_SIZE, 12)
 
     if (i < pdfFiles.length - 1) {
       ctx.strokeStyle = '#eeeeee'
@@ -2879,6 +2889,7 @@ async function generateDirImage(type) {
           pdfCanvas.width = viewport.width
           pdfCanvas.height = viewport.height
           await page.render({ canvasContext: pdfCanvas.getContext('2d'), viewport }).promise
+          await applyPdfSensitiveMosaic(pdfCanvas, page, viewport)
           dirDrawer.pdfPageDataUrl = pdfCanvas.toDataURL('image/png')
           dirDrawer.previewUrl = dirDrawer.dirOnly
             ? await Promise.resolve(renderCompositeImage(files, dirDrawer.title, dirDrawer.borderColor, dirDrawer.bgColor, dirDrawer.bgOpacity, bgImg, dirDrawer.titleY))
@@ -2929,6 +2940,7 @@ async function changeDirMode(mode) {
       pdfCanvas.width = viewport.width
       pdfCanvas.height = viewport.height
       await page.render({ canvasContext: pdfCanvas.getContext('2d'), viewport }).promise
+      await applyPdfSensitiveMosaic(pdfCanvas, page, viewport)
       dirDrawer.pdfPageDataUrl = pdfCanvas.toDataURL('image/png')
       dirDrawer.pdfPreviewUrl = dirDrawer.pdfPageDataUrl
       dirDrawer.pdfFsid = culturePdf.fs_id
@@ -2978,6 +2990,87 @@ const mosaicBlockSize = ref(20)
 const mosaicHasPaint = ref(false)
 let mosaicIsDrawing = false
 let mosaicBaseDataUrl = ''  // 原始图（无马赛克），用于"清除"还原
+
+// ─── 敏感词自动识别打马赛克 ───────────────────────────────
+// 敏感词列表（前端硬编码，按需维护）
+const SENSITIVE_WORD_LIST = [
+  '习近平', '毛泽东', '邓小平', '江泽民', '胡锦涛', '李克强',
+  '赵乐际', '王沪宁', '丁薛祥', '李希',
+  '中国共产党', '中共中央', '党中央', '中央', '共产党', '政治局', '总书记',
+  '国家主席', '国家副主席', '中央军委', '人民解放军', '武警部队',
+  '国务院', '全国人大', '全国政协', '人民代表大会',
+  '中华人民共和国', '政府', '党',
+]
+const autoMosaicEnabled = ref(true)  // 生图时自动遮盖敏感词开关
+
+// 返回 text 中所有敏感词的合并字符区间 [{start, end}]
+function _findSensitiveRanges(text) {
+  const ranges = []
+  for (const w of SENSITIVE_WORD_LIST) {
+    let i = 0
+    while (true) {
+      const p = text.indexOf(w, i)
+      if (p < 0) break
+      ranges.push({ start: p, end: p + w.length })
+      i = p + 1
+    }
+  }
+  ranges.sort((a, b) => a.start - b.start)
+  const merged = []
+  for (const r of ranges) {
+    const last = merged[merged.length - 1]
+    if (last && r.start <= last.end) last.end = Math.max(last.end, r.end)
+    else merged.push({ ...r })
+  }
+  return merged
+}
+
+// 在 canvas ctx 上对 text 行内的敏感子串打马赛克
+// textX: fillText 的 x (align='left'); textBaselineY: fillText 的 y (baseline='alphabetic')
+// fontSize: 字号（与当前 ctx.font 的 px 值一致）; blockSize: 马赛克块（与坐标系同单位）
+// 返回命中区间数
+function _mosaicSensitiveInText(ctx, text, textX, textBaselineY, fontSize, blockSize = 10) {
+  if (!autoMosaicEnabled.value) return 0
+  const ranges = _findSensitiveRanges(text)
+  if (!ranges.length) return 0
+
+  const savedFill     = ctx.fillStyle
+  const savedAlign    = ctx.textAlign
+  const savedBaseline = ctx.textBaseline
+  ctx.textAlign    = 'left'
+  ctx.textBaseline = 'alphabetic'
+
+  const CW = ctx.canvas.width, CH = ctx.canvas.height
+  for (const { start, end } of ranges) {
+    const prefixW = ctx.measureText(text.slice(0, start)).width
+    const matchW  = ctx.measureText(text.slice(start, end)).width
+    const rx = Math.floor(textX + prefixW) - 2
+    const ry = Math.floor(textBaselineY - fontSize * 1.05) - 2
+    const rw = Math.ceil(matchW) + 4
+    const rh = Math.ceil(fontSize * 1.35) + 4
+    const x0 = Math.max(0, rx),    y0 = Math.max(0, ry)
+    const x1 = Math.min(CW, rx + rw), y1 = Math.min(CH, ry + rh)
+    for (let by = y0; by < y1; by += blockSize) {
+      for (let bx = x0; bx < x1; bx += blockSize) {
+        const bw = Math.min(blockSize, x1 - bx)
+        const bh = Math.min(blockSize, y1 - by)
+        if (bw <= 0 || bh <= 0) continue
+        const px = ctx.getImageData(
+          Math.min(bx + (bw >> 1), CW - 1),
+          Math.min(by + (bh >> 1), CH - 1),
+          1, 1
+        ).data
+        ctx.fillStyle = `rgb(${px[0]},${px[1]},${px[2]})`
+        ctx.fillRect(bx, by, bw, bh)
+      }
+    }
+  }
+
+  ctx.fillStyle    = savedFill
+  ctx.textAlign    = savedAlign
+  ctx.textBaseline = savedBaseline
+  return ranges.length
+}
 
 function toggleMosaicMode() {
   mosaicMode.value = !mosaicMode.value
@@ -3088,6 +3181,68 @@ function onMosaicEnd() {
 }
 
 let pdfjsLib = null
+
+// PDF 页面敏感词自动打马赛克
+// 在 page.render() 完成后、toDataURL() 之前调用
+// 利用 page.getTextContent() 获取文字位置，精准遮盖敏感词
+async function applyPdfSensitiveMosaic(pdfCanvas, page, viewport) {
+  if (!autoMosaicEnabled.value) return 0
+  let textContent
+  try { textContent = await page.getTextContent() } catch { return 0 }
+  const ctx = pdfCanvas.getContext('2d')
+  const CW = pdfCanvas.width, CH = pdfCanvas.height
+  const BLOCK = 20
+  const [va, vb, vc, vd, ve, vf] = viewport.transform  // viewport 变换矩阵
+
+  // PDF 坐标 → canvas 像素坐标（手动矩阵乘法，兼容各 PDF.js 版本）
+  const pdfPt = (x, y) => [va * x + vc * y + ve, vb * x + vd * y + vf]
+
+  let hitCount = 0
+  for (const item of textContent.items) {
+    if (!item.str) continue
+    const ranges = _findSensitiveRanges(item.str)
+    if (!ranges.length) continue
+
+    // 文字项基线原点 → canvas 坐标
+    const [cx, cy] = pdfPt(item.transform[4], item.transform[5])
+
+    // 字号（PDF points）转 canvas px：取 transform 矩阵 x 轴分量的模
+    const fontSizePdf = Math.sqrt(item.transform[0] ** 2 + item.transform[1] ** 2)
+    const fontSizePx = fontSizePdf * Math.abs(va)  // va = viewport.scale（正值）
+
+    // 文字项总宽度（canvas px）
+    const totalWidthPx = (item.width || 0) * Math.abs(va)
+
+    for (const { start, end } of ranges) {
+      // 用字符位置比例估算子串在行内的像素偏移（CJK 等宽字体时精度很高）
+      const len = item.str.length || 1
+      const x0r = start / len, x1r = end / len
+      const rx = Math.floor(cx + x0r * totalWidthPx) - 3
+      const ry = Math.floor(cy - fontSizePx * 1.05) - 3
+      const rw = Math.ceil((x1r - x0r) * totalWidthPx) + 6
+      const rh = Math.ceil(fontSizePx * 1.4) + 6
+
+      const bx0 = Math.max(0, rx), by0 = Math.max(0, ry)
+      const bx1 = Math.min(CW, rx + rw), by1 = Math.min(CH, ry + rh)
+      for (let by = by0; by < by1; by += BLOCK) {
+        for (let bx = bx0; bx < bx1; bx += BLOCK) {
+          const bw = Math.min(BLOCK, bx1 - bx), bh = Math.min(BLOCK, by1 - by)
+          if (bw <= 0 || bh <= 0) continue
+          const px = ctx.getImageData(
+            Math.min(bx + (bw >> 1), CW - 1),
+            Math.min(by + (bh >> 1), CH - 1),
+            1, 1
+          ).data
+          ctx.fillStyle = `rgb(${px[0]},${px[1]},${px[2]})`
+          ctx.fillRect(bx, by, bw, bh)
+        }
+      }
+      hitCount++
+    }
+  }
+  return hitCount
+}
+
 async function ensurePdfjs() {
   if (pdfjsLib) return pdfjsLib
   await new Promise((resolve, reject) => {
@@ -3120,6 +3275,7 @@ async function renderPdfFirstPage(file) {
     canvas.width = viewport.width
     canvas.height = viewport.height
     await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise
+    await applyPdfSensitiveMosaic(canvas, page, viewport)
     dirDrawer.pdfPreviewUrl = canvas.toDataURL('image/png')
     // history / custom 类型：同步更新合成图
     if (dirDrawer.type === 'history' || dirDrawer.type === 'custom') {

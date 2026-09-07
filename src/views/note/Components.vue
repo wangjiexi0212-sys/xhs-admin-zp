@@ -217,6 +217,7 @@ async function renderPdfRandomPage(file) {
     pdfCanvas.width = viewport.width
     pdfCanvas.height = viewport.height
     await page.render({ canvasContext: pdfCanvas.getContext('2d'), viewport }).promise
+    await applyPdfSensitiveMosaic(pdfCanvas, page, viewport)
     drawer.pdfPageDataUrl = pdfCanvas.toDataURL('image/png')
     drawer.pdfPreviewUrl = drawer.pdfPageDataUrl
     drawer.previewUrl = await buildPublicBasicComposite(drawer.pdfPageDataUrl, drawer.files, drawer.borderColor, drawer.title, drawer.titleY)
@@ -394,6 +395,7 @@ async function buildPublicBasicComposite(pdfDataUrl, files, borderColor, title, 
     if (name !== file.name) name = name.slice(0, -1) + '...'
 
     ctx.fillText(name, overlayX + OVERLAY_PAD + ICON_SIZE + 10, y + ROW_H / 2 + 6)
+    _mosaicSensitiveInText(ctx, name, overlayX + OVERLAY_PAD + ICON_SIZE + 10, y + ROW_H / 2 + 6, FONT_SIZE, 12)
 
     if (i < pdfFiles.length - 1) {
       ctx.strokeStyle = '#eeeeee'
@@ -406,6 +408,104 @@ async function buildPublicBasicComposite(pdfDataUrl, files, borderColor, title, 
   })
 
   return canvas.toDataURL('image/png')
+}
+
+// ─── 敏感词自动识别打马赛克（与 Detail.vue / List.vue 保持一致）────
+const SENSITIVE_WORD_LIST = [
+  '习近平', '毛泽东', '邓小平', '江泽民', '胡锦涛', '李克强',
+  '赵乐际', '王沪宁', '丁薛祥', '李希',
+  '中国共产党', '中共中央', '党中央', '中央', '共产党', '政治局', '总书记',
+  '国家主席', '国家副主席', '中央军委', '人民解放军', '武警部队',
+  '国务院', '全国人大', '全国政协', '人民代表大会',
+  '中华人民共和国', '政府', '党',
+]
+
+function _findSensitiveRanges(text) {
+  const ranges = []
+  for (const w of SENSITIVE_WORD_LIST) {
+    let i = 0
+    while (true) {
+      const p = text.indexOf(w, i)
+      if (p < 0) break
+      ranges.push({ start: p, end: p + w.length })
+      i = p + 1
+    }
+  }
+  ranges.sort((a, b) => a.start - b.start)
+  const merged = []
+  for (const r of ranges) {
+    const last = merged[merged.length - 1]
+    if (last && r.start <= last.end) last.end = Math.max(last.end, r.end)
+    else merged.push({ ...r })
+  }
+  return merged
+}
+
+function _mosaicSensitiveInText(ctx, text, textX, textBaselineY, fontSize, blockSize = 12) {
+  const ranges = _findSensitiveRanges(text)
+  if (!ranges.length) return 0
+  const savedFill = ctx.fillStyle, savedAlign = ctx.textAlign, savedBaseline = ctx.textBaseline
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'
+  const CW = ctx.canvas.width, CH = ctx.canvas.height
+  for (const { start, end } of ranges) {
+    const prefixW = ctx.measureText(text.slice(0, start)).width
+    const matchW  = ctx.measureText(text.slice(start, end)).width
+    const rx = Math.floor(textX + prefixW) - 2, ry = Math.floor(textBaselineY - fontSize * 1.05) - 2
+    const rw = Math.ceil(matchW) + 4,            rh = Math.ceil(fontSize * 1.35) + 4
+    const x0 = Math.max(0, rx), y0 = Math.max(0, ry)
+    const x1 = Math.min(CW, rx + rw), y1 = Math.min(CH, ry + rh)
+    for (let by = y0; by < y1; by += blockSize) {
+      for (let bx = x0; bx < x1; bx += blockSize) {
+        const bw = Math.min(blockSize, x1 - bx), bh = Math.min(blockSize, y1 - by)
+        if (bw <= 0 || bh <= 0) continue
+        const px = ctx.getImageData(Math.min(bx + (bw >> 1), CW - 1), Math.min(by + (bh >> 1), CH - 1), 1, 1).data
+        ctx.fillStyle = `rgb(${px[0]},${px[1]},${px[2]})`
+        ctx.fillRect(bx, by, bw, bh)
+      }
+    }
+  }
+  ctx.fillStyle = savedFill; ctx.textAlign = savedAlign; ctx.textBaseline = savedBaseline
+  return ranges.length
+}
+
+async function applyPdfSensitiveMosaic(pdfCanvas, page, viewport) {
+  let textContent
+  try { textContent = await page.getTextContent() } catch { return 0 }
+  const ctx = pdfCanvas.getContext('2d')
+  const CW = pdfCanvas.width, CH = pdfCanvas.height
+  const BLOCK = 20
+  const [va, vb, vc, vd, ve, vf] = viewport.transform
+  const pdfPt = (x, y) => [va * x + vc * y + ve, vb * x + vd * y + vf]
+  let hitCount = 0
+  for (const item of textContent.items) {
+    if (!item.str) continue
+    const ranges = _findSensitiveRanges(item.str)
+    if (!ranges.length) continue
+    const [cx, cy] = pdfPt(item.transform[4], item.transform[5])
+    const fontSizePdf = Math.sqrt(item.transform[0] ** 2 + item.transform[1] ** 2)
+    const fontSizePx = fontSizePdf * Math.abs(va)
+    const totalWidthPx = (item.width || 0) * Math.abs(va)
+    for (const { start, end } of ranges) {
+      const len = item.str.length || 1
+      const rx = Math.floor(cx + start / len * totalWidthPx) - 3
+      const ry = Math.floor(cy - fontSizePx * 1.05) - 3
+      const rw = Math.ceil((end - start) / len * totalWidthPx) + 6
+      const rh = Math.ceil(fontSizePx * 1.4) + 6
+      const bx0 = Math.max(0, rx), by0 = Math.max(0, ry)
+      const bx1 = Math.min(CW, rx + rw), by1 = Math.min(CH, ry + rh)
+      for (let by = by0; by < by1; by += BLOCK) {
+        for (let bx = bx0; bx < bx1; bx += BLOCK) {
+          const bw = Math.min(BLOCK, bx1 - bx), bh = Math.min(BLOCK, by1 - by)
+          if (bw <= 0 || bh <= 0) continue
+          const px = ctx.getImageData(Math.min(bx + (bw >> 1), CW - 1), Math.min(by + (bh >> 1), CH - 1), 1, 1).data
+          ctx.fillStyle = `rgb(${px[0]},${px[1]},${px[2]})`
+          ctx.fillRect(bx, by, bw, bh)
+        }
+      }
+      hitCount++
+    }
+  }
+  return hitCount
 }
 
 // ─── pdf.js 按需加载 ──────────────────────────────────────
