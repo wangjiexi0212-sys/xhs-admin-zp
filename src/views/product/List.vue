@@ -206,7 +206,7 @@ import { getToken } from '@/api/request'
 import { BellOutlined } from '@ant-design/icons-vue'
 import { chatLlm } from '@/api/llm'
 import { getPromptList } from '@/api/prompts'
-import { getContentTemplateList } from '@/api/contentTemplates'
+import { BODY_TEMPLATES } from '@/utils/bodyTemplates'
 import { useLlmStore } from '@/stores/llm'
 import { Document, Packer, Paragraph, TextRun, HeadingLevel } from 'docx'
 import { saveAs } from 'file-saver'
@@ -950,12 +950,8 @@ async function generateNoteForProduct(detail) {
   const randomTitle = TITLE_POOL[Math.floor(Math.random() * TITLE_POOL.length)]
   const title = `${detail.company_name || ''}笔试，${randomTitle}`
 
-  // --- 生成正文：随机取一条正文模版，结合标题发给大模型生成 ---
-  const params = { page: 1, pageSize: 100 }
-  if (detail.job_type_id) params.job_type_id = detail.job_type_id
-  const tplRes = await getContentTemplateList(params)
-  const tpl = pickRandom(tplRes.list || [])
-  if (!tpl) throw new Error(`未找到「${detail.job_type_name || '该类型'}」内容模板，无法生成正文`)
+  // --- 生成正文：从 BODY_TEMPLATES（6个固定风格模版）随机取一条，与单品页面保持一致 ---
+  const tpl = BODY_TEMPLATES[Math.floor(Math.random() * BODY_TEMPLATES.length)]
 
   const bodyPromptRes = await getPromptList({ scene: 'content', page: 1, pageSize: 1 })
   const bodyPrompt = bodyPromptRes.list?.[0]
