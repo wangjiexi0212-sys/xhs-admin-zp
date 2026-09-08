@@ -3203,11 +3203,19 @@ async function applyPdfSensitiveMosaic(pdfCanvas, page, viewport) {
     return { str: it.str, cx, cy, widthPx: (it.width || 0) * Math.abs(va), fontSizePx: fontSizePdf * Math.abs(va) }
   })
 
-  // 按基线 y 分行（±3px 容差），解决逐字符拆分 PDF 跨 item 无法检测的问题
+  // 按基线 y 分行（±8px 容差），解决逐字符拆分 PDF 跨 item 无法检测的问题
+  // 容差从 3→8：部分 PDF 同一视觉行各字符 baseCy 可偏差 4~6px，过小会拆断整词
   const lines = []
   for (const item of items) {
-    let line = lines.find(l => Math.abs(l.baseCy - item.cy) <= 3)
-    if (!line) { line = { baseCy: item.cy, items: [] }; lines.push(line) }
+    let line = lines.find(l => Math.abs(l.baseCy - item.cy) <= 8)
+    if (!line) {
+      line = { baseCy: item.cy, cySum: item.cy, cyCount: 1, items: [] }
+      lines.push(line)
+    } else {
+      // 动态维护均值基线，避免首个 item 偏低/偏高时后续匹配失败
+      line.cySum += item.cy; line.cyCount++
+      line.baseCy = line.cySum / line.cyCount
+    }
     line.items.push(item)
   }
 
