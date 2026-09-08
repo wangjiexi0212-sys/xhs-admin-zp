@@ -3605,6 +3605,8 @@ async function renderPdfGridImage(file) {
     c.width = viewport.width
     c.height = viewport.height
     await page.render({ canvasContext: c.getContext('2d'), viewport }).promise
+    // 每页渲染后同步打码敏感词（与单页模式保持一致）
+    await applyPdfSensitiveMosaic(c, page, viewport)
     pageDataUrls.push(c.toDataURL('image/png'))
   }
 
