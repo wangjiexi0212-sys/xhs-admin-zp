@@ -592,6 +592,20 @@
             <span class="card-text-label">卡片文字</span>
             <a-textarea v-model:value="cardText" placeholder="生成标题后会同步到此处，可手动修改用于卡片"
               :auto-size="{ minRows: 1, maxRows: 4 }" :maxlength="200" style="margin: 20px 0;" />
+            <a-button
+              :loading="cardImgGenerating"
+              :disabled="!cardText"
+              style="flex-shrink:0; margin-top:20px"
+              @click="generateCardImage"
+            >生图</a-button>
+          </div>
+          <div v-if="cardGeneratedImgUrl" style="margin-bottom:12px; display:flex; flex-direction:column; align-items:center; gap:8px">
+            <a-image
+              :src="cardGeneratedImgUrl"
+              :preview="{ src: cardGeneratedImgUrl }"
+              style="max-height:200px; max-width:100%; border-radius:8px; box-shadow:0 2px 12px rgba(0,0,0,0.12); display:block; cursor:pointer"
+            />
+            <a-button size="small" :loading="cardDownloading" @click="downloadCardImage">下载图片</a-button>
           </div>
           <CardEditor :text="cardText" placeholder="生成标题后将以标题作为卡片文字"
             :file-name-prefix="`xhs-card-${data.id || 'item'}`" />
@@ -1068,6 +1082,7 @@ import { createExamJob, getLatestExamJob, getExamJob, downloadExamJob, downloadE
 import { processImageForDownload, processImageForDisplay, buildRandomGradient, triggerBlobDownload } from '@/utils/imageProcess'
 import { getBaiduFiles } from '@/api/baidu'
 import { getToken } from '@/api/request'
+import { rewriteImage, proxyImageForDownload } from '@/api/xhsRewrite'
 import { getBgImageList } from '@/api/bgImages'
 import { Document, Packer, Paragraph, TextRun, HeadingLevel } from 'docx'
 import { saveAs } from 'file-saver'
@@ -1084,6 +1099,9 @@ const data = ref({})
 const generateVisible = ref(false)
 const generatedTitle = ref('')
 const cardText = ref('')
+const cardImgGenerating = ref(false)
+const cardDownloading = ref(false)
+const cardGeneratedImgUrl = ref('')
 const bodyGenerating = ref(false)
 const noteDownloading = ref(false)
 const generatedBody = ref('')
@@ -1804,6 +1822,102 @@ async function downloadCoverImage(url) {
     triggerBlobDownload(blob, `cover-${data.value.id || 'img'}.jpg`)
   } catch (e) {
     message.error(e.message || '下载失败')
+  }
+}
+
+// ─── 卡片大字报生图 ────────────────────────────────────────────────
+// 18 种风格，核心原则：背景浅色/纯色，标题文字必须深色/高对比，绝不同色系
+const CARD_POSTER_STYLES = [
+  // 0 白底+超大红字+黄色高亮（济南水务参考图同款）
+  '竖版备考海报，纯白方格纸背景，超大加粗黑红双色主标题（上行黑色+下行红色），中间明黄色椭圆圈住副标题黑色文字，黄色手绘波浪下划线，下方彩色扁平卡通插图（彩色书本堆叠、笔记本、举拳加油卡通小人），整体白底高对比，文字醒目',
+
+  // 1 白底+深蓝大字+黄色色块（吉林省参考图同款）
+  '竖版备考海报，纯白背景，顶部黄色圆角矩形色块衬底内有超大加粗深蓝色主标题，白色区域蓝色副标题，橙色手绘波浪线分隔，右侧扁平卡通学生或老师人物，左侧蓝色圆形图标+要点黑色文字，绿色手绘箭头，白底深字高对比',
+
+  // 2 绿边框+白内页+超大黑字（滕州市参考图同款）
+  '竖版备考海报，外层草绿色圆角笔记本边框，内层纯白纸张顶部打孔装饰，超大加粗黑色主标题居中（黑字白底极高对比），粉色手绘椭圆圈住关键词黑字，绿色手绘箭头，右下角可爱卡通铅笔人物，干净清晰可爱',
+
+  // 3 蓝灰摄影背景+黑色大字压图（郑城县参考图同款）
+  '竖版备考海报，下半部柔焦蓝灰学习桌面摄影虚化背景（书本绿植钢笔），上半部纯白或浅色遮罩区域叠加超大加粗深蓝色/黑色主标题，蓝色笔刷色块衬托白色副标题，顶部小书本图标+细字标签，文字区域底色浅让黑字清晰突出',
+
+  // 4 白底+超大红色冲刺大字+黄色圈
+  '竖版备考海报，纯白背景，超大加粗大红色主标题铺满上半版面（白底红字强对比），黄色圆角椭圆框住副标题黑字，黑色粗波浪下划线，下方卡通学生跳跃冲刺扁平插图+书本堆叠，红色"上岸"小标签，激励感强',
+
+  // 5 浅黄底+黑色超大标题+红色标签
+  '竖版备考海报，浅柠檬黄/米黄背景，超大加粗黑色主标题（黄底黑字高对比），红色圆角矩形标签内白色副标题文字，黑色手绘下划线，角落橙色五角星装饰，下方卡通书本文具扁平插图，明快活泼备考风',
+
+  // 6 白底+深蓝黑双色标题+橙色波浪线
+  '竖版备考海报，白色背景，超大加粗主标题上行深蓝色下行黑色（高对比度），橙色手绘粗波浪线分隔主副标题，副标题黑色字体，右侧扁平卡通讲师人物，下方备考书本插图，橙色圆点散布，蓝橙白三色搭配清爽',
+
+  // 7 浅蓝白渐变+黑色大字+白色气泡副标题
+  '竖版备考海报，极浅天蓝白渐变背景，超大加粗黑色主标题（浅蓝底黑字高对比），白色云朵气泡形状框内黑色副标题，蓝色手绘箭头和星形装饰，下方扁平卡通学习插图（书桌书本），整体蓝白清爽，字体清晰醒目',
+
+  // 8 白底+黑色大字+粉色荧光高亮圈
+  '竖版备考海报，纯白背景，超大加粗黑色主标题（最高对比度），粉色马克笔荧光高亮色块涂在关键词背后（文字仍是黑色），绿色手绘波浪下划线，蓝色手绘箭头，下方可爱卡通学生坐着读书扁平插图，手账风格亲切',
+
+  // 9 浅橙白底+深色大字+橙色圆角标签
+  '竖版备考海报，浅橙白渐变背景，超大加粗深褐色/黑色主标题（橙白底深字高对比），橙色实心圆角标签内白色副标题，绿色小箭头装饰，下方扁平卡通书本文具暖橙色插图，整体暖意充满活力，文字主次分明',
+
+  // 10 白底+主标题黑字+蓝色方框副标题
+  '竖版备考海报，白色背景，超大加粗黑色主标题（白底黑字最强对比），蓝色圆角矩形实色框内白色副标题，蓝色圆形图标+黑色要点列表，橙色波浪线装饰，右侧扁平卡通学生举书人物，专业整洁备考风',
+
+  // 11 浅粉白底+黑色大字+深色高亮框
+  '竖版备考海报，极浅粉白背景，超大加粗黑色/深灰色主标题（高对比清晰），深玫红圆角色块内白色副标题，粉色手绘椭圆虚线圈装饰，可爱星星爱心手绘点缀，下方卡通女学生扁平人物+书本，甜而不腻清爽备考风',
+
+  // 12 米白底+深蓝标题+绿色圆角标签
+  '竖版备考海报，温暖米白奶油色背景，超大加粗深蓝色主标题（米白底深蓝字高对比），绿色实心圆角标签内白色副标题，咖啡色手绘下划线，下方扁平卡通学习书桌场景插图（书本笔记本绿植），温馨有质感',
+
+  // 13 白底+红黑主标题+黄底黑字副标题圆框
+  '竖版备考海报，纯白或极浅灰白背景，超大加粗主标题前两行黑色后一行红色（高对比），下方黄色填充圆角框内黑色加粗副标题，红色粗线下划线，下方彩色卡通书本资料堆叠插图，干净明快配色',
+
+  // 14 白底+超大深蓝标题+橙黄弧形色块
+  '竖版备考海报，白色背景，超大加粗深蓝色主标题占上半版（白底深蓝高对比），橙黄色弧形大色块横跨中部衬托白色副标题，绿色小箭头和圆点，下方扁平卡通学生和书本，蓝橙撞色活泼专业感',
+
+  // 15 浅绿白底+黑色大字+白色色块副标题（修正单色问题）
+  '竖版备考海报，极浅薄荷绿白渐变背景（接近白色非纯绿），超大加粗黑色主标题（浅底黑字强对比，绝非绿底绿字），白色实心圆角云朵形状内黑色副标题，深绿色手绘箭头，下方绿白配色卡通插图，清新不失对比度',
+
+  // 16 白底+黑字标题+多色荧光标注
+  '竖版备考海报，白色背景，超大加粗黑色主标题，关键字分别有黄色/粉色/蓝色荧光笔底色（字仍黑色高对比），蓝色手绘方框圈住副标题，手绘星星箭头涂鸦，下方卡通学生学习插图，手帐笔记风格活泼',
+
+  // 17 浅蓝底+白色大字色块+黑色副标题（蓝白高对比）
+  '竖版备考海报，天蓝渐变背景，超大加粗白色主标题放在深蓝圆角大色块内（深蓝块衬白字强对比），白色区域黑色副标题，蓝白分区清晰，橙色小标签装饰，下方卡通学生书本扁平插图，蓝白橙三色专业备考风',
+]
+
+async function generateCardImage() {
+  const text = (cardText.value || '').trim()
+  if (!text) { message.warning('请先填写卡片文字'); return }
+  cardImgGenerating.value = true
+  try {
+    const styleDesc = CARD_POSTER_STYLES[Math.floor(Math.random() * CARD_POSTER_STYLES.length)]
+    const image_prompt = `小红书备考笔记封面大字海报，竖版9:16比例，${styleDesc}，画面核心是超大加粗醒目的标题文字【${text}】，文字占据画面主体（60%以上空间），标题文字颜色与背景颜色必须形成强烈对比（深色字配浅背景，或浅色字配深色块），层次分明一眼抓人，文字清晰锐利不模糊`
+    const res = await rewriteImage({ image_prompt })
+    cardGeneratedImgUrl.value = res?.url || ''
+    if (!cardGeneratedImgUrl.value) message.warning('生图成功但未返回图片地址')
+  } catch (e) {
+    message.error(e.message || '生图失败')
+  } finally {
+    cardImgGenerating.value = false
+  }
+}
+
+async function downloadCardImage() {
+  const url = cardGeneratedImgUrl.value
+  if (!url) return
+  cardDownloading.value = true
+  try {
+    const blob = await processImageForDownload(url)
+    triggerBlobDownload(blob, `card-poster-${data.value.id || 'img'}.jpg`)
+  } catch {
+    // CORS 场景：先代理到 R2 再处理
+    try {
+      const proxied = await proxyImageForDownload(url)
+      const blob = await processImageForDownload(proxied.url)
+      triggerBlobDownload(blob, `card-poster-${data.value.id || 'img'}.jpg`)
+    } catch (e2) {
+      message.error('下载失败：' + (e2.message || '未知'))
+    }
+  } finally {
+    cardDownloading.value = false
   }
 }
 
@@ -2882,7 +2996,7 @@ const SENSITIVE_WORD_LIST = [
   '中国共产党', '中共中央', '党中央', '中央', '共产党', '政治局', '总书记',
   '国家主席', '国家副主席', '中央军委', '人民解放军', '武警部队',
   '国务院', '全国人大', '全国政协', '人民代表大会', '人民代表',
-  '中华人民共和国', '中国', '中华民族', '政府', '党', '宪法',
+  '中华人民共和国', '共和国', '中国', '中华民族', '中华', '政府', '党', '宪法',
   '社会主义', '全会', '国家', '法律', '法规', '政治',
 ]
 const autoMosaicEnabled = ref(true)  // 生图时自动遮盖敏感词开关

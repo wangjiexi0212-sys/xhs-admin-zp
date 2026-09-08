@@ -22,6 +22,10 @@
           <ShoppingOutlined />
           商品链接
         </div>
+        <div class="card-tab" :class="{ active: activeTab === 'prompt' }" @click="activeTab = 'prompt'">
+          <FormOutlined />
+          提示词
+        </div>
       </div>
 
       <div class="card-body">
@@ -36,7 +40,7 @@
         />
         <!-- 商品链接输入 -->
         <a-input
-          v-else
+          v-else-if="activeTab === 'product'"
           v-model:value="productUrl"
           class="product-url-input"
           placeholder="粘贴小红书商品页链接，支持 xhslink 短链和 App 分享文字"
@@ -45,6 +49,18 @@
         >
           <template #prefix><LinkOutlined style="color:#9ca3af" /></template>
         </a-input>
+        <!-- 提示词输入 -->
+        <template v-else-if="activeTab === 'prompt'">
+          <a-textarea
+            v-model:value="promptText"
+            class="link-input"
+            placeholder="在此输入绘图提示词，描述你想生成的图片内容、风格、构图等…&#10;例如：一杯冒着热气的咖啡放在木桌上，背景是窗边柔和的自然光，小红书风格，清新温暖"
+            :rows="5"
+            :bordered="false"
+            :maxlength="2000"
+            show-count
+          />
+        </template>
 
         <!-- 本地上传图片（商品链接 tab） -->
         <template v-if="activeTab === 'product'">
@@ -94,18 +110,23 @@
             size="large"
             class="rewrite-btn"
             :loading="submitting"
-            :disabled="activeTab === 'link' ? !links.trim() : (!productUrl.trim() && !productResult)"
+            :disabled="
+              activeTab === 'link'    ? !links.trim() :
+              activeTab === 'product' ? (!productUrl.trim() && !productResult) :
+              !promptText.trim()
+            "
             @click="onRewrite"
           >
             <template #icon><ThunderboltOutlined /></template>
-            {{ activeTab === 'link' ? '一键 AI 改写' : '解析商品' }}
+            {{ activeTab === 'link' ? '一键 AI 改写' : activeTab === 'product' ? '解析商品' : '生成图片' }}
             <ArrowRightOutlined />
           </a-button>
         </div>
         <div class="card-footer-tip">
           <InfoCircleOutlined />
           <template v-if="activeTab === 'link'">支持多链接批量改写 · 每行一条链接 · 最多 10 条</template>
-          <template v-else>支持小红书商品页链接 · 自动提取商品标题和主图、详情图</template>
+          <template v-else-if="activeTab === 'product'">支持小红书商品页链接 · 自动提取商品标题和主图、详情图</template>
+          <template v-else>根据提示词直接生成图片 · 仅支持全能绘图渠道 · 即梦暂不支持</template>
         </div>
       </div>
     </div>
@@ -126,12 +147,34 @@
           >
             <img :src="xhsImgProxyUrl(img)" class="product-img-thumb" @error="e => e.target.style.display='none'" />
             <div class="product-img-overlay">
-              <a-button size="small" type="primary" ghost @click="downloadProductImg(img, ii)">
-                <DownloadOutlined />
-              </a-button>
-              <a-button size="small" danger ghost @click.stop="deleteProductImg(ii)">
-                <DeleteOutlined />
-              </a-button>
+              <div class="overlay-row">
+                <a-tooltip title="下载">
+                  <a-button size="small" type="primary" ghost @click.stop="downloadProductImg(img, ii)">
+                    <DownloadOutlined />
+                  </a-button>
+                </a-tooltip>
+                <a-tooltip title="删除">
+                  <a-button size="small" danger ghost @click.stop="deleteProductImg(ii)">
+                    <DeleteOutlined />
+                  </a-button>
+                </a-tooltip>
+              </div>
+              <div class="overlay-row">
+                <a-tooltip title="图片文字二创">
+                  <a-button
+                    size="small" type="primary" ghost
+                    :loading="!!productSingleProcessing[ii]"
+                    @click.stop="handleSingleTextRewrite(img, ii)"
+                  >
+                    <template #icon><HighlightOutlined /></template>
+                  </a-button>
+                </a-tooltip>
+                <a-tooltip title="自定义提示词改写">
+                  <a-button size="small" type="primary" ghost @click.stop="openProductSingleEdit(img, ii)">
+                    <template #icon><EditOutlined /></template>
+                  </a-button>
+                </a-tooltip>
+              </div>
             </div>
           </div>
         </div>
@@ -139,6 +182,9 @@
           <a-button size="small" @click="downloadAllProductImgs">
             <DownloadOutlined /> 批量下载
           </a-button>
+          <a-divider type="vertical" style="margin: 0 2px;" />
+          <a-switch v-model:checked="productImgTextRewrite" size="small" />
+          <span class="direct-label" :class="{ off: !productImgTextRewrite }" style="font-size:12px">图片文字二创</span>
           <a-button
             size="small"
             type="primary"
@@ -206,6 +252,58 @@
           </a-button>
         </div>
       </template>
+    </div>
+
+    <!-- 提示词生成图片结果区 -->
+    <div v-if="activeTab === 'prompt' && promptImages.length" class="product-result-card">
+      <div class="product-result-header">
+        <span class="product-result-title" style="font-size:14px;font-weight:500;color:#6b7280">
+          已生成 {{ promptImages.filter(i => i.status === 'done').length }} / {{ promptImages.length }} 张
+        </span>
+        <a-button size="small" @click="promptImages = []"><CloseOutlined /> 清除</a-button>
+      </div>
+      <div class="product-img-section">
+        <div class="product-img-grid">
+          <div
+            v-for="(img, ii) in promptImages"
+            :key="ii"
+            class="product-img-item"
+          >
+            <div v-if="img.status === 'pending' || img.status === 'running'" class="img-placeholder">
+              <a-spin size="small" />
+              <span class="img-placeholder-text">{{ img.status === 'pending' ? '排队中' : '生成中' }}</span>
+            </div>
+            <div v-else-if="img.status === 'error'" class="img-error">
+              <ExclamationCircleOutlined />
+              <span>生成失败</span>
+              <a-button size="small" class="img-retry-btn" @click.stop="retryPromptImage(img)">
+                <ReloadOutlined /> 重试
+              </a-button>
+            </div>
+            <template v-else>
+              <img
+                :src="img.url" :alt="`生成图 ${ii + 1}`" class="product-img-thumb"
+                style="cursor:zoom-in"
+                @click.stop="previewImg.url = img.url; previewImg.visible = true"
+              />
+              <div class="product-img-overlay" style="flex-direction:row;gap:6px">
+                <a-button size="small" type="primary" ghost :loading="img.downloading" @click.stop="downloadPromptImage(img, ii)">
+                  <DownloadOutlined />
+                </a-button>
+              </div>
+            </template>
+          </div>
+        </div>
+        <a-button
+          v-if="promptImages.some(i => i.status === 'done')"
+          size="small"
+          :loading="promptBatchDownloading"
+          style="margin-top:8px;align-self:flex-start"
+          @click="downloadAllPromptImages"
+        >
+          <DownloadOutlined /> 批量下载
+        </a-button>
+      </div>
     </div>
 
     <!-- 改写任务列表 -->
@@ -472,6 +570,81 @@
     </a-drawer>
   </div>
 
+  <!-- 单张商品图 AI 改写 Modal -->
+  <a-modal
+    v-model:open="productSingleEdit.visible"
+    title="单张图 AI 改写"
+    :footer="null"
+    :width="540"
+    :mask-closable="!productSingleEdit.generating"
+    destroy-on-close
+  >
+    <p class="edit-modal-sub">选择改写方式，AI 基于原图生成新图</p>
+
+    <!-- 图片文字二创开关 -->
+    <div class="single-edit-switch-row">
+      <a-switch v-model:checked="productSingleEdit.useTextRewrite" size="small" />
+      <span class="single-edit-switch-label">图片文字二创</span>
+      <span class="single-edit-switch-hint">自动识别并改写图中所有文字</span>
+    </div>
+
+    <div class="edit-modal-body">
+      <!-- 自定义提示词 -->
+      <a-textarea
+        v-model:value="productSingleEdit.customPrompt"
+        class="edit-prompt-ta"
+        placeholder="（选填）描述希望如何改动，例如：换浅色背景、调整色调风格…"
+        :maxlength="500"
+        :rows="6"
+        show-count
+      />
+      <!-- 参考图上传 -->
+      <div class="edit-ref-col">
+        <div class="edit-ref-label">上传参考图</div>
+        <div
+          class="edit-ref-area"
+          :class="{ 'has-img': productSingleEdit.refPreview }"
+          @click="triggerProductSingleRef"
+        >
+          <template v-if="productSingleEdit.refPreview">
+            <img :src="productSingleEdit.refPreview" class="edit-ref-img" />
+            <div class="edit-ref-change">更换</div>
+            <button class="edit-ref-rm" @click.stop="removeProductSingleRef">×</button>
+          </template>
+          <template v-else>
+            <PlusOutlined class="edit-ref-plus" />
+            <span class="edit-ref-hint">点击上传</span>
+          </template>
+        </div>
+        <div class="edit-ref-tip"><InfoCircleOutlined /> 学习图片风格</div>
+      </div>
+    </div>
+
+    <input
+      ref="productSingleRefInput"
+      type="file"
+      accept="image/*"
+      style="display:none"
+      @change="handleProductSingleRefChange"
+    />
+
+    <div class="edit-modal-footer">
+      <div />
+      <div class="edit-footer-right">
+        <a-button :disabled="productSingleEdit.generating" @click="productSingleEdit.visible = false">取消</a-button>
+        <a-button
+          type="primary"
+          class="edit-gen-btn"
+          :loading="productSingleEdit.generating"
+          :disabled="!productSingleEdit.useTextRewrite && !productSingleEdit.customPrompt.trim() && !productSingleEdit.refFile"
+          @click="onProductSingleEditGenerate"
+        >
+          立即生成
+        </a-button>
+      </div>
+    </div>
+  </a-modal>
+
   <!-- 大图预览 Modal -->
   <a-modal
     v-model:open="previewImg.visible"
@@ -499,6 +672,7 @@ import {
   CopyOutlined, DownloadOutlined, ReloadOutlined, ExclamationCircleOutlined,
   LoadingOutlined, CheckCircleFilled, CloseCircleFilled, BarsOutlined, DownOutlined,
   EditOutlined, PlusOutlined, CloseOutlined, UploadOutlined, DeleteOutlined, EyeOutlined,
+  HighlightOutlined, FormOutlined,
 } from '@ant-design/icons-vue'
 import RewritePromptPanel from './RewritePrompt.vue'
 import { parseXhsLink, rewriteContent, rewriteImage, uploadXhsImageViaWorker, uploadLocalImageToR2, proxyImageForDownload, parseProductLink, xhsImgProxyUrl } from '@/api/xhsRewrite'
@@ -510,12 +684,34 @@ const productResult = ref(null)   // { title, images: string[] }
 const productAiImages = ref([])   // [{ src, url, status, downloading }]
 const productAiGenerating = ref(false)
 const productAiBatchDownloading = ref(false)
-const activeTab = ref('link')    // 'link' | 'product'
+const productImgTextRewrite = ref(false)   // 商品图片文字二创开关（批量）
+
+// 单张图处理进行中标记（key = 图片索引，value = true）
+const productSingleProcessing = reactive({})
+
+// 单张图 AI 改写弹窗（针对商品原图，支持文字二创 + 自定义提示词 + 参考图）
+const productSingleEdit = reactive({
+  visible: false,
+  src: '',          // 原图 URL
+  srcIdx: -1,       // 在 productResult.images 中的索引
+  useTextRewrite: false,
+  customPrompt: '',
+  refFile: null,
+  refPreview: '',
+  generating: false,
+})
+const productSingleRefInput = ref(null)
+const activeTab = ref('link')    // 'link' | 'product' | 'prompt'
 const submitting = ref(false)
 const showPromptDrawer = ref(false)
 const jobs = ref([])
 const directRewrite = ref(true)
 const imgTextRewrite = ref(false)   // 图片文字二创，默认关闭
+
+// ── 提示词生图 Tab 状态 ────────────────────────────────────
+const promptText = ref('')
+const promptImages = ref([])          // [{ url, status, downloading, errMsg }]
+const promptBatchDownloading = ref(false)
 const previewImg = reactive({ visible: false, url: '' })  // 大图预览状态
 
 // 直接改写关闭时，联动重置图片文字二创
@@ -657,6 +853,28 @@ async function typewrite(step, text, msPerChar = 18) {
 // ─── 主流程 ───────────────────────────────────────────────
 
 async function onRewrite() {
+  // ── 提示词生图模式 ────────────────────────────────────────
+  if (activeTab.value === 'prompt') {
+    const text = promptText.value.trim()
+    if (!text) { message.warning('请输入提示词'); return }
+    submitting.value = true
+    const imgObj = reactive({ url: '', status: 'pending', downloading: false, errMsg: '', _prompt: text })
+    promptImages.value.unshift(imgObj)
+    submitting.value = false
+    try {
+      imgObj.status = 'running'
+      const res = await rewriteImage({ image_prompt: text })
+      imgObj.url = res.url
+      imgObj.status = 'done'
+      message.success('图片生成成功')
+    } catch (e) {
+      imgObj.status = 'error'
+      imgObj.errMsg = e.message || '生成失败'
+      message.error(imgObj.errMsg)
+    }
+    return
+  }
+
   // ── 商品链接模式 ─────────────────────────────────────────
   if (activeTab.value === 'product') {
     const url = productUrl.value.trim()
@@ -822,9 +1040,7 @@ async function processJob(job) {
         const res = await rewriteImage({
           src: publicSrc,
           prompt: '',
-          image_prompt: imgTextRewrite.value
-            ? '保持图片整体构图和主体内容不变，对图片中出现的所有覆盖文字进行改写，更换措辞和表达方式，文字风格与原图保持一致，其余内容轻度重绘，风格清新自然，适合小红书发布。'
-            : '',
+          image_prompt: imgTextRewrite.value ? TEXT_REWRITE_PROMPT : '',
         })
         img.url = res.url
         img.status = 'done'
@@ -930,7 +1146,15 @@ async function downloadAllProductImgs() {
 
 // ─── 商品图片 AI 二创 ──────────────────────────────────────
 
-/** 单张商品图执行 AI 二创（先代理到 R2，再调 AI 绘图） */
+// 图片文字二创专用 prompt（批量 & 单张共用）
+const TEXT_REWRITE_PROMPT = '保持图片整体构图和主体内容不变，对图片中出现的所有覆盖文字进行改写，更换措辞和表达方式，文字风格与原图保持一致，其余内容轻度重绘，风格清新自然，适合小红书发布。'
+
+/** 单张商品图执行 AI 二创（先代理到 R2，再调 AI 绘图）
+ *  imgObj 支持额外属性：
+ *    useImgTextRewrite {boolean}  — 使用文字二创 prompt
+ *    image_prompt      {string}   — 显式指定 prompt（优先级高于 useImgTextRewrite）
+ *    ref_src           {string}   — 参考图 R2 URL
+ */
 async function _doProductAiOne(imgObj) {
   imgObj.status = 'running'
   imgObj.url = ''
@@ -942,7 +1166,16 @@ async function _doProductAiOne(imgObj) {
       publicSrc = uploaded.url
       imgObj.publicSrc = publicSrc // 缓存，重试复用
     }
-    const res = await rewriteImage({ src: publicSrc, prompt: '' })
+    // image_prompt 优先取显式值，其次根据 useImgTextRewrite flag 生成
+    const imagePrompt = 'image_prompt' in imgObj
+      ? imgObj.image_prompt
+      : (imgObj.useImgTextRewrite ? TEXT_REWRITE_PROMPT : '')
+    const res = await rewriteImage({
+      src: publicSrc,
+      prompt: '',
+      image_prompt: imagePrompt,
+      ...(imgObj.ref_src ? { ref_src: imgObj.ref_src } : {}),
+    })
     imgObj.url = res.url
     imgObj.status = 'done'
   } catch (e) {
@@ -957,9 +1190,10 @@ async function handleProductAiRewrite() {
   if (!srcs.length) { message.warning('请先解析到商品图片'); return }
 
   productAiGenerating.value = true
-  // 初始化（重新生成时重置）
+  // 初始化（重新生成时重置），记录当前二创模式供重试复用
   productAiImages.value = srcs.map(src => ({
     src, url: '', status: 'pending', downloading: false, errMsg: '',
+    useImgTextRewrite: productImgTextRewrite.value,
   }))
 
   for (const imgObj of productAiImages.value) {
@@ -974,6 +1208,56 @@ async function handleProductAiRewrite() {
 /** 单张失败重试 */
 async function retryProductAiImage(imgObj) {
   await _doProductAiOne(imgObj)
+}
+
+// ─── 提示词生图 · 重试 & 下载 ──────────────────────────────
+
+async function retryPromptImage(imgObj) {
+  if (!imgObj._prompt) return
+  imgObj.status = 'running'
+  imgObj.url = ''
+  try {
+    const res = await rewriteImage({ image_prompt: imgObj._prompt })
+    imgObj.url = res.url
+    imgObj.status = 'done'
+    message.success('重试成功')
+  } catch (e) {
+    imgObj.status = 'error'
+    imgObj.errMsg = e.message || '生成失败'
+    message.error(imgObj.errMsg)
+  }
+}
+
+async function downloadPromptImage(img, idx) {
+  if (img.downloading) return
+  img.downloading = true
+  try {
+    const blob = await _getProcessedBlob(img.url)
+    triggerBlobDownload(blob, `prompt_ai_${idx + 1}.jpg`)
+  } catch (e) {
+    message.error(e.message || '下载失败')
+  } finally {
+    img.downloading = false
+  }
+}
+
+async function downloadAllPromptImages() {
+  const done = promptImages.value.filter(i => i.status === 'done')
+  if (!done.length) return
+  promptBatchDownloading.value = true
+  const hide = message.loading(`下载 ${done.length} 张图片中…`, 0)
+  let ok = 0
+  for (let i = 0; i < done.length; i++) {
+    try {
+      const blob = await _getProcessedBlob(done[i].url)
+      triggerBlobDownload(blob, `prompt_ai_${i + 1}.jpg`)
+      ok++
+      if (i < done.length - 1) await new Promise(r => setTimeout(r, 600))
+    } catch { /* 单张失败不中断 */ }
+  }
+  hide()
+  promptBatchDownloading.value = false
+  message.success(`已下载 ${ok} / ${done.length} 张`)
 }
 
 /** 下载单张 AI 二创图 */
@@ -1161,6 +1445,86 @@ async function retryImage(job, img, idx) {
       imgStep.errMsg = e.message || '绘图失败'
       imgStep.logs.push({ time: nowTime(), text: `✗ ${e.message || '绘图失败'}`, type: 'error' })
     }
+  }
+}
+
+// ─── 单张商品图 · 文字二创（快捷，无弹窗）─────────────────────
+
+async function handleSingleTextRewrite(srcUrl, idx) {
+  if (productSingleProcessing[idx]) return
+  productSingleProcessing[idx] = true
+  const imgObj = reactive({
+    src: srcUrl, url: '', status: 'pending', downloading: false, errMsg: '',
+    useImgTextRewrite: true,
+  })
+  productAiImages.value.push(imgObj)
+  await _doProductAiOne(imgObj)
+  delete productSingleProcessing[idx]
+  if (imgObj.status === 'done') message.success('图片文字二创完成')
+  else message.error(imgObj.errMsg || '文字二创失败')
+}
+
+// ─── 单张商品图 · 自定义改写弹窗 ────────────────────────────────
+
+function openProductSingleEdit(srcUrl, idx) {
+  Object.assign(productSingleEdit, {
+    visible: true, src: srcUrl, srcIdx: idx,
+    useTextRewrite: false, customPrompt: '',
+    refFile: null, refPreview: '', generating: false,
+  })
+}
+
+function triggerProductSingleRef() { productSingleRefInput.value?.click() }
+
+function handleProductSingleRefChange(e) {
+  const file = e.target.files?.[0]
+  if (!file) return
+  productSingleEdit.refFile = file
+  const reader = new FileReader()
+  reader.onload = () => { productSingleEdit.refPreview = reader.result }
+  reader.readAsDataURL(file)
+  e.target.value = ''
+}
+
+function removeProductSingleRef() {
+  productSingleEdit.refFile = null
+  productSingleEdit.refPreview = ''
+}
+
+async function onProductSingleEditGenerate() {
+  const { src, useTextRewrite, customPrompt, refFile } = productSingleEdit
+  if (!useTextRewrite && !customPrompt.trim() && !refFile) {
+    message.warning('请开启文字二创、输入提示词或上传参考图')
+    return
+  }
+  productSingleEdit.generating = true
+  try {
+    // 上传参考图（如有）
+    let refSrc
+    if (refFile) {
+      const up = await uploadLocalImageToR2(refFile)
+      refSrc = up.url
+    }
+    // 组合最终 image_prompt
+    let imagePrompt = customPrompt.trim()
+    if (useTextRewrite) {
+      imagePrompt = imagePrompt ? `${imagePrompt}\n\n${TEXT_REWRITE_PROMPT}` : TEXT_REWRITE_PROMPT
+    }
+    // 关弹窗，追加 pending 条目
+    productSingleEdit.visible = false
+    const imgObj = reactive({
+      src, url: '', status: 'pending', downloading: false, errMsg: '',
+      image_prompt: imagePrompt,
+      ...(refSrc ? { ref_src: refSrc } : {}),
+    })
+    productAiImages.value.push(imgObj)
+    await _doProductAiOne(imgObj)
+    if (imgObj.status === 'done') message.success('图片改写完成')
+    else message.error(imgObj.errMsg || '改写失败')
+  } catch (e) {
+    message.error(e.message || '改写失败')
+  } finally {
+    productSingleEdit.generating = false
   }
 }
 
@@ -1921,5 +2285,39 @@ async function onEditGenerate() {
   height: 1px;
   background: #f0f0f0;
   margin: 16px 0 12px;
+}
+
+/* ─── 商品图片 overlay 2×2 布局 ────────────────────────────── */
+.product-img-overlay {
+  flex-direction: column;
+  gap: 6px;
+}
+
+.overlay-row {
+  display: flex;
+  gap: 6px;
+}
+
+/* ─── 单张图改写 Modal 专用样式 ─────────────────────────────── */
+.single-edit-switch-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  background: #f9fafb;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+}
+
+.single-edit-switch-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.single-edit-switch-hint {
+  font-size: 12px;
+  color: #9ca3af;
 }
 </style>
