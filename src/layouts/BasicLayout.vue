@@ -21,6 +21,7 @@
           <template #title>商品管理</template>
           <a-menu-item key="/product/list">商品列表</a-menu-item>
           <a-menu-item key="/product/category">商品类型</a-menu-item>
+          <a-menu-item key="/regular-product/list">常规商品</a-menu-item>
         </a-sub-menu>
         <a-sub-menu key="user">
           <template #icon>
@@ -133,6 +134,7 @@ const openKeys = ref(getDefaultOpenKeys())
 
 function getDefaultOpenKeys() {
   if (route.path.startsWith('/product')) return ['product']
+  if (route.path.startsWith('/regular-product')) return ['product']
   if (route.path.startsWith('/user')) return ['user']
   if (route.path.startsWith('/note')) return ['note']
   if (route.path.startsWith('/ai')) return ['ai']
@@ -142,7 +144,7 @@ function getDefaultOpenKeys() {
 
 watch(() => route.path, (path) => {
   if (collapsed.value) return
-  if (path.startsWith('/product') && !openKeys.value.includes('product')) {
+  if ((path.startsWith('/product') || path.startsWith('/regular-product')) && !openKeys.value.includes('product')) {
     openKeys.value = ['product']
   } else if (path.startsWith('/user') && !openKeys.value.includes('user')) {
     openKeys.value = ['user']

@@ -41,6 +41,26 @@ const router = createRouter({
           component: () => import('../views/product/Category.vue'),
         },
         {
+          path: 'regular-product/list',
+          name: 'regular-product-list',
+          component: () => import('../views/regularProduct/List.vue'),
+        },
+        {
+          path: 'regular-product/create',
+          name: 'regular-product-create',
+          component: () => import('../views/regularProduct/Edit.vue'),
+        },
+        {
+          path: 'regular-product/edit/:id',
+          name: 'regular-product-edit',
+          component: () => import('../views/regularProduct/Edit.vue'),
+        },
+        {
+          path: 'regular-product/detail/:id',
+          name: 'regular-product-detail',
+          component: () => import('../views/regularProduct/Detail.vue'),
+        },
+        {
           path: 'user/list',
           name: 'user-list',
           component: () => import('../views/user/List.vue'),
