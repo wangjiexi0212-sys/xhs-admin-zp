@@ -75,13 +75,24 @@
               @select="onTreeSelect"
             >
               <template #title="node">
-                <span
-                  :class="{ 'pdf-node': node.isLeaf && isPdf(node.title) }"
-                  @click.stop="node.isLeaf && isPdf(node.title) ? openPdf({ name: node.title, path: node.key }) : null"
-                >
-                  <span class="tree-icon">{{ node.isLeaf ? (isPdf(node.title) ? '📄' : '📄') : '📁' }}</span>
-                  {{ node.title }}
-                  <a-tag v-if="node.isLeaf && isPdf(node.title)" color="red" style="margin-left: 6px; font-size: 11px">PDF</a-tag>
+                <span class="tree-node-row">
+                  <span
+                    :class="{ 'pdf-node': node.isLeaf && isPdf(node.title) }"
+                    @click.stop="node.isLeaf && isPdf(node.title) ? openPdf({ name: node.title, path: node.key }) : null"
+                  >
+                    <span class="tree-icon">{{ node.isLeaf ? '📄' : '📁' }}</span>
+                    {{ node.title }}
+                    <a-tag v-if="node.isLeaf && isPdf(node.title)" color="red" style="margin-left: 6px; font-size: 11px">PDF</a-tag>
+                  </span>
+                  <a-button
+                    v-if="!node.isLeaf"
+                    size="small"
+                    type="text"
+                    class="node-dir-img-btn"
+                    :loading="generatingNodeKey === node.key"
+                    title="生成该文件夹目录图"
+                    @click.stop="generateNodeDirImage(node)"
+                  >📥</a-button>
                 </span>
               </template>
             </a-tree>
@@ -226,6 +237,7 @@ function _drawPdfIcon(ctx, x, y, size) {
 
 const dirImgGenerating = ref(false)
 const dirImgBorderColor = ref('#F9863B')  // 边框颜色，默认橙色
+const generatingNodeKey = ref(null)       // 正在生成目录图的文件夹 key
 
 // 递归收集所有当前已加载的可见节点（包含展开的子目录内容），带深度信息
 function collectVisibleNodes(nodes, depth = 0, result = []) {
@@ -238,85 +250,114 @@ function collectVisibleNodes(nodes, depth = 0, result = []) {
   return result
 }
 
+// ── 公共画布逻辑 ─────────────────────────────────────────
+async function _doGenerateDirImage(files, title) {
+  const DPR = 2, W = 600
+  const BORDER = 10, PADDING = 28, ICON_SIZE = 26, ROW_H = 48, TITLE_H = 88
+  const INDENT = 18
+  const H = BORDER + TITLE_H + ROW_H * files.length + PADDING + BORDER
+
+  const canvas = document.createElement('canvas')
+  canvas.width = W * DPR
+  canvas.height = H * DPR
+  const ctx = canvas.getContext('2d')
+  ctx.scale(DPR, DPR)
+
+  // 背景
+  ctx.fillStyle = dirImgBorderColor.value; ctx.fillRect(0, 0, W, H)
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(BORDER, BORDER, W - BORDER * 2, H - BORDER * 2)
+  _drawGridBg(ctx, BORDER, BORDER, W - BORDER * 2, H - BORDER * 2, pickBgColor(), 0.35)
+
+  // 标题
+  ctx.fillStyle = '#FF0000'
+  ctx.font = `bold 34px "PingFang SC", "Microsoft YaHei", sans-serif`
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+  ctx.fillText(title, W / 2, BORDER + TITLE_H / 2)
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'
+
+  // 分隔线
+  ctx.strokeStyle = '#eeeeee'; ctx.lineWidth = 1
+  ctx.beginPath()
+  ctx.moveTo(BORDER + PADDING, BORDER + TITLE_H)
+  ctx.lineTo(W - BORDER - PADDING, BORDER + TITLE_H)
+  ctx.stroke()
+
+  // 文件列表
+  const listTop = BORDER + TITLE_H
+  files.forEach((file, i) => {
+    const y = listTop + i * ROW_H
+    const iconY = y + (ROW_H - ICON_SIZE) / 2
+    const indentX = BORDER + PADDING + file.depth * INDENT
+    file.isdir === 1
+      ? _drawFolderIcon(ctx, indentX, iconY, ICON_SIZE)
+      : _drawPdfIcon(ctx, indentX, iconY, ICON_SIZE)
+
+    ctx.fillStyle = file.depth === 0 ? '#222222' : '#444444'
+    ctx.font = file.depth === 0
+      ? `bold 15px "PingFang SC", "Microsoft YaHei", sans-serif`
+      : `14px "PingFang SC", "Microsoft YaHei", sans-serif`
+    const textX = indentX + ICON_SIZE + 10
+    const maxWidth = W - BORDER - PADDING - textX
+    let name = file.name
+    while (ctx.measureText(name).width > maxWidth && name.length > 1) name = name.slice(0, -1)
+    if (name !== file.name) name = name.slice(0, -1) + '...'
+    ctx.fillText(name, textX, y + ROW_H / 2 + 5)
+
+    if (i < files.length - 1) {
+      ctx.strokeStyle = '#f0f0f0'; ctx.lineWidth = 1
+      ctx.beginPath()
+      ctx.moveTo(BORDER + PADDING, y + ROW_H)
+      ctx.lineTo(W - BORDER - PADDING, y + ROW_H)
+      ctx.stroke()
+    }
+  })
+
+  // 下载
+  const dataUrl = canvas.toDataURL('image/png')
+  const a = document.createElement('a')
+  a.href = dataUrl
+  a.download = `目录图_${title}.png`
+  a.click()
+}
+
+// 整棵树的目录图（顶部工具栏按钮）
 async function generateAndDownloadDirImage() {
   if (!treeData.value.length) return
   dirImgGenerating.value = true
   try {
-    // 递归收集所有已展开的可见节点
     const files = collectVisibleNodes(treeData.value)
-
-    const DPR = 2, W = 600
-    const BORDER = 10, PADDING = 28, ICON_SIZE = 26, ROW_H = 48, TITLE_H = 88
-    const INDENT = 18  // 每一级缩进像素
-    const H = BORDER + TITLE_H + ROW_H * files.length + PADDING + BORDER
-
-    const canvas = document.createElement('canvas')
-    canvas.width = W * DPR
-    canvas.height = H * DPR
-    const ctx = canvas.getContext('2d')
-    ctx.scale(DPR, DPR)
-
-    // 背景
-    ctx.fillStyle = dirImgBorderColor.value; ctx.fillRect(0, 0, W, H)
-    ctx.fillStyle = '#ffffff'; ctx.fillRect(BORDER, BORDER, W - BORDER * 2, H - BORDER * 2)
-    _drawGridBg(ctx, BORDER, BORDER, W - BORDER * 2, H - BORDER * 2, pickBgColor(), 0.35)
-
-    // 标题
-    const title = product.value.title || '文件目录'
-    ctx.fillStyle = '#FF0000'
-    ctx.font = `bold 34px "PingFang SC", "Microsoft YaHei", sans-serif`
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-    ctx.fillText(title, W / 2, BORDER + TITLE_H / 2)
-    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'
-
-    // 分隔线
-    ctx.strokeStyle = '#eeeeee'; ctx.lineWidth = 1
-    ctx.beginPath()
-    ctx.moveTo(BORDER + PADDING, BORDER + TITLE_H)
-    ctx.lineTo(W - BORDER - PADDING, BORDER + TITLE_H)
-    ctx.stroke()
-
-    // 文件列表
-    const listTop = BORDER + TITLE_H
-    files.forEach((file, i) => {
-      const y = listTop + i * ROW_H
-      const iconY = y + (ROW_H - ICON_SIZE) / 2
-      const indentX = BORDER + PADDING + file.depth * INDENT
-      file.isdir === 1
-        ? _drawFolderIcon(ctx, indentX, iconY, ICON_SIZE)
-        : _drawPdfIcon(ctx, indentX, iconY, ICON_SIZE)
-
-      ctx.fillStyle = file.depth === 0 ? '#222222' : '#444444'
-      ctx.font = file.depth === 0
-        ? `bold 15px "PingFang SC", "Microsoft YaHei", sans-serif`
-        : `14px "PingFang SC", "Microsoft YaHei", sans-serif`
-      const textX = indentX + ICON_SIZE + 10
-      const maxWidth = W - BORDER - PADDING - textX
-      let name = file.name
-      while (ctx.measureText(name).width > maxWidth && name.length > 1) name = name.slice(0, -1)
-      if (name !== file.name) name = name.slice(0, -1) + '...'
-      ctx.fillText(name, textX, y + ROW_H / 2 + 5)
-
-      if (i < files.length - 1) {
-        ctx.strokeStyle = '#f0f0f0'; ctx.lineWidth = 1
-        ctx.beginPath()
-        ctx.moveTo(BORDER + PADDING, y + ROW_H)
-        ctx.lineTo(W - BORDER - PADDING, y + ROW_H)
-        ctx.stroke()
-      }
-    })
-
-    // 下载
-    const dataUrl = canvas.toDataURL('image/png')
-    const a = document.createElement('a')
-    a.href = dataUrl
-    a.download = `目录图_${title}.png`
-    a.click()
+    await _doGenerateDirImage(files, product.value.title || '文件目录')
     message.success('目录图已下载')
   } catch (e) {
     message.error('生成失败：' + e.message)
   } finally {
     dirImgGenerating.value = false
+  }
+}
+
+// 指定文件夹的目录图（节点行内按钮）
+async function generateNodeDirImage(node) {
+  const targetNode = findNode(treeData.value, node.key)
+  if (!targetNode) return
+
+  if (!targetNode.children) {
+    message.info('请先展开该文件夹以加载子目录，再生成目录图')
+    return
+  }
+  if (targetNode.children.length === 0) {
+    message.warning('该文件夹为空，无内容可生成')
+    return
+  }
+
+  generatingNodeKey.value = node.key
+  try {
+    const files = collectVisibleNodes(targetNode.children, 0)
+    await _doGenerateDirImage(files, node.title)
+    message.success('目录图已下载')
+  } catch (e) {
+    message.error('生成失败：' + e.message)
+  } finally {
+    generatingNodeKey.value = null
   }
 }
 
@@ -674,6 +715,27 @@ onBeforeUnmount(() => {
   color: #aaa;
   text-align: center;
   padding: 24px 0;
+}
+
+.tree-node-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+}
+
+.node-dir-img-btn {
+  opacity: 0;
+  transition: opacity 0.15s;
+  font-size: 13px;
+  padding: 0 4px;
+  height: 20px;
+  line-height: 20px;
+  flex-shrink: 0;
+}
+
+.tree-node-row:hover .node-dir-img-btn {
+  opacity: 1;
 }
 
 .tree-icon {
