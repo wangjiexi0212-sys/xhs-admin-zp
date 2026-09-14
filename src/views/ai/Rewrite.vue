@@ -790,6 +790,35 @@ const refFileInput = ref(null)
 
 // ─── 工具函数 ──────────────────────────────────────────────
 
+/**
+ * 并发受限执行器：最多 limit 张同时处理，一张完成立刻补一张进来。
+ * @param {Array}    items   要处理的元素列表
+ * @param {Function} fn      (item) => Promise  处理函数
+ * @param {number}   limit   最大并发数（默认 10）
+ */
+function runConcurrent(items, fn, limit = 10) {
+  const queue = [...items]
+  let active = 0
+
+  return new Promise((resolve) => {
+    function pump() {
+      // 尽量补满并发槽
+      while (active < limit && queue.length) {
+        active++
+        const item = queue.shift()
+        fn(item).finally(() => {
+          active--
+          if (queue.length > 0) pump()
+          else if (active === 0) resolve()
+        })
+      }
+      // 初始即为空时直接结束
+      if (active === 0 && queue.length === 0) resolve()
+    }
+    pump()
+  })
+}
+
 function parseLinks(text) {
   return text.split('\n').map(l => l.trim()).filter(Boolean).slice(0, 10)
 }
@@ -1010,9 +1039,9 @@ async function processJob(job) {
     job.totalMs = Date.now() - t0
     job.logsCollapsed = false // 完成后先展开日志供查看
 
-    // ── Step 4: 逐张 AI 绘图 ──────────────────────────────
-    for (let i = 0; i < images.length; i++) {
-      const img = images[i]
+    // ── Step 4: 并发 AI 绘图（最多 10 张同时进行，完成一张立刻补一张）──
+    await runConcurrent(images, async (img) => {
+      const i = img.idx
       const imgStep = job.steps.find(s => s.key === `img_${i}`)
       const endImg = startStep(job, `img_${i}`)
       addStepLog(job, `img_${i}`, `原图地址：${img.src?.slice(0, 50)}…`)
@@ -1051,7 +1080,7 @@ async function processJob(job) {
         img.status = 'error'
         endImg(false, e.message || '绘图失败')
       }
-    }
+    }, 10)
 
   } catch (e) {
     if (job.status !== 'done') {
@@ -1196,9 +1225,8 @@ async function handleProductAiRewrite() {
     useImgTextRewrite: productImgTextRewrite.value,
   }))
 
-  for (const imgObj of productAiImages.value) {
-    await _doProductAiOne(imgObj)
-  }
+  // 并发处理（最多 10 张同时进行，完成一张立刻补一张）
+  await runConcurrent(productAiImages.value, _doProductAiOne, 10)
 
   productAiGenerating.value = false
   const done = productAiImages.value.filter(i => i.status === 'done').length

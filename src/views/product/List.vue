@@ -211,6 +211,7 @@ import { useLlmStore } from '@/stores/llm'
 import { Document, Packer, Paragraph, TextRun, HeadingLevel } from 'docx'
 import { saveAs } from 'file-saver'
 import { writeFeishuBitableRecords, uploadFeishuBitableImage } from '@/api/feishuConfig'
+import { getBgImageList } from '@/api/bgImages'
 
 const router = useRouter()
 const llmStore = useLlmStore()
@@ -301,6 +302,30 @@ function pickRandomBgColor() {
   return BG_COLOR_POOL[Math.floor(Math.random() * BG_COLOR_POOL.length)]
 }
 
+// ─── 背景图池（与 Detail.vue 的"使用背景图"功能对齐）────────
+let _bgImagePool = []
+let _bgImagePoolLoaded = false
+
+async function ensureBgImagePool() {
+  if (_bgImagePoolLoaded) return
+  try {
+    const res = await getBgImageList()
+    _bgImagePool = (res.list || []).map(item => item.url).filter(Boolean)
+  } catch { /* ignore，无背景图时走普通模式 */ }
+  _bgImagePoolLoaded = true
+}
+
+/**
+ * 从背景图池随机取一张 URL；使用 crypto.getRandomValues 保证真随机。
+ * 若背景图池为空，返回 null（调用方回退到普通配色模式）。
+ */
+function pickBgImageUrl() {
+  if (!_bgImagePool.length) return null
+  const buf = new Uint32Array(1)
+  crypto.getRandomValues(buf)
+  return _bgImagePool[buf[0] % _bgImagePool.length]
+}
+
 const HISTORY_TITLE_POOL = [
   '刷真题，吃透核心考点', '研真题，洞悉考察方向', '析真题，总结答题套路',
   '品真题，掌握命题规律', '梳理真题，理清考察重点', '复盘真题，弥补知识短板',
@@ -374,10 +399,10 @@ function drawPdfIcon(ctx, x, y, size) {
   ctx.textBaseline = 'alphabetic'
 }
 
-function renderCompositeImage(files, title, borderColor, bgColor, bgOpacity) {
+async function renderCompositeImage(files, title, borderColor, bgColor, bgOpacity, bgImageUrl = null) {
   const DPR = 2
   const W = 600
-  const BORDER = 10
+  const BORDER = bgImageUrl ? 0 : 10
   const PADDING = 28
   const ICON_SIZE = 30
   const ROW_H = 52
@@ -388,11 +413,19 @@ function renderCompositeImage(files, title, borderColor, bgColor, bgOpacity) {
   canvas.height = H * DPR
   const ctx = canvas.getContext('2d')
   ctx.scale(DPR, DPR)
-  ctx.fillStyle = borderColor
-  ctx.fillRect(0, 0, W, H)
-  ctx.fillStyle = '#ffffff'
-  ctx.fillRect(BORDER, BORDER, W - BORDER * 2, H - BORDER * 2)
-  drawGridBg(ctx, BORDER, BORDER, W - BORDER * 2, H - BORDER * 2, bgColor, bgOpacity)
+  if (bgImageUrl) {
+    // 背景图模式：cover 铺满，无边框，无网格
+    const bgImg = await loadImage(bgImageUrl)
+    const scale = Math.max(W / bgImg.width, H / bgImg.height)
+    const bw = bgImg.width * scale, bh = bgImg.height * scale
+    ctx.drawImage(bgImg, (W - bw) / 2, (H - bh) / 2, bw, bh)
+  } else {
+    ctx.fillStyle = borderColor
+    ctx.fillRect(0, 0, W, H)
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(BORDER, BORDER, W - BORDER * 2, H - BORDER * 2)
+    drawGridBg(ctx, BORDER, BORDER, W - BORDER * 2, H - BORDER * 2, bgColor, bgOpacity)
+  }
   ctx.fillStyle = '#FF0000'
   ctx.font = `bold 34px "PingFang SC", "Microsoft YaHei", sans-serif`
   ctx.textAlign = 'center'
@@ -437,23 +470,33 @@ function renderCompositeImage(files, title, borderColor, bgColor, bgOpacity) {
   return canvas.toDataURL('image/png')
 }
 
-async function buildHistoryComposite(pdfDataUrl, files, borderColor, title, bgColor, bgOpacity) {
+async function buildHistoryComposite(pdfDataUrl, files, borderColor, title, bgColor, bgOpacity, bgImageUrl = null) {
   const pdfImg = await loadImage(pdfDataUrl)
   const CANVAS_W = 1242
   const CANVAS_H = 1656
-  const BORDER = 12
+  const BORDER = bgImageUrl ? 0 : 12
   const TITLE_H = 120
   const canvas = document.createElement('canvas')
   canvas.width = CANVAS_W
   canvas.height = CANVAS_H
   const ctx = canvas.getContext('2d')
-  ctx.fillStyle = borderColor
-  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H)
+  if (bgImageUrl) {
+    // 背景图模式：cover 铺满，无边框，无网格
+    const bgImg = await loadImage(bgImageUrl)
+    const scale = Math.max(CANVAS_W / bgImg.width, CANVAS_H / bgImg.height)
+    const bw = bgImg.width * scale, bh = bgImg.height * scale
+    ctx.drawImage(bgImg, (CANVAS_W - bw) / 2, (CANVAS_H - bh) / 2, bw, bh)
+  } else {
+    ctx.fillStyle = borderColor
+    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H)
+  }
   const innerX = BORDER, innerY = BORDER
   const innerW = CANVAS_W - BORDER * 2, innerH = CANVAS_H - BORDER * 2
-  ctx.fillStyle = '#ffffff'
-  ctx.fillRect(innerX, innerY, innerW, innerH)
-  drawGridBg(ctx, innerX, innerY, innerW, innerH, bgColor, bgOpacity, 36)
+  if (!bgImageUrl) {
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(innerX, innerY, innerW, innerH)
+    drawGridBg(ctx, innerX, innerY, innerW, innerH, bgColor, bgOpacity, 36)
+  }
   ctx.fillStyle = '#FF0000'
   ctx.font = `bold ${Math.round(TITLE_H * 0.5)}px "PingFang SC", "Microsoft YaHei", sans-serif`
   ctx.textAlign = 'center'
@@ -663,7 +706,7 @@ async function getBaiduFilesWithRetry(path, MAX_RETRY = 5) {
   throw lastErr
 }
 
-async function buildDirImageForBatch(path, type, title, onlyDir = false) {
+async function buildDirImageForBatch(path, type, title, onlyDir = false, bgImageUrl = null) {
   const res = await getBaiduFilesWithRetry(path)
   const files = res.files || []
   if (!files.length) throw new Error('目录为空')
@@ -686,11 +729,11 @@ async function buildDirImageForBatch(path, type, title, onlyDir = false) {
           pdfCanvas.height = viewport.height
           await page.render({ canvasContext: pdfCanvas.getContext('2d'), viewport }).promise
           await applyPdfSensitiveMosaic(pdfCanvas, page, viewport)
-          return await buildHistoryComposite(pdfCanvas.toDataURL('image/png'), files, '#F9863B', title, pickRandomBgColor(), 0.35)
+          return await buildHistoryComposite(pdfCanvas.toDataURL('image/png'), files, '#F9863B', title, pickRandomBgColor(), 0.35, bgImageUrl)
         } catch (_) {}
       }
     }
-    return renderCompositeImage(files, title, '#F9863B', pickRandomBgColor(), 0.35)
+    return renderCompositeImage(files, title, '#F9863B', pickRandomBgColor(), 0.35, bgImageUrl)
   }
   if (type === 'custom') {
     if (!onlyDir) {
@@ -710,13 +753,13 @@ async function buildDirImageForBatch(path, type, title, onlyDir = false) {
           pdfCanvas.height = viewport.height
           await page.render({ canvasContext: pdfCanvas.getContext('2d'), viewport }).promise
           await applyPdfSensitiveMosaic(pdfCanvas, page, viewport)
-          return await buildHistoryComposite(pdfCanvas.toDataURL('image/png'), files, '#F9863B', title, pickRandomBgColor(), 0.35)
+          return await buildHistoryComposite(pdfCanvas.toDataURL('image/png'), files, '#F9863B', title, pickRandomBgColor(), 0.35, bgImageUrl)
         } catch (_) {}
       }
     }
-    return renderCompositeImage(files, title, '#F9863B', pickRandomBgColor(), 0.35)
+    return renderCompositeImage(files, title, '#F9863B', pickRandomBgColor(), 0.35, bgImageUrl)
   }
-  return renderCompositeImage(files, title, '#F9863B', pickRandomBgColor(), 0.35)
+  return renderCompositeImage(files, title, '#F9863B', pickRandomBgColor(), 0.35, bgImageUrl)
 }
 
 // --- 笔记内容生成 + Word 导出 ---
@@ -1197,10 +1240,16 @@ async function runBatchDirImages(onlyDirImages) {
   let totalNotes = 0
   const feishuRecords = []   // 收集飞书多维表格行
 
+  // 提前加载背景图池（一次请求，后续所有商品复用）
+  await ensureBgImagePool()
+
   for (const id of selectedRowKeys.value) {
     const product = list.value.find(p => p.id === id)
     const company = product?.company_name || `product-${id}`
     dirBatchLogs.value.push({ text: `处理：${company}`, type: 'info' })
+
+    // 每个商品随机取一张背景图，该商品所有任务共用同一张
+    const productBgUrl = pickBgImageUrl()
 
     let detail
     try {
@@ -1261,9 +1310,9 @@ async function runBatchDirImages(onlyDirImages) {
           pdfCanvas.height = viewport.height
           await page.render({ canvasContext: pdfCanvas.getContext('2d'), viewport }).promise
           await applyPdfSensitiveMosaic(pdfCanvas, page, viewport)
-          dataUrl = await buildHistoryComposite(pdfCanvas.toDataURL('image/png'), files, '#F9863B', task.title, pickRandomBgColor(), 0.35)
+          dataUrl = await buildHistoryComposite(pdfCanvas.toDataURL('image/png'), files, '#F9863B', task.title, pickRandomBgColor(), 0.35, productBgUrl)
         } else {
-          dataUrl = await buildDirImageForBatch(task.path, task.type, task.title, onlyDirImages)
+          dataUrl = await buildDirImageForBatch(task.path, task.type, task.title, onlyDirImages, productBgUrl)
         }
         const base64 = dataUrl.replace(/^data:image\/png;base64,/, '')
         folder.file(`${task.label}.png`, base64, { base64: true })
