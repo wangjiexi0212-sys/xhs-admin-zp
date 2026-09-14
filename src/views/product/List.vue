@@ -1226,6 +1226,7 @@ async function runBatchDirImages(onlyDirImages) {
   dirBatchVisible.value = true
   dirBatchGenerating.value = true
 
+  // ── 1. 加载 JSZip ────────────────────────────────────────────────
   let JSZip
   try {
     JSZip = await ensureJSZip()
@@ -1235,101 +1236,92 @@ async function runBatchDirImages(onlyDirImages) {
     return
   }
 
-  const zip = new JSZip()
-  let totalImages = 0
-  let totalNotes = 0
-  const feishuRecords = []   // 收集飞书多维表格行
-
-  // 提前加载背景图池（一次请求，后续所有商品复用）
-  await ensureBgImagePool()
-
+  // ── 2. 预加载所有商品详情（主线程，有 token / cookie）────────────
+  dirBatchLogs.value.push({ text: '加载商品详情中...', type: 'info' })
+  const productDetails = []
   for (const id of selectedRowKeys.value) {
     const product = list.value.find(p => p.id === id)
     const company = product?.company_name || `product-${id}`
-    dirBatchLogs.value.push({ text: `处理：${company}`, type: 'info' })
-
-    // 每个商品随机取一张背景图，该商品所有任务共用同一张
-    const productBgUrl = pickBgImageUrl()
-
-    let detail
     try {
-      detail = await getProductDetail(id)
+      const detail = await getProductDetail(id)
+      productDetails.push({ id, company, detail })
     } catch (e) {
-      dirBatchLogs.value.push({ text: `  └ 加载失败：${e.message}`, type: 'error' })
-      dirBatchDone.value++
-      continue
+      dirBatchLogs.value.push({ text: `  └ ${company} 详情加载失败：${e.message}`, type: 'error' })
     }
+  }
+  if (!productDetails.length) {
+    dirBatchLogs.value.push({ text: '没有可处理的商品', type: 'error' })
+    dirBatchGenerating.value = false
+    return
+  }
 
-    const tasks = []
-    if (detail.baidu_path_exam) {
-      tasks.push({ path: detail.baidu_path_exam, type: 'exam', label: '笔试资料目录', title: '笔试资料完整目录' })
-      tasks.push({ path: detail.baidu_path_exam, type: 'culture', label: '企业文化目录', title: '企业近况及文化' })
-    }
-    if (detail.baidu_path_history) {
-      tasks.push({ path: detail.baidu_path_history, type: 'history', label: '真题目录', title: pickRandomHistoryTitle() })
-    }
-    if (detail.baidu_path_mock) {
-      tasks.push({ path: detail.baidu_path_mock, type: 'mock', label: '模拟题目录', title: pickRandomMockTitle() })
-    }
-    if (detail.baidu_custom_dirs?.length) {
-      detail.baidu_custom_dirs.forEach((item, idx) => {
-        tasks.push({ path: item.path, type: 'custom', label: item.name || `自定义${idx + 1}`, title: item.name || '自定义' })
-      })
-    }
+  // ── 3. 加载背景图池 ──────────────────────────────────────────────
+  await ensureBgImagePool()
 
-    if (!tasks.length) {
-      dirBatchLogs.value.push({ text: `  └ 未配置百度网盘目录，跳过`, type: 'warn' })
-      dirBatchDone.value++
-      continue
-    }
+  // ── 4. 启动 Web Worker 进行图片生成（切换窗口后仍持续运行）─────
+  dirBatchLogs.value.push({ text: '后台生成线程已启动，可自由切换窗口 ✓', type: 'info' })
 
-    const folder = zip.folder(company)
-    let imgDone = 0
-    const productImages = []  // 收集本商品所有生成图片，用于同步到飞书附件
-    for (const task of tasks) {
-      try {
-        let dataUrl
-        if (task.type === 'culture') {
-          const res = await getBaiduFilesWithRetry(task.path)
-          const files = (res.files || []).sort((a, b) => b.isdir - a.isdir)
-          // 企业文化始终生成 PDF 合成图
-          const culturePdf = files.find(f => f.isdir === 0 && f.name.includes('企业文化'))
-          if (!culturePdf) {
-            dirBatchLogs.value.push({ text: `  └ ${task.label}：未找到"企业文化"PDF，跳过`, type: 'warn' })
-            continue
-          }
-          const lib = await ensurePdfjs()
-          const pdfDoc = await lib.getDocument({
-            url: `/api/baidu/proxy-pdf?path=${encodeURIComponent(culturePdf.path)}`,
-            httpHeaders: { Authorization: `Bearer ${getToken()}` },
-          }).promise
-          const page = await pdfDoc.getPage(1)
-          const viewport = page.getViewport({ scale: 2 })
-          const pdfCanvas = document.createElement('canvas')
-          pdfCanvas.width = viewport.width
-          pdfCanvas.height = viewport.height
-          await page.render({ canvasContext: pdfCanvas.getContext('2d'), viewport }).promise
-          await applyPdfSensitiveMosaic(pdfCanvas, page, viewport)
-          dataUrl = await buildHistoryComposite(pdfCanvas.toDataURL('image/png'), files, '#F9863B', task.title, pickRandomBgColor(), 0.35, productBgUrl)
-        } else {
-          dataUrl = await buildDirImageForBatch(task.path, task.type, task.title, onlyDirImages, productBgUrl)
+  const zip = new JSZip()
+  let totalImages = 0, totalNotes = 0
+  const feishuRecords = []
+  // 收集 worker 发回的每个商品图片，用于后续 note 生成 + feishu
+  const productImageMap = {}  // company → { detail, folder, images: [{label, base64}] }
+
+  await new Promise((resolve, reject) => {
+    const worker = new Worker(
+      new URL('../../workers/batchDirGen.worker.js', import.meta.url),
+      { type: 'classic' }
+    )
+
+    worker.onmessage = (e) => {
+      const data = e.data
+      if (data.type === 'log') {
+        dirBatchLogs.value.push({ text: data.text, type: data.logType })
+      } else if (data.type === 'progress') {
+        dirBatchDone.value = data.done
+        dirBatchTotal.value = data.total
+      } else if (data.type === 'product-images') {
+        const { company, id, images } = data
+        const folder = zip.folder(company)
+        for (const { label, base64 } of images) {
+          folder.file(`${label}.png`, base64, { base64: true })
+          totalImages++
         }
-        const base64 = dataUrl.replace(/^data:image\/png;base64,/, '')
-        folder.file(`${task.label}.png`, base64, { base64: true })
-        imgDone++
-        totalImages++
-        dirBatchLogs.value.push({ text: `  └ ${task.label} ✓`, type: 'success' })
-        productImages.push({ dataUrl, filename: `${task.label}.png` })
-      } catch (e) {
-        dirBatchLogs.value.push({ text: `  └ ${task.label} 失败：${e.message}`, type: 'error' })
+        const detail = productDetails.find(p => p.id === id)?.detail
+        productImageMap[company] = { detail, folder, images }
+      } else if (data.type === 'done') {
+        worker.terminate()
+        resolve()
+      } else if (data.type === 'error') {
+        worker.terminate()
+        reject(new Error(data.message))
       }
     }
-    if (!imgDone) {
-      dirBatchLogs.value.push({ text: `  └ 该商品无图片生成`, type: 'warn' })
-    }
 
-    // 生成笔记内容并写入 Word
-    dirBatchLogs.value.push({ text: `  └ 生成笔记内容中...`, type: 'info' })
+    worker.onerror = (e) => { worker.terminate(); reject(new Error(e.message || 'Worker 异常')) }
+
+    worker.postMessage({
+      type: 'start',
+      token: getToken(),
+      apiBase: import.meta.env.VITE_API_BASE || '',
+      bgPool: _bgImagePool,
+      productDetails,
+      onlyDirImages,
+      titlePool: TITLE_POOL,
+      historyTitlePool: HISTORY_TITLE_POOL,
+      mockTitlePool: MOCK_TITLE_POOL,
+      cardSchemes: CARD_BASIC_SCHEMES,
+    })
+  }).catch((err) => {
+    dirBatchLogs.value.push({ text: `Worker 异常退出：${err.message}`, type: 'error' })
+  })
+
+  // ── 5. Worker 完成后：生成笔记内容 + docx + 飞书（主线程处理）──
+  for (const company of Object.keys(productImageMap)) {
+    const { detail, folder, images } = productImageMap[company]
+    if (!detail) continue
+
+    dirBatchLogs.value.push({ text: `${company} - 生成笔记内容中...`, type: 'info' })
     let noteResult = null
     try {
       const { title, body } = await generateNoteForProduct(detail)
@@ -1338,39 +1330,21 @@ async function runBatchDirImages(onlyDirImages) {
       const docBlob = await Packer.toBlob(doc)
       folder.file('笔记内容.docx', docBlob)
       totalNotes++
-      dirBatchLogs.value.push({ text: `  └ 笔记内容 ✓`, type: 'success' })
+      dirBatchLogs.value.push({ text: `  └ ${company} 笔记内容 ✓`, type: 'success' })
     } catch (e) {
-      dirBatchLogs.value.push({ text: `  └ 笔记内容失败：${e.message}`, type: 'error' })
+      dirBatchLogs.value.push({ text: `  └ ${company} 笔记内容失败：${e.message}`, type: 'error' })
     }
 
-    // 生成卡片图（CardBasic 风格，随机配色 + 随机文案）
-    dirBatchLogs.value.push({ text: `  └ 生成卡片图中...`, type: 'info' })
-    try {
-      const cardScheme = CARD_BASIC_SCHEMES[Math.floor(Math.random() * CARD_BASIC_SCHEMES.length)]
-      const cardTitleRandom = TITLE_POOL[Math.floor(Math.random() * TITLE_POOL.length)]
-      const cardText = `${detail.company_name || ''}笔试，${cardTitleRandom}`
-      const cardDataUrl = renderCardBasicImage(cardText, cardScheme)
-      const cardBase64 = cardDataUrl.replace(/^data:image\/png;base64,/, '')
-      folder.file('卡片图.png', cardBase64, { base64: true })
-      totalImages++
-      dirBatchLogs.value.push({ text: `  └ 卡片图 ✓`, type: 'success' })
-      productImages.push({ dataUrl: cardDataUrl, filename: '卡片图.png' })
-    } catch (e) {
-      dirBatchLogs.value.push({ text: `  └ 卡片图失败：${e.message}`, type: 'error' })
-    }
-
-    // 写入飞书多维表格（含图片附件）
+    // 飞书同步（需要图片 file_token）
     if (feishuEnabled.value && noteResult) {
       const nowTs = Date.now()
-      // 先将本商品所有图片上传到飞书素材库，获取 file_token
       const fileTokens = []
-      for (const { dataUrl, filename } of productImages) {
+      for (const { label, base64 } of images) {
         try {
-          const base64 = dataUrl.replace(/^data:image\/\w+;base64,/, '')
-          const res = await uploadFeishuBitableImage({ base64, filename })
+          const res = await uploadFeishuBitableImage({ base64, filename: `${label}.png` })
           if (res?.file_token) fileTokens.push(res.file_token)
         } catch (e) {
-          dirBatchLogs.value.push({ text: `  └ 图片上传飞书失败（${filename}）：${e.message}`, type: 'warn' })
+          dirBatchLogs.value.push({ text: `  └ 图片上传飞书失败（${label}）：${e.message}`, type: 'warn' })
         }
       }
       feishuRecords.push({
@@ -1384,10 +1358,9 @@ async function runBatchDirImages(onlyDirImages) {
         file_tokens: fileTokens,
       })
     }
-
-    dirBatchDone.value++
   }
 
+  // ── 6. 下载 ZIP ─────────────────────────────────────────────────
   if (totalImages > 0 || totalNotes > 0) {
     try {
       const blob = await zip.generateAsync({ type: 'blob' })
@@ -1401,7 +1374,7 @@ async function runBatchDirImages(onlyDirImages) {
     dirBatchLogs.value.push({ text: '无可生成的目录图或笔记内容', type: 'error' })
   }
 
-  // 飞书多维表格同步
+  // ── 7. 飞书多维表格同步 ──────────────────────────────────────────
   if (feishuEnabled.value && feishuRecords.length) {
     dirBatchLogs.value.push({ text: `同步飞书多维表格（${feishuRecords.length} 条）...`, type: 'info' })
     try {
