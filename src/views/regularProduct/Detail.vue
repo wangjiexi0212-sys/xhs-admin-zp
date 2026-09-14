@@ -32,6 +32,13 @@
               <a-tag v-if="product.tags">{{ product.tags }}</a-tag>
               <span v-else class="text-gray">—</span>
             </a-descriptions-item>
+            <a-descriptions-item label="笔记标题" :span="2">
+              <div v-if="product.note_title" class="note-title-preview">
+                <span class="note-title-text">{{ notePreview }}</span>
+                <a-button type="link" size="small" @click="drawerOpen = true">展开查看</a-button>
+              </div>
+              <span v-else class="text-gray">—</span>
+            </a-descriptions-item>
             <a-descriptions-item label="创建时间">{{ formatTime(product.created_at) }}</a-descriptions-item>
             <a-descriptions-item label="创建人">{{ product.created_by_name || '—' }}</a-descriptions-item>
             <a-descriptions-item label="更新时间">{{ formatTime(product.updated_at) }}</a-descriptions-item>
@@ -127,6 +134,17 @@
         </div>
       </div>
     </a-spin>
+
+    <!-- 笔记标题 Drawer -->
+    <a-drawer
+      v-model:open="drawerOpen"
+      title="笔记标题"
+      placement="right"
+      :width="480"
+      :body-style="{ padding: '20px', overflowY: 'auto' }"
+    >
+      <pre class="drawer-note-content">{{ product?.note_title }}</pre>
+    </a-drawer>
   </div>
 </template>
 
@@ -145,6 +163,11 @@ const id = computed(() => route.params.id)
 // ── 商品数据 ─────────────────────────────────────────────
 const loading = ref(true)
 const product = ref(null)
+const drawerOpen = ref(false)
+const notePreview = computed(() => {
+  const t = product.value?.note_title || ''
+  return t.length > 80 ? t.slice(0, 80) + '…' : t
+})
 
 async function loadDetail() {
   loading.value = true
@@ -563,6 +586,35 @@ onBeforeUnmount(() => {
 
 .text-gray {
   color: #aaa;
+}
+
+/* 笔记标题高亮预览 */
+.note-title-preview {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: #fffbe6;
+  border-left: 3px solid #faad14;
+  padding: 8px 12px;
+  border-radius: 4px;
+}
+.note-title-text {
+  flex: 1;
+  color: #333;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* Drawer 正文 */
+.drawer-note-content {
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.9;
+  color: #222;
+  margin: 0;
 }
 
 /* 文件树 */

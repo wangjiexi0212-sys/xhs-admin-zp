@@ -25,6 +25,16 @@
         <div class="form-tip">填写百度网盘内路径，格式：/xxx/yyy（以斜杠开头的完整目录路径）</div>
       </a-form-item>
 
+      <a-form-item label="笔记标题" name="note_title">
+        <a-textarea
+          v-model:value="form.note_title"
+          placeholder="请输入笔记标题（支持多行）"
+          :auto-size="{ minRows: 4, maxRows: 12 }"
+          :maxlength="2000"
+          show-count
+        />
+      </a-form-item>
+
       <a-form-item label="标签" name="tags">
         <a-input v-model:value="form.tags" placeholder="标签文本，如：2025年 央企 笔试" :maxlength="200" />
         <div class="form-tip">纯文本标签，自由填写</div>
@@ -63,6 +73,7 @@ const form = reactive({
   title: '',
   disk_path: '',
   tags: '',
+  note_title: '',
 })
 
 const rules = {
@@ -77,6 +88,7 @@ async function loadDetail() {
     form.title = res.title || ''
     form.disk_path = res.disk_path || ''
     form.tags = res.tags || ''
+    form.note_title = res.note_title || ''
   } catch (e) {
     message.error(e.message || '加载失败')
   }
@@ -94,6 +106,7 @@ async function handleSubmit() {
       title: form.title.trim(),
       disk_path: form.disk_path.trim(),
       tags: form.tags.trim(),
+      note_title: form.note_title.trim(),
     }
     if (isEdit.value) {
       await updateRegularProduct(id.value, payload)
