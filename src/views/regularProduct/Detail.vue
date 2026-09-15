@@ -104,6 +104,9 @@
           <div class="section-title">
             📄 PDF 预览：{{ pdfState.filename }}
             <a-button size="small" style="margin-left: 12px" @click="closePdf">关闭</a-button>
+            <a-badge :count="pdfImageList.length" :offset="[-4, 4]" style="margin-left: auto">
+              <a-button size="small" type="primary" @click="imageListDrawerOpen = true">🖼 图片列表</a-button>
+            </a-badge>
           </div>
           <a-spin :spinning="pdfState.loading" tip="加载 PDF 中...">
             <div v-if="pdfState.error" class="pdf-error">{{ pdfState.error }}</div>
@@ -135,6 +138,11 @@
                 />
                 <a-button size="small" :disabled="pdfState.rendering" @click="handleJump">GO</a-button>
                 <a-button size="small" type="primary" :disabled="pdfState.rendering" @click="downloadSnapshot">📥 下载截图</a-button>
+                <a-button
+                  size="small"
+                  :disabled="pdfState.rendering"
+                  @click="addCurrentPageToList"
+                >➕ 添加到列表</a-button>
               </div>
               <!-- 画布 -->
               <div class="canvas-wrapper">
@@ -156,6 +164,141 @@
     >
       <pre class="drawer-note-content">{{ product?.note_title }}</pre>
     </a-drawer>
+
+    <!-- 图片列表 & AI 二创 Drawer -->
+    <a-drawer
+      v-model:open="imageListDrawerOpen"
+      title="图片列表 & AI 二创"
+      placement="right"
+      :width="540"
+      :body-style="{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto' }"
+    >
+      <!-- 空状态 -->
+      <a-empty
+        v-if="!pdfImageList.length && !pdfAiImages.length"
+        description="暂无图片，请在 PDF 预览中点击「添加到列表」"
+        style="padding: 40px 0"
+      />
+
+      <!-- 图片列表 -->
+      <template v-if="pdfImageList.length">
+        <div class="ai-drawer-section-title">📷 已添加图片（{{ pdfImageList.length }} 张）</div>
+        <div class="pdf-list-grid">
+          <div v-for="item in pdfImageList" :key="item.id" class="pdf-list-item">
+            <img
+              :src="item.dataUrl"
+              class="pdf-list-thumb"
+              style="cursor:zoom-in"
+              @click="previewDrawerImg(item.dataUrl)"
+            />
+            <div class="pdf-list-name">{{ item.filename }}</div>
+            <a-button
+              danger
+              size="small"
+              class="pdf-list-del"
+              title="从列表中删除"
+              @click="removeFromImageList(item.id)"
+            >
+              <DeleteOutlined />
+            </a-button>
+          </div>
+        </div>
+
+        <!-- AI 二创配置 -->
+        <a-divider style="margin: 4px 0" />
+        <div class="ai-drawer-section-title">✨ AI 二创配置</div>
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap">
+          <a-switch v-model:checked="pdfAiTextRewrite" size="small" />
+          <span style="font-size:13px; color:#555">图片文字二创</span>
+        </div>
+        <a-textarea
+          v-model:value="pdfAiCustomPrompt"
+          placeholder="自定义提示词（留空则使用默认风格：小红书清新自然重绘）"
+          :rows="3"
+          :maxlength="500"
+          show-count
+          allow-clear
+        />
+        <a-button
+          type="primary"
+          block
+          :loading="pdfAiGenerating"
+          :disabled="pdfAiGenerating"
+          @click="startPdfAiRewrite"
+        >
+          <ThunderboltOutlined /> AI 二创全部图片（{{ pdfImageList.length }} 张）
+        </a-button>
+      </template>
+
+      <!-- AI 二创结果 -->
+      <template v-if="pdfAiImages.length">
+        <a-divider style="margin: 4px 0" />
+        <div class="ai-drawer-section-title">
+          🎨 二创结果（{{ pdfAiImages.filter(i => i.status === 'done').length }} / {{ pdfAiImages.length }} 张完成）
+        </div>
+        <div class="pdf-list-grid">
+          <div v-for="(img, ii) in pdfAiImages" :key="img.id" class="pdf-list-item">
+            <!-- 排队 / 生成中 -->
+            <div v-if="img.status === 'pending' || img.status === 'running'" class="pdf-ai-placeholder">
+              <a-spin size="small" />
+              <span>{{ img.status === 'pending' ? '排队中' : '生成中…' }}</span>
+            </div>
+            <!-- 失败 -->
+            <div v-else-if="img.status === 'error'" class="pdf-ai-error">
+              <ExclamationCircleOutlined style="font-size:18px" />
+              <span>{{ img.errMsg || '生成失败' }}</span>
+              <a-button size="small" @click="retryPdfAiImage(img)">
+                <ReloadOutlined /> 重试
+              </a-button>
+            </div>
+            <!-- 完成 -->
+            <template v-else>
+              <img
+                :src="img.url"
+                class="pdf-list-thumb"
+                style="cursor:zoom-in"
+                @click="previewDrawerImg(img.url)"
+              />
+              <div class="pdf-list-name">{{ img.filename }}</div>
+              <a-button
+                size="small"
+                type="primary"
+                ghost
+                :loading="img.downloading"
+                @click="downloadPdfAiImage(img, ii)"
+              >
+                <DownloadOutlined /> 下载
+              </a-button>
+            </template>
+          </div>
+        </div>
+        <a-button
+          v-if="pdfAiImages.some(i => i.status === 'done')"
+          block
+          :loading="pdfAiBatchDownloading"
+          :disabled="pdfAiBatchDownloading"
+          style="margin-top: 4px"
+          @click="downloadAllPdfAiImages"
+        >
+          <DownloadOutlined /> 一键下载全部 AI 图（{{ pdfAiImages.filter(i => i.status === 'done').length }} 张）
+        </a-button>
+      </template>
+    </a-drawer>
+
+    <!-- 大图预览 Modal（抽屉内图片点击） -->
+    <a-modal
+      v-model:open="drawerPreviewImg.visible"
+      :footer="null"
+      :body-style="{ padding: 0, lineHeight: 0, background: '#000' }"
+      centered
+      width="auto"
+    >
+      <img
+        v-if="drawerPreviewImg.visible"
+        :src="drawerPreviewImg.url"
+        style="max-width:90vw; max-height:90vh; display:block; object-fit:contain"
+      />
+    </a-modal>
   </div>
 </template>
 
@@ -163,8 +306,14 @@
 import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { message } from 'ant-design-vue'
+import {
+  DeleteOutlined, ThunderboltOutlined, DownloadOutlined,
+  ExclamationCircleOutlined, ReloadOutlined,
+} from '@ant-design/icons-vue'
 import { getRegularProductDetail } from '@/api/regularProducts'
 import { request, getToken } from '@/api/request'
+import { rewriteImage, proxyImageForDownload } from '@/api/xhsRewrite'
+import { processImageForDownload, triggerBlobDownload } from '@/utils/imageProcess'
 
 const API_BASE = import.meta.env.VITE_API_BASE || ''
 
@@ -570,6 +719,172 @@ function closePdf() {
   _pdfDoc = null
 }
 
+// ── 图片收集列表 & AI 二创侧边抽屉 ──────────────────────────
+let _listImgId = 0
+const pdfImageList = ref([])          // [{ id, dataUrl, filename }]
+const imageListDrawerOpen = ref(false)
+
+// AI 二创状态
+const pdfAiImages = ref([])           // [{ id, src, filename, url, status, downloading, errMsg, publicSrc }]
+const pdfAiGenerating = ref(false)
+const pdfAiBatchDownloading = ref(false)
+const pdfAiTextRewrite = ref(false)
+const pdfAiCustomPrompt = ref('')
+
+// 大图预览（抽屉内）
+const drawerPreviewImg = reactive({ visible: false, url: '' })
+function previewDrawerImg(url) { drawerPreviewImg.url = url; drawerPreviewImg.visible = true }
+
+/** 把当前 PDF 页追加到图片列表，并打开抽屉 */
+function addCurrentPageToList() {
+  if (!pdfCanvas.value || pdfState.rendering) return
+  const dataUrl = pdfCanvas.value.toDataURL('image/png')
+  const filename = `${pdfState.filename.replace(/\.pdf$/i, '')}_第${pdfState.currentPage}页.png`
+  pdfImageList.value.push({ id: ++_listImgId, dataUrl, filename })
+  pdfAiImages.value = []   // 列表变化时清空旧二创结果
+  message.success(`已添加第 ${pdfState.currentPage} 页（共 ${pdfImageList.value.length} 张）`)
+  imageListDrawerOpen.value = true
+}
+
+/** 从图片列表中删除一张 */
+function removeFromImageList(id) {
+  pdfImageList.value = pdfImageList.value.filter(i => i.id !== id)
+  pdfAiImages.value = []
+}
+
+/** 上传 canvas dataUrl 到 R2，返回 { url } */
+async function _uploadDataUrlToR2(dataUrl) {
+  return request('/api/xhs-rewrite/upload-image', {
+    method: 'POST',
+    body: { dataUrl, mimeType: 'image/png' },
+  })
+}
+
+const PDF_AI_TEXT_REWRITE_PROMPT = '保持图片整体构图和主体内容不变，对图片中出现的所有覆盖文字进行改写，更换措辞和表达方式，文字风格与原图保持一致，其余内容轻度重绘，风格清新自然，适合小红书发布。'
+
+/** 并发受限执行器（复用 Rewrite.vue 相同实现） */
+function runConcurrent(items, fn, limit = 3) {
+  const queue = [...items]
+  let active = 0
+  return new Promise((resolve) => {
+    function pump() {
+      while (active < limit && queue.length) {
+        active++
+        const item = queue.shift()
+        fn(item).finally(() => {
+          active--
+          if (queue.length > 0) pump()
+          else if (active === 0) resolve()
+        })
+      }
+      if (active === 0 && queue.length === 0) resolve()
+    }
+    pump()
+  })
+}
+
+/** 对单张 imgObj 执行 AI 二创（上传 R2 → 调 AI 绘图） */
+async function _doPdfAiOne(imgObj) {
+  imgObj.status = 'running'
+  imgObj.url = ''
+  try {
+    let publicSrc = imgObj.publicSrc
+    if (!publicSrc) {
+      const res = await _uploadDataUrlToR2(imgObj.src)
+      publicSrc = res.url
+      imgObj.publicSrc = publicSrc
+    }
+    const imagePrompt = pdfAiCustomPrompt.value.trim()
+      || (pdfAiTextRewrite.value ? PDF_AI_TEXT_REWRITE_PROMPT : '')
+    const res = await rewriteImage({ src: publicSrc, prompt: '', image_prompt: imagePrompt })
+    imgObj.url = res.url
+    imgObj.status = 'done'
+  } catch (e) {
+    imgObj.status = 'error'
+    imgObj.errMsg = e.message || '绘图失败'
+  }
+}
+
+/** 对图片列表全部图片发起 AI 二创 */
+async function startPdfAiRewrite() {
+  if (!pdfImageList.value.length) { message.warning('请先添加图片'); return }
+  pdfAiGenerating.value = true
+
+  pdfAiImages.value = pdfImageList.value.map(item => reactive({
+    id: item.id,
+    src: item.dataUrl,
+    filename: item.filename,
+    url: '',
+    status: 'pending',
+    downloading: false,
+    errMsg: '',
+    publicSrc: '',
+  }))
+
+  await runConcurrent(pdfAiImages.value, _doPdfAiOne, 3)
+
+  pdfAiGenerating.value = false
+  const done = pdfAiImages.value.filter(i => i.status === 'done').length
+  message.success(`AI 二创完成：${done} / ${pdfAiImages.value.length} 张`)
+}
+
+/** 重试单张失败的 AI 二创 */
+async function retryPdfAiImage(imgObj) {
+  await _doPdfAiOne(imgObj)
+}
+
+/** 下载单张 AI 二创图片（与全能改写一致：去重指纹处理 + CORS 中转兜底） */
+async function downloadPdfAiImage(img, idx) {
+  if (img.downloading) return
+  img.downloading = true
+  try {
+    let blob
+    try {
+      blob = await processImageForDownload(img.url)
+    } catch {
+      // AI CDN 不返回 CORS 头，先中转到 R2 再处理
+      const proxied = await proxyImageForDownload(img.url)
+      blob = await processImageForDownload(proxied.url)
+    }
+    triggerBlobDownload(blob, `ai_${img.filename || `ai_${idx + 1}.jpg`}`)
+  } catch (e) {
+    message.error(e.message || '下载失败')
+  } finally {
+    img.downloading = false
+  }
+}
+
+/** 一键下载全部已完成的 AI 二创图片 */
+async function downloadAllPdfAiImages() {
+  const doneImgs = pdfAiImages.value.filter(i => i.status === 'done')
+  if (!doneImgs.length) return
+  pdfAiBatchDownloading.value = true
+  const hide = message.loading(`下载 ${doneImgs.length} 张 AI 图中…`, 0)
+  let ok = 0
+  for (let i = 0; i < doneImgs.length; i++) {
+    const img = doneImgs[i]
+    img.downloading = true
+    try {
+      let blob
+      try {
+        blob = await processImageForDownload(img.url)
+      } catch {
+        const proxied = await proxyImageForDownload(img.url)
+        blob = await processImageForDownload(proxied.url)
+      }
+      triggerBlobDownload(blob, `ai_${img.filename || `ai_${i + 1}.jpg`}`)
+      ok++
+      // 相邻下载间隔 600ms，避免浏览器弹窗被拦截
+      if (i < doneImgs.length - 1) await new Promise(r => setTimeout(r, 600))
+    } catch { /* 单张失败不中断 */ } finally {
+      img.downloading = false
+    }
+  }
+  hide()
+  pdfAiBatchDownloading.value = false
+  message.success(`已下载 ${ok} / ${doneImgs.length} 张（已处理去重指纹）`)
+}
+
 onMounted(loadDetail)
 
 onBeforeUnmount(() => {
@@ -808,5 +1123,85 @@ onBeforeUnmount(() => {
   max-width: 100%;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
   border-radius: 4px;
+}
+
+/* ── 图片列表 & AI 二创抽屉 ───────────────────────────────── */
+.ai-drawer-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+}
+
+.pdf-list-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.pdf-list-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  background: #fafafa;
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+  padding: 8px;
+  position: relative;
+  transition: box-shadow 0.15s;
+}
+.pdf-list-item:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.pdf-list-thumb {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid #ebebeb;
+}
+
+.pdf-list-name {
+  font-size: 11px;
+  color: #888;
+  text-align: center;
+  word-break: break-all;
+  line-height: 1.3;
+  width: 100%;
+}
+
+.pdf-list-del {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  opacity: 0;
+  transition: opacity 0.15s;
+  padding: 0 4px;
+  height: 22px;
+  line-height: 22px;
+}
+.pdf-list-item:hover .pdf-list-del {
+  opacity: 0.85;
+}
+.pdf-list-del:hover {
+  opacity: 1 !important;
+}
+
+.pdf-ai-placeholder,
+.pdf-ai-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 100px;
+  color: #999;
+  font-size: 12px;
+  width: 100%;
+  padding: 12px 0;
+}
+.pdf-ai-error {
+  color: #e63946;
 }
 </style>

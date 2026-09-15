@@ -19,6 +19,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = ''
 // ── 全局配置（由主线程通过 start 消息初始化）──────────────────────
 let _token = ''
 let _apiBase = ''
+let _borderColor = '#F9863B'
 let _TITLE_POOL = []
 let _HISTORY_TITLE_POOL = []
 let _MOCK_TITLE_POOL = []
@@ -376,11 +377,11 @@ async function buildDirImageForBatch(path, type, title, onlyDir, bgUrl) {
       if (pdf) {
         try {
           const pdfCanvas = await renderPdfPage(pdf.path)
-          return await buildHistoryComposite(pdfCanvas, files, '#F9863B', title, pickBgColor(), 0.35, bgUrl)
+          return await buildHistoryComposite(pdfCanvas, files, _borderColor, title, pickBgColor(), 0.35, bgUrl)
         } catch (_) {}
       }
     }
-    return renderCompositeImage(files, title, '#F9863B', pickBgColor(), 0.35, bgUrl)
+    return renderCompositeImage(files, title, _borderColor, pickBgColor(), 0.35, bgUrl)
   }
   if (type === 'custom') {
     if (!onlyDir) {
@@ -388,12 +389,12 @@ async function buildDirImageForBatch(path, type, title, onlyDir, bgUrl) {
       if (pdfs.length) {
         try {
           const pdfCanvas = await renderPdfPage(rndPick(pdfs).path)
-          return await buildHistoryComposite(pdfCanvas, files, '#F9863B', title, pickBgColor(), 0.35, bgUrl)
+          return await buildHistoryComposite(pdfCanvas, files, _borderColor, title, pickBgColor(), 0.35, bgUrl)
         } catch (_) {}
       }
     }
   }
-  return renderCompositeImage(files, title, '#F9863B', pickBgColor(), 0.35, bgUrl)
+  return renderCompositeImage(files, title, _borderColor, pickBgColor(), 0.35, bgUrl)
 }
 
 // ── 卡片图（CardBasic，OffscreenCanvas 版）──────────────────────────
@@ -457,11 +458,12 @@ async function renderCardImage(text, scheme) {
 }
 
 // ── 主批量循环 ───────────────────────────────────────────────────────
-async function runBatch({ productDetails, onlyDirImages, bgPool, titlePool, historyTitlePool, mockTitlePool, cardSchemes }) {
+async function runBatch({ productDetails, onlyDirImages, bgPool, borderColor, titlePool, historyTitlePool, mockTitlePool, cardSchemes }) {
   _TITLE_POOL         = titlePool        || []
   _HISTORY_TITLE_POOL = historyTitlePool || []
   _MOCK_TITLE_POOL    = mockTitlePool    || []
   _CARD_SCHEMES       = cardSchemes      || []
+  _borderColor        = borderColor      || '#F9863B'
   const bgImagePool   = bgPool           || []
 
   const total = productDetails.length
@@ -510,7 +512,7 @@ async function runBatch({ productDetails, onlyDirImages, bgPool, titlePool, hist
           const culturePdf = files.find(f => f.isdir === 0 && f.name.includes('企业文化'))
           if (!culturePdf) { log(`  └ ${task.label}：未找到"企业文化"PDF，跳过`, 'warn'); continue }
           const pdfCanvas = await renderPdfPage(culturePdf.path)
-          dataUrl = await buildHistoryComposite(pdfCanvas, files, '#F9863B', task.title, pickBgColor(), 0.35, productBgUrl)
+          dataUrl = await buildHistoryComposite(pdfCanvas, files, _borderColor, task.title, pickBgColor(), 0.35, productBgUrl)
         } else {
           dataUrl = await buildDirImageForBatch(task.path, task.type, task.title, onlyDirImages, productBgUrl)
         }

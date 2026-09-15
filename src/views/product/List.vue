@@ -65,6 +65,22 @@
         </a-radio-group>
       </div>
       <a-divider style="margin: 12px 0" />
+      <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px">
+        <span style="font-size: 13px; font-weight: 500; color: #555">背景图</span>
+        <a-switch v-model:checked="dirBatchUseBgImage" size="small" />
+        <span style="font-size: 12px; color: #999">{{ dirBatchUseBgImage ? '开启，使用背景图池' : '关闭，使用边框颜色' }}</span>
+      </div>
+      <!-- 边框颜色选择器（背景图关闭时显示，与商品详情目录图一致） -->
+      <div v-if="!dirBatchUseBgImage" style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px; padding: 8px 12px; background: #fafafa; border: 1px solid #f0f0f0; border-radius: 6px">
+        <span style="font-size: 13px; color: #555">边框颜色</span>
+        <label style="display:inline-flex; align-items:center; gap:5px; cursor:pointer; padding:2px 8px; border:1px solid #d9d9d9; border-radius:6px; background:#fff">
+          <span :style="{ display:'inline-block', width:'16px', height:'16px', borderRadius:'3px', border:'1px solid rgba(0,0,0,.12)', background: dirBatchBorderColor, flexShrink: 0 }"></span>
+          <span style="font-size:12px; color:#555">{{ dirBatchBorderColor }}</span>
+          <input type="color" v-model="dirBatchBorderColor" style="width:0;height:0;opacity:0;position:absolute;pointer-events:none" />
+        </label>
+        <a-button size="small" type="text" style="font-size:12px;color:#999;padding:0 4px" @click="dirBatchBorderColor = '#F9863B'">重置</a-button>
+      </div>
+      <a-divider style="margin: 12px 0" />
       <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px">
         <span style="font-size: 13px; font-weight: 500; color: #555">飞书多维表格</span>
         <a-switch v-model:checked="feishuEnabled" size="small" />
@@ -1195,6 +1211,8 @@ function renderCardBasicImage(text, scheme) {
 // --- 批量生成目录图状态 ---
 const dirBatchSettingsVisible = ref(false)  // 设置弹窗
 const dirBatchOnlyDir = ref(false)          // 只生成目录图模式
+const dirBatchUseBgImage = ref(false)       // 是否使用背景图（默认关闭 = 边框+颜色模式）
+const dirBatchBorderColor = ref('#F9863B')  // 边框颜色（背景图关闭时生效）
 const feishuEnabled = ref(false)            // 飞书文档开关
 const dirBatchVisible = ref(false)
 const dirBatchGenerating = ref(false)
@@ -1212,10 +1230,10 @@ async function onBatchGenerateDirImages() {
 
 function onConfirmBatchDirSettings() {
   dirBatchSettingsVisible.value = false
-  runBatchDirImages(dirBatchOnlyDir.value)
+  runBatchDirImages(dirBatchOnlyDir.value, dirBatchUseBgImage.value, dirBatchBorderColor.value)
 }
 
-async function runBatchDirImages(onlyDirImages) {
+async function runBatchDirImages(onlyDirImages, useBgImage = false, borderColor = '#F9863B') {
   if (!selectedRowKeys.value.length) {
     message.warning('请先勾选商品')
     return
@@ -1255,8 +1273,8 @@ async function runBatchDirImages(onlyDirImages) {
     return
   }
 
-  // ── 3. 加载背景图池 ──────────────────────────────────────────────
-  await ensureBgImagePool()
+  // ── 3. 加载背景图池（仅开启背景图时加载）──────────────────────
+  if (useBgImage) await ensureBgImagePool()
 
   // ── 4. 启动 Web Worker 进行图片生成（切换窗口后仍持续运行）─────
   dirBatchLogs.value.push({ text: '后台生成线程已启动，可自由切换窗口 ✓', type: 'info' })
@@ -1304,7 +1322,8 @@ async function runBatchDirImages(onlyDirImages) {
       type: 'start',
       token: getToken(),
       apiBase: import.meta.env.VITE_API_BASE || '',
-      bgPool: _bgImagePool,
+      bgPool: useBgImage ? _bgImagePool : [],
+      borderColor,
       productDetails,
       onlyDirImages,
       titlePool: TITLE_POOL,
