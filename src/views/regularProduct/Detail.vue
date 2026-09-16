@@ -45,6 +45,8 @@
           </a-descriptions>
         </div>
 
+        <AiContentCenter v-if="id" :product-id="id" :disk-path="product.disk_path" />
+
         <!-- 文件树区域 -->
         <div v-if="showFileBrowser" class="file-browser-section">
           <div class="section-title">
@@ -314,6 +316,7 @@ import { getRegularProductDetail } from '@/api/regularProducts'
 import { request, getToken } from '@/api/request'
 import { rewriteImage, proxyImageForDownload } from '@/api/xhsRewrite'
 import { processImageForDownload, triggerBlobDownload } from '@/utils/imageProcess'
+import AiContentCenter from './components/AiContentCenter.vue'
 
 const API_BASE = import.meta.env.VITE_API_BASE || ''
 
