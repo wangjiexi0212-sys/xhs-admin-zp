@@ -14,7 +14,7 @@
           <LinkOutlined />
           小红书链接
         </div>
-        <div class="card-tab disabled" title="即将开放">
+        <div class="card-tab" :class="{ active: activeTab === 'image' }" @click="activeTab = 'image'">
           <PictureOutlined />
           上传图片
         </div>
@@ -60,6 +60,40 @@
             :maxlength="2000"
             show-count
           />
+        </template>
+
+        <!-- 上传图片生成笔记 -->
+        <template v-else-if="activeTab === 'image'">
+          <div
+            class="local-upload-area"
+            :class="{ uploading: ocrUploading }"
+            @click="!ocrUploading && ocrFileInput?.click()"
+          >
+            <input
+              ref="ocrFileInput"
+              type="file"
+              accept="image/*"
+              multiple
+              style="display:none"
+              @change="handleOcrImageSelect"
+            />
+            <template v-if="ocrUploading">
+              <a-spin size="small" />
+              <span class="local-upload-tip">上传中，请稍候…</span>
+            </template>
+            <template v-else>
+              <UploadOutlined class="local-upload-icon" />
+              <span class="local-upload-tip">点击选择图片（支持多选，最多 9 张）</span>
+              <span class="local-upload-hint">JPG · PNG · WEBP · AI 读取图片文字，生成小红书笔记</span>
+            </template>
+          </div>
+          <!-- 已选图片预览 -->
+          <div v-if="ocrImages.length" class="ocr-img-preview-grid">
+            <div v-for="(img, ii) in ocrImages" :key="ii" class="ocr-img-item">
+              <img :src="img.previewUrl" class="ocr-img-thumb" />
+              <button class="ocr-img-rm" @click.stop="removeOcrImage(ii)">×</button>
+            </div>
+          </div>
         </template>
 
         <!-- 本地上传图片（商品链接 tab） -->
@@ -113,12 +147,13 @@
             :disabled="
               activeTab === 'link'    ? !links.trim() :
               activeTab === 'product' ? (!productUrl.trim() && !productResult) :
+              activeTab === 'image'   ? !ocrImages.length :
               !promptText.trim()
             "
             @click="onRewrite"
           >
             <template #icon><ThunderboltOutlined /></template>
-            {{ activeTab === 'link' ? '一键 AI 改写' : activeTab === 'product' ? '解析商品' : '生成图片' }}
+            {{ activeTab === 'link' ? '一键 AI 改写' : activeTab === 'product' ? '解析商品' : activeTab === 'image' ? '生成笔记' : '生成图片' }}
             <ArrowRightOutlined />
           </a-button>
         </div>
@@ -126,6 +161,7 @@
           <InfoCircleOutlined />
           <template v-if="activeTab === 'link'">支持多链接批量改写 · 每行一条链接 · 最多 10 条</template>
           <template v-else-if="activeTab === 'product'">支持小红书商品页链接 · 自动提取商品标题和主图、详情图</template>
+          <template v-else-if="activeTab === 'image'">上传最多 9 张图片 · AI 识别图片文字 · 自动整理生成小红书笔记（标题 + 正文 ≤500 字）</template>
           <template v-else>根据提示词直接生成图片 · 仅支持全能绘图渠道 · 即梦暂不支持</template>
         </div>
       </div>
@@ -252,6 +288,25 @@
           </a-button>
         </div>
       </template>
+    </div>
+
+    <!-- OCR 生成笔记结果区 -->
+    <div v-if="activeTab === 'image' && ocrResult.visible" class="product-result-card">
+      <div class="product-result-header">
+        <span class="product-result-title" style="font-size:14px;color:#6b7280;font-weight:500">AI 生成笔记</span>
+        <a-button size="small" @click="ocrResult.visible = false"><CloseOutlined /> 关闭</a-button>
+      </div>
+      <div class="ocr-note-result">
+        <div class="ocr-note-label">标题</div>
+        <div class="ocr-note-title">{{ ocrResult.title }}</div>
+        <div class="ocr-note-label" style="margin-top:12px">正文</div>
+        <div class="ocr-note-content">{{ ocrResult.content }}</div>
+        <div class="ocr-note-actions">
+          <a-button size="small" @click="copyOcrNote">
+            <CopyOutlined /> 复制全部
+          </a-button>
+        </div>
+      </div>
     </div>
 
     <!-- 提示词生成图片结果区 -->
@@ -675,7 +730,7 @@ import {
   HighlightOutlined, FormOutlined,
 } from '@ant-design/icons-vue'
 import RewritePromptPanel from './RewritePrompt.vue'
-import { parseXhsLink, rewriteContent, rewriteImage, uploadXhsImageViaWorker, uploadLocalImageToR2, proxyImageForDownload, parseProductLink, xhsImgProxyUrl } from '@/api/xhsRewrite'
+import { parseXhsLink, rewriteContent, rewriteImage, uploadXhsImageViaWorker, uploadLocalImageToR2, proxyImageForDownload, parseProductLink, xhsImgProxyUrl, ocrNote } from '@/api/xhsRewrite'
 import { processImageForDownload, triggerBlobDownload } from '@/utils/imageProcess'
 
 const links = ref('')
@@ -713,6 +768,12 @@ const promptText = ref('')
 const promptImages = ref([])          // [{ url, status, downloading, errMsg }]
 const promptBatchDownloading = ref(false)
 const previewImg = reactive({ visible: false, url: '' })  // 大图预览状态
+
+// ── 上传图片生成笔记 Tab 状态 ──────────────────────────────
+const ocrFileInput = ref(null)
+const ocrUploading = ref(false)
+const ocrImages = ref([])             // [{ previewUrl, r2Url }]
+const ocrResult = reactive({ visible: false, title: '', content: '' })
 
 // 直接改写关闭时，联动重置图片文字二创
 watch(directRewrite, (val) => { if (!val) imgTextRewrite.value = false })
@@ -882,6 +943,26 @@ async function typewrite(step, text, msPerChar = 18) {
 // ─── 主流程 ───────────────────────────────────────────────
 
 async function onRewrite() {
+  // ── 上传图片生成笔记模式 ──────────────────────────────────
+  if (activeTab.value === 'image') {
+    if (!ocrImages.value.length) { message.warning('请先上传图片'); return }
+    submitting.value = true
+    ocrResult.visible = false
+    ocrResult.title = ''
+    ocrResult.content = ''
+    try {
+      const res = await ocrNote({ image_urls: ocrImages.value.map(i => i.r2Url) })
+      ocrResult.title = res.title || ''
+      ocrResult.content = res.content || ''
+      ocrResult.visible = true
+    } catch (e) {
+      message.error(e.message || '生成失败，请检查 LLM 配置是否支持视觉能力')
+    } finally {
+      submitting.value = false
+    }
+    return
+  }
+
   // ── 提示词生图模式 ────────────────────────────────────────
   if (activeTab.value === 'prompt') {
     const text = promptText.value.trim()
@@ -1097,6 +1178,45 @@ function triggerLocalUpload() {
   localFileInput.value?.click()
 }
 
+// ─── 上传图片生成笔记（OCR Tab）─────────────────────────────
+
+async function handleOcrImageSelect(e) {
+  const files = [...(e.target.files ?? [])]
+  e.target.value = ''
+  if (!files.length) return
+  const remaining = 9 - ocrImages.value.length
+  if (remaining <= 0) { message.warning('最多支持 9 张图片'); return }
+  const selected = files.slice(0, remaining)
+  ocrUploading.value = true
+  try {
+    const uploaded = await Promise.all(
+      selected.map(async (file) => {
+        const previewUrl = URL.createObjectURL(file)
+        const res = await uploadLocalImageToR2(file)
+        return { previewUrl, r2Url: res.url }
+      })
+    )
+    ocrImages.value = [...ocrImages.value, ...uploaded]
+  } catch (e) {
+    message.error(e.message || '上传失败，请重试')
+  } finally {
+    ocrUploading.value = false
+  }
+}
+
+function removeOcrImage(idx) {
+  ocrImages.value = ocrImages.value.filter((_, i) => i !== idx)
+}
+
+async function copyOcrNote() {
+  const text = `${ocrResult.title}\n\n${ocrResult.content}`
+  try {
+    await navigator.clipboard.writeText(text)
+    message.success('已复制到剪贴板')
+  } catch {
+    message.error('复制失败，请手动选择文本')
+  }
+}
 async function handleLocalImageUpload(e) {
   const files = [...(e.target.files ?? [])]
   e.target.value = ''   // 允许重复选同一批文件
@@ -1176,7 +1296,45 @@ async function downloadAllProductImgs() {
 // ─── 商品图片 AI 二创 ──────────────────────────────────────
 
 // 图片文字二创专用 prompt（批量 & 单张共用）
-const TEXT_REWRITE_PROMPT = '保持图片整体构图和主体内容不变，对图片中出现的所有覆盖文字进行改写，更换措辞和表达方式，文字风格与原图保持一致，其余内容轻度重绘，风格清新自然，适合小红书发布。'
+const TEXT_REWRITE_PROMPT = `保持图片整体构图和主体内容不变，对图中文字按以下规则识别并分类处理。
+
+【总原则】
+目标：「适度优化 + 少量二创」——在保持原意不变的前提下，允许在措辞和语气上加入少量创意，让表达更自然、更有吸引力
+
+【第一步：识别文字类型，再决定如何处理】
+
+▍打码 / 模糊 / 遮挡文字
+图中已被马赛克、模糊处理或贴图遮挡的部分，原样保持打码效果，绝对不能猜测或补全任何内容
+
+▍资料类文字（原样保留，一字不改）
+判断标准：客观事实的罗列，改了会传递错误信息或失去资料价值
+典型形态：目录大纲、章节列表、文件清单、知识点条目、事件名称、政策法规名称、课程名、机构名、具体数字与数据
+处理方式：完全原样保留，不调整顺序，不替换任何词语
+
+▍文案 / 分享类文字（适度优化 + 少量二创）
+判断标准：博主或作者写的主观表达，带有个人观点、经验总结、引导推荐的口吻
+典型形态：经验分享的正文、建议语、口号标语、笔记标题、推荐语
+
+注意一：【语义方向不能反转，改写前先理解再动笔】
+- 改写前必须完整理解原句表达的事实结论，确保改写后传递的意思与原句一致
+- 含有"不""没有""少""低""高"等否定或程度词时，改写后的事实方向必须与原句完全相同
+- 严禁用意思相反的词替换：如"不高"（占比低）绝不能改成"不小"（占比大），两者意思相反
+- 每句改写完成后默读确认：改写句与原句表达的是同一个事实，才能输出
+
+注意二：【标题分段处理，标识符锁定，描述部分改写】
+标题通常由「标识符」+「描述文案」两部分构成：
+- 「标识符」：学校名、机构名、职位名、考试类型、品牌名、产品名等专有名词，必须原样保留，不能替换、删减或意译，改写后的标题严禁引入原文没有的新话题、人物或职业
+- 「描述文案」：标语、情绪词、引导语等主观表达，换一种自然的说法，或加入一点情绪感、引导感，让表达更有吸引力，但意思不能偏离
+示例：「盐城师范辅导员笔试｜不吹不黑大实话」→「盐城师范辅导员笔试」锁定，「不吹不黑大实话」改写为同意思但表达更有吸引力的新句子
+
+注意三：【正文段落：适度改写，保留全部核心信息】
+- 允许小幅调整语气（加一点口语化、情绪感），改动幅度以「换一种更生动的说法」为度
+- 数字、比例、具体数据等事实信息完全保留，围绕这些数据的叙述可换说法但事实不变
+- 不调换段落之间的顺序，不新增原文没有的信息，不删除任何核心观点
+
+【通用要求】
+- 文字的排版位置、字体风格与原图保持一致
+- 其余画面内容轻度重绘，风格清新自然，适合小红书发布`
 
 /** 单张商品图执行 AI 二创（先代理到 R2，再调 AI 绘图）
  *  imgObj 支持额外属性：
@@ -2347,5 +2505,84 @@ async function onEditGenerate() {
 .single-edit-switch-hint {
   font-size: 12px;
   color: #9ca3af;
+}
+
+/* ─── OCR 图片预览 ───────────────────────────────────────── */
+.ocr-img-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.ocr-img-item {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+  background: #f5f6f7;
+}
+
+.ocr-img-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.ocr-img-rm {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(0,0,0,.5);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.ocr-img-rm:hover { background: rgba(220,38,38,.8); }
+
+/* ─── OCR 笔记结果 ───────────────────────────────────────── */
+.ocr-note-result {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ocr-note-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+}
+
+.ocr-note-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1f2937;
+  line-height: 1.5;
+}
+
+.ocr-note-content {
+  font-size: 14px;
+  color: #374151;
+  line-height: 1.75;
+  white-space: pre-wrap;
+}
+
+.ocr-note-actions {
+  margin-top: 12px;
+  display: flex;
+  gap: 8px;
 }
 </style>
