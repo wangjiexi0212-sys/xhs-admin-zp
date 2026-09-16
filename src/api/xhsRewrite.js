@@ -126,3 +126,10 @@ export async function uploadLocalImageToR2(file) {
   })
 }
 
+/**
+ * 从多张图片 OCR 提取文字并生成一篇小红书笔记（标题 + 正文）。
+ * @param {{ image_urls: string[] }} data 已上传到 R2 的图片公开 URL 列表
+ */
+export const ocrNote = (data) =>
+  request('/api/xhs-rewrite/ocr-note', { method: 'POST', body: withLlm(data) })
+
