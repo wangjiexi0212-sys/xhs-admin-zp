@@ -78,6 +78,7 @@
               </a-form-item>
               <a-form-item label="模板">
                 <a-select v-model:value="editForm.template" style="width: 160px" allow-clear>
+                  <a-select-option value="tag_cards">卡片标签</a-select-option>
                   <a-select-option value="mind_map">思维导图</a-select-option>
                   <a-select-option value="exam_list">必背清单</a-select-option>
                   <a-select-option value="pink_note">考点长图</a-select-option>
@@ -427,62 +428,102 @@ function renderTemplateImageBlob(script) {
 function drawTemplateImage(ctx, script, W, H) {
   const template = script.template || script.page_type || 'minimal'
   const lines = parseContent(script.content_json)
-  ctx.fillStyle = template === 'pink_note' || script.page_type === 'note_long' ? '#fff7fb' : '#ffffff'
+  ctx.fillStyle = '#f8fafc'
   ctx.fillRect(0, 0, W, H)
 
-  if (template === 'pink_note' || script.page_type === 'note_long') {
-    ctx.strokeStyle = '#e7b5cc'
-    ctx.lineWidth = 22
-    roundRect(ctx, 36, 36, W - 72, H - 72, 28)
-    ctx.stroke()
-  }
+  const bgGradient = ctx.createLinearGradient(0, 0, 0, H)
+  bgGradient.addColorStop(0, '#ffffff')
+  bgGradient.addColorStop(1, '#f1f5f9')
+  ctx.fillStyle = bgGradient
+  ctx.fillRect(0, 0, W, H)
 
-  ctx.fillStyle = template === 'pink_note' || script.page_type === 'note_long' ? '#ec4899' : '#b91c1c'
+  ctx.fillStyle = '#0f172a'
   ctx.font = 'bold 54px sans-serif'
   drawWrappedText(ctx, script.title || '考点笔记', 70, 92, W - 140, 64, 2)
 
-  if (script.page_type === 'mind_map') {
-    drawMindMap(ctx, lines, W, H)
-  } else {
-    drawListTemplate(ctx, lines, W, H)
-  }
+  drawTagCardsTemplate(ctx, script, lines, W, H)
 }
 
-function drawMindMap(ctx, lines, W, H) {
-  const centerX = W / 2 - 90
-  const centerY = 250
-  ctx.fillStyle = '#f6f4ff'
-  ctx.strokeStyle = '#c8c2ea'
+function drawTagCardsTemplate(ctx, script, lines, W, H) {
+  const groups = groupMindMapLines(lines)
+  const colors = [
+    { bg: '#fff7ed', border: '#fed7aa', title: '#c2410c', chip: '#ffedd5' },
+    { bg: '#eff6ff', border: '#bfdbfe', title: '#1d4ed8', chip: '#dbeafe' },
+    { bg: '#f0fdf4', border: '#bbf7d0', title: '#15803d', chip: '#dcfce7' },
+    { bg: '#fdf2f8', border: '#fbcfe8', title: '#be185d', chip: '#fce7f3' },
+    { bg: '#f5f3ff', border: '#ddd6fe', title: '#6d28d9', chip: '#ede9fe' },
+  ]
+  const startY = 228
+  const gap = 22
+  const groupCount = Math.min(groups.length, 6)
+  const cols = 2
+  const rows = Math.ceil(groupCount / cols)
+  const cardW = 370
+  const cardH = Math.min(260, Math.floor((H - startY - 80 - (rows - 1) * gap) / rows))
+  const totalW = cols * cardW + (cols - 1) * gap
+  const x0 = (W - totalW) / 2
+
+  ctx.fillStyle = '#e0f2fe'
+  roundRect(ctx, 70, 174, W - 140, 42, 21)
+  ctx.fill()
+  ctx.fillStyle = '#075985'
+  ctx.font = 'bold 24px sans-serif'
+  ctx.fillText(script.page_type === 'mind_map' ? '按模块抓重点，复习更快' : '高频考点卡片速记', 292, 202)
+
+  groups.slice(0, 6).forEach((group, i) => {
+    const col = i % cols
+    const row = Math.floor(i / cols)
+    const x = x0 + col * (cardW + gap)
+    const y = startY + row * (cardH + gap)
+    const theme = colors[i % colors.length]
+    drawTagCardGroup(ctx, group, x, y, cardW, cardH, theme)
+  })
+}
+
+function groupMindMapLines(lines) {
+  const map = new Map()
+  for (const raw of lines.slice(0, 16)) {
+    const text = String(raw || '').trim()
+    if (!text) continue
+    const parts = text.split(/\s*(?:--|—|：|:)\s*/)
+    const key = (parts[0] || '核心').trim()
+    const val = parts.length > 1 ? parts.slice(1).join('：').trim() : text
+    if (!map.has(key)) map.set(key, [])
+    map.get(key).push(val)
+  }
+  const groups = Array.from(map.entries()).map(([title, items]) => ({ title, items: items.slice(0, 6) }))
+  return groups.length ? groups : [{ title: '核心框架', items: lines.slice(0, 8) }]
+}
+
+function drawTagCardGroup(ctx, group, x, y, w, h, theme) {
+  ctx.fillStyle = theme.bg
+  ctx.strokeStyle = theme.border
   ctx.lineWidth = 3
-  roundRect(ctx, centerX, centerY, 180, 72, 10)
+  roundRect(ctx, x, y, w, h, 18)
   ctx.fill()
   ctx.stroke()
-  ctx.fillStyle = '#111827'
-  ctx.font = 'bold 26px sans-serif'
-  ctx.fillText('核心框架', centerX + 38, centerY + 46)
 
-  const items = lines.slice(0, 10)
-  const left = items.filter((_, i) => i % 2 === 0)
-  const right = items.filter((_, i) => i % 2 === 1)
-  drawMindMapSide(ctx, left, 80, 380, centerX, centerY + 36, 1)
-  drawMindMapSide(ctx, right, W - 380, 380, centerX + 180, centerY + 36, -1)
-}
+  ctx.fillStyle = '#ffffff'
+  roundRect(ctx, x + 18, y + 18, Math.min(w - 36, 190), 42, 21)
+  ctx.fill()
+  ctx.fillStyle = theme.title
+  ctx.font = 'bold 27px sans-serif'
+  drawWrappedText(ctx, group.title, x + 34, y + 18, Math.min(w - 68, 170), 34, 1)
 
-function drawMindMapSide(ctx, items, x, y, fromX, fromY, dir) {
-  items.forEach((line, i) => {
-    const boxY = y + i * 130
-    ctx.strokeStyle = '#c8c2ea'
-    ctx.beginPath()
-    ctx.moveTo(fromX, fromY)
-    ctx.lineTo(x + (dir > 0 ? 0 : 320), boxY + 36)
-    ctx.stroke()
-    ctx.fillStyle = '#f7f5ff'
-    roundRect(ctx, x, boxY, 320, 76, 8)
+  let itemY = y + 82
+  ctx.font = '22px sans-serif'
+  group.items.forEach((item, idx) => {
+    if (itemY > y + h - 42) return
+    ctx.fillStyle = theme.chip
+    roundRect(ctx, x + 22, itemY, 42, 34, 17)
     ctx.fill()
-    ctx.stroke()
+    ctx.fillStyle = theme.title
+    ctx.font = 'bold 18px sans-serif'
+    ctx.fillText(`${idx + 1}`, x + 37, itemY + 23)
     ctx.fillStyle = '#1f2937'
-    ctx.font = '22px sans-serif'
-    drawWrappedText(ctx, line, x + 18, boxY + 24, 284, 30, 2)
+    ctx.font = '21px sans-serif'
+    drawWrappedText(ctx, item, x + 76, itemY - 1, w - 104, 28, 2)
+    itemY += 54
   })
 }
 
@@ -710,6 +751,9 @@ async function onDrop() {
   color: #1f2937;
   font-size: 10px;
   line-height: 1.45;
+  padding: 5px 6px;
+  border-radius: 6px;
+  background: #ffffff;
 }
 
 .template-preview-index {
@@ -719,20 +763,13 @@ async function onDrop() {
 }
 
 .template-mind_map {
-  background: #ffffff;
+  background: #f8fafc;
 }
 
 .template-mind_map .template-preview-lines {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 6px;
-}
-
-.template-mind_map .template-preview-line {
-  padding: 5px;
-  border: 1px solid #d8d4f2;
-  border-radius: 4px;
-  background: #f6f4ff;
 }
 
 .template-exam_list {
@@ -744,14 +781,16 @@ async function onDrop() {
 }
 
 .template-pink_note,
-.template-note_long {
-  border: 8px solid #e7b5cc;
-  background: #fff7fb;
+.template-note_long,
+.template-tag_cards {
+  border: 1px solid #e5e7eb;
+  background: #f8fafc;
 }
 
 .template-pink_note .template-preview-title,
-.template-note_long .template-preview-title {
-  color: #ec4899;
+.template-note_long .template-preview-title,
+.template-tag_cards .template-preview-title {
+  color: #0f172a;
 }
 
 .script-edit-form {

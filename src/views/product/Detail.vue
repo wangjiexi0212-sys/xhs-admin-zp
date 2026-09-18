@@ -9,10 +9,22 @@
       </a-button>
       <span class="page-title">商品详情</span>
       <a-space>
-        <a-button @click="openExamCard">
-          <template #icon><PictureOutlined /></template>
-          生图
-        </a-button>
+        <a-dropdown>
+          <a-button>
+            <template #icon><PictureOutlined /></template>
+            生图 <DownOutlined style="font-size:11px;margin-left:3px" />
+          </a-button>
+          <template #overlay>
+            <a-menu @click="onImageMenuClick">
+              <a-menu-item key="cover">🖼️ 主封面图</a-menu-item>
+              <a-menu-divider />
+              <a-menu-item key="exam_info">📋 考情</a-menu-item>
+              <a-menu-item key="sprint">🚀 冲刺</a-menu-item>
+              <a-menu-item key="advice">💡 备考建议</a-menu-item>
+              <a-menu-item key="intensity">💪 强度</a-menu-item>
+            </a-menu>
+          </template>
+        </a-dropdown>
         <a-button type="primary" ghost @click="openGenerate">
           <template #icon>
             <FileTextOutlined />
@@ -1060,6 +1072,13 @@
       <!-- idle 初始 -->
       <div v-else style="color:#999;margin-top:60px;font-size:14px">准备就绪，正在启动…</div>
     </a-drawer>
+
+    <!-- HTML图片生成（考情 / 冲刺 / 备考建议 / 强度） -->
+    <HtmlCardImages
+      v-model:visible="htmlImageVisible"
+      :data="data"
+      :init-type="htmlImageInitType"
+    />
   </div>
 </template>
 
@@ -1067,7 +1086,8 @@
 import { ref, reactive, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
-import { LeftOutlined, EditOutlined, FileTextOutlined, DownloadOutlined, BulbOutlined, FileWordOutlined, SyncOutlined, CheckCircleOutlined, CloseCircleOutlined, ClockCircleOutlined, FormOutlined, StopOutlined, CopyOutlined, PictureOutlined } from '@ant-design/icons-vue'
+import { LeftOutlined, EditOutlined, FileTextOutlined, DownloadOutlined, BulbOutlined, FileWordOutlined, SyncOutlined, CheckCircleOutlined, CloseCircleOutlined, ClockCircleOutlined, FormOutlined, StopOutlined, CopyOutlined, PictureOutlined, DownOutlined } from '@ant-design/icons-vue'
+import HtmlCardImages from './components/HtmlCardImages.vue'
 import { getProductDetail } from '@/api/products'
 import { getContentTemplateList } from '@/api/contentTemplates'
 import { getPromptList } from '@/api/prompts'
@@ -2307,6 +2327,19 @@ async function generateBodyFromTemplate(tpl) {
     message.error(e.message || '生成失败')
   } finally {
     bodyGenerating.value = false
+  }
+}
+
+// ─── HTML图片生成（考情 / 冲刺 / 备考建议 / 强度） ────────────
+const htmlImageVisible = ref(false)
+const htmlImageInitType = ref('exam_info')
+
+function onImageMenuClick({ key }) {
+  if (key === 'cover') {
+    openExamCard()
+  } else {
+    htmlImageInitType.value = key
+    htmlImageVisible.value = true
   }
 }
 

@@ -61,6 +61,14 @@
             >
               废弃
             </a-button>
+            <a-popconfirm
+              title="确认删除此选题？"
+              ok-text="删除"
+              cancel-text="取消"
+              @confirm="removeTopic(topic)"
+            >
+              <a-button size="small" danger>删除</a-button>
+            </a-popconfirm>
           </div>
         </div>
       </div>
@@ -88,7 +96,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
-import { generateAiTopics, getAiTopics, updateAiTopic } from '@/api/aiContentCenter'
+import { deleteAiTopic, generateAiTopics, getAiTopics, updateAiTopic } from '@/api/aiContentCenter'
 import { useLlmStore } from '@/stores/llm'
 
 const props = defineProps({
@@ -185,6 +193,16 @@ async function discard(topic) {
     topic.status = 'discarded'
   } catch (e) {
     message.error(e.message || '操作失败')
+  }
+}
+
+async function removeTopic(topic) {
+  try {
+    await deleteAiTopic(topic.id)
+    topics.value = topics.value.filter(item => item.id !== topic.id)
+    message.success('选题已删除')
+  } catch (e) {
+    message.error(e.message || '删除失败')
   }
 }
 

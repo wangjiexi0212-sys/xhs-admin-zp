@@ -101,6 +101,9 @@ export const getAiNote = (noteId) =>
 export const updateAiNote = (noteId, body) =>
   request(`/api/ai-content/notes/${ensureId(noteId, 'note_id')}`, { method: 'PUT', body })
 
+export const deleteAiNote = (noteId) =>
+  request(`/api/ai-content/notes/${ensureId(noteId, 'note_id')}`, { method: 'DELETE' })
+
 // Phase 4 — 图片脚本
 export const generateImageScripts = (noteId, body) =>
   request(`/api/ai-content/notes/${ensureId(noteId, 'note_id')}/image-scripts/generate`, { method: 'POST', body })

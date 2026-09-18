@@ -44,6 +44,14 @@
               </a-select>
               <a-button size="small" @click="openDetail(note)">详情</a-button>
               <a-button size="small" @click="openScripts(note)">图片脚本</a-button>
+              <a-popconfirm
+                title="确认删除此内容资产？关联图片脚本和生成图也会删除。"
+                ok-text="删除"
+                cancel-text="取消"
+                @confirm="removeNote(note)"
+              >
+                <a-button size="small" danger>删除</a-button>
+              </a-popconfirm>
             </a-space>
           </template>
 
@@ -129,7 +137,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
-import { getAiNotes, updateAiNote, getGeneratedImages } from '@/api/aiContentCenter'
+import { deleteAiNote, getAiNotes, updateAiNote, getGeneratedImages } from '@/api/aiContentCenter'
 
 const props = defineProps({
   productId: { type: [Number, String], required: true },
@@ -200,6 +208,24 @@ async function changeStatus(note, val) {
     note.status = val
   } catch (e) {
     message.error(e.message || '更新失败')
+  }
+}
+
+async function removeNote(note) {
+  try {
+    await deleteAiNote(note.id)
+    notes.value = notes.value.filter(item => item.id !== note.id)
+    const { [note.id]: _oldImages, ...nextImageMap } = imageMap.value
+    const { [note.id]: _oldCount, ...nextCountMap } = imageCountMap.value
+    imageMap.value = nextImageMap
+    imageCountMap.value = nextCountMap
+    if (detailNote.value?.id === note.id) {
+      detailOpen.value = false
+      detailNote.value = null
+    }
+    message.success('内容资产已删除')
+  } catch (e) {
+    message.error(e.message || '删除失败')
   }
 }
 
