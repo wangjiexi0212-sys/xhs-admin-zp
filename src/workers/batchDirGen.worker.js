@@ -454,6 +454,16 @@ async function renderCardImage(text, scheme) {
   const BAR_W = 40 * SCALE
   ctx.fillStyle = scheme.accent
   ctx.beginPath(); ctx.roundRect(PAD_L, H - PAD_B - BAR_H, BAR_W, BAR_H, 2 * SCALE); ctx.fill()
+  // ─── 底部固定文字：左滑查看更多备考资料（重点样式，同 xxx笔试 高亮）──
+  const BTM_FONT_SIZE = 22 * SCALE
+  const BTM_TEXT = '左滑查看更多备考资料'
+  ctx.font = `bold ${BTM_FONT_SIZE}px "PingFang SC", "Helvetica Neue", sans-serif`
+  ctx.textBaseline = 'top'
+  const btmTextW = ctx.measureText(BTM_TEXT).width
+  const btmX = W - PAD_R - btmTextW
+  const btmY = H - 160 - BTM_FONT_SIZE
+  ctx.fillStyle = HL_COLOR; ctx.fillRect(btmX, btmY + BTM_FONT_SIZE * 0.55, btmTextW, BTM_FONT_SIZE * 0.47)
+  ctx.fillStyle = scheme.text; ctx.fillText(BTM_TEXT, btmX, btmY)
   return offscreenToDataUrl(canvas)
 }
 

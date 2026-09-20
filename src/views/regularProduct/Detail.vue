@@ -45,7 +45,7 @@
           </a-descriptions>
         </div>
 
-        <AiContentCenter v-if="id" :product-id="id" :disk-path="product.disk_path" />
+        <!-- <AiContentCenter v-if="id" :product-id="id" :disk-path="product.disk_path" /> -->
 
         <!-- 文件树区域 -->
         <div v-if="showFileBrowser" class="file-browser-section">

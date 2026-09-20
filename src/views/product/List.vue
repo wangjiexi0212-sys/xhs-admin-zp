@@ -38,10 +38,7 @@
 
     <div v-if="selectedRowKeys.length" class="selection-bar">
       已选 {{ selectedRowKeys.length }} 条
-      <a-button type="primary" size="small" style="margin-left: 8px" :loading="batchGenerating" @click="onBatchGenerateNoteImages">
-        批量生成笔记图
-      </a-button>
-      <a-button size="small" style="margin-left: 8px" :loading="dirBatchGenerating" @click="onBatchGenerateDirImages">
+<a-button size="small" style="margin-left: 8px" :loading="dirBatchGenerating" @click="onBatchGenerateDirImages">
         批量生成目录图
       </a-button>
       <a-button size="small" danger style="margin-left: 8px" :loading="batchDeleting" @click="onBatchDelete">
@@ -81,6 +78,14 @@
         <a-button size="small" type="text" style="font-size:12px;color:#999;padding:0 4px" @click="dirBatchBorderColor = '#F9863B'">重置</a-button>
       </div>
       <a-divider style="margin: 12px 0" />
+      <template v-if="!dirBatchOnlyDir">
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px">
+          <span style="font-size: 13px; font-weight: 500; color: #555">生成正文</span>
+          <a-switch v-model:checked="dirBatchGenBody" size="small" />
+          <span style="font-size: 12px; color: #999">{{ dirBatchGenBody ? '开启，AI生成正文并写入Word' : '关闭，Word仅含标题和标签' }}</span>
+        </div>
+        <a-divider style="margin: 12px 0" />
+      </template>
       <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px">
         <span style="font-size: 13px; font-weight: 500; color: #555">飞书多维表格</span>
         <a-switch v-model:checked="feishuEnabled" size="small" />
@@ -423,7 +428,8 @@ async function renderCompositeImage(files, title, borderColor, bgColor, bgOpacit
   const ICON_SIZE = 30
   const ROW_H = 52
   const TITLE_H = 88
-  const H = BORDER + TITLE_H + ROW_H * files.length + PADDING + BORDER
+  const BOTTOM_BAR_H = 44
+  const H = BORDER + TITLE_H + ROW_H * files.length + PADDING + BORDER + BOTTOM_BAR_H
   const canvas = document.createElement('canvas')
   canvas.width = W * DPR
   canvas.height = H * DPR
@@ -483,6 +489,15 @@ async function renderCompositeImage(files, title, borderColor, bgColor, bgOpacit
       ctx.stroke()
     }
   })
+  // ─── 底部重点文字条 ───────────────────────────────────────
+  const barY = H - BOTTOM_BAR_H
+  ctx.fillStyle = '#FF0000'
+  ctx.font = `bold 34px "PingFang SC", "Microsoft YaHei", sans-serif`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText('左滑查看更多备考资料', W / 2, barY + BOTTOM_BAR_H / 2)
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'alphabetic'
   return canvas.toDataURL('image/png')
 }
 
@@ -573,6 +588,16 @@ async function buildHistoryComposite(pdfDataUrl, files, borderColor, title, bgCo
       ctx.stroke()
     }
   })
+  // ─── 底部重点文字条 ───────────────────────────────────────
+  const BOTTOM_BAR_H = 90
+  const barY = CANVAS_H - BOTTOM_BAR_H
+  ctx.fillStyle = '#FF0000'
+  ctx.font = `bold ${Math.round(TITLE_H * 0.5)}px "PingFang SC", "Microsoft YaHei", sans-serif`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText('左滑查看更多备考资料', CANVAS_W / 2, barY + BOTTOM_BAR_H / 2)
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'alphabetic'
   return canvas.toDataURL('image/png')
 }
 
@@ -1057,7 +1082,7 @@ function buildNoteDocx(title, body, tags) {
       properties: {},
       children: [
         new Paragraph({ heading: HeadingLevel.HEADING_1, children: textToRuns(title || '（无标题）') }),
-        ...String(body || '（无正文）').split('\n').map(line => new Paragraph({ children: textToRuns(line) })),
+        ...(body ? String(body).split('\n').map(line => new Paragraph({ children: textToRuns(line) })) : []),
         new Paragraph({ text: '' }),
         new Paragraph({
           children: textToRuns(Array.isArray(tags) && tags.length ? tags.join(' ') : '（无标签）', { color: 'FF6699' }),
@@ -1205,6 +1230,24 @@ function renderCardBasicImage(text, scheme) {
   ctx.roundRect(PAD_L, H - PAD_B - BAR_H, BAR_W, BAR_H, 2 * SCALE)
   ctx.fill()
 
+  // ─── 底部固定文字：左滑查看更多备考资料（重点样式，同 xxx笔试 高亮）──
+  const BTM_FONT_SIZE = 22 * SCALE  // 66px，略小于正文保持层次
+  const BTM_TEXT = '左滑查看更多备考资料'
+  ctx.font = `bold ${BTM_FONT_SIZE}px "PingFang SC", "Helvetica Neue", sans-serif`
+  ctx.textBaseline = 'top'
+  ctx.textAlign = 'left'
+  const btmTextW = ctx.measureText(BTM_TEXT).width
+  const btmX = W - PAD_R - btmTextW                    // 右对齐
+  const btmY = H - 160 - BTM_FONT_SIZE                  // 文字底边距画布底部 160px
+  // 黄色荧光高亮底色（与正文高亮一致：底部 45% 区域）
+  ctx.fillStyle = HL_COLOR
+  ctx.fillRect(btmX, btmY + BTM_FONT_SIZE * 0.55, btmTextW, BTM_FONT_SIZE * 0.47)
+  // 文字本体
+  ctx.fillStyle = scheme.text
+  ctx.fillText(BTM_TEXT, btmX, btmY)
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'top'
+
   return canvas.toDataURL('image/png')
 }
 
@@ -1213,6 +1256,7 @@ const dirBatchSettingsVisible = ref(false)  // 设置弹窗
 const dirBatchOnlyDir = ref(false)          // 只生成目录图模式
 const dirBatchUseBgImage = ref(false)       // 是否使用背景图（默认关闭 = 边框+颜色模式）
 const dirBatchBorderColor = ref('#F9863B')  // 边框颜色（背景图关闭时生效）
+const dirBatchGenBody = ref(true)           // 是否生成正文（默认开启）
 const feishuEnabled = ref(false)            // 飞书文档开关
 const dirBatchVisible = ref(false)
 const dirBatchGenerating = ref(false)
@@ -1230,10 +1274,10 @@ async function onBatchGenerateDirImages() {
 
 function onConfirmBatchDirSettings() {
   dirBatchSettingsVisible.value = false
-  runBatchDirImages(dirBatchOnlyDir.value, dirBatchUseBgImage.value, dirBatchBorderColor.value)
+  runBatchDirImages(dirBatchOnlyDir.value, dirBatchUseBgImage.value, dirBatchBorderColor.value, dirBatchGenBody.value)
 }
 
-async function runBatchDirImages(onlyDirImages, useBgImage = false, borderColor = '#F9863B') {
+async function runBatchDirImages(onlyDirImages, useBgImage = false, borderColor = '#F9863B', genBody = true) {
   if (!selectedRowKeys.value.length) {
     message.warning('请先勾选商品')
     return
@@ -1343,7 +1387,18 @@ async function runBatchDirImages(onlyDirImages, useBgImage = false, borderColor 
     dirBatchLogs.value.push({ text: `${company} - 生成笔记内容中...`, type: 'info' })
     let noteResult = null
     try {
-      const { title, body } = await generateNoteForProduct(detail)
+      let title, body
+      if (genBody) {
+        // 完整生成：标题（本地随机）+ 正文（LLM）
+        const res = await generateNoteForProduct(detail)
+        title = res.title
+        body = res.body
+      } else {
+        // 仅生成标题，跳过正文 LLM 调用
+        const randomTitle = TITLE_POOL[Math.floor(Math.random() * TITLE_POOL.length)]
+        title = `${detail.company_name || ''}笔试，${randomTitle}`
+        body = null
+      }
       noteResult = { title, body }
       const doc = buildNoteDocx(title, body, detail.xhs_tags)
       const docBlob = await Packer.toBlob(doc)

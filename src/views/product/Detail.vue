@@ -665,8 +665,14 @@
           <div v-if="bodyGenerating" class="field-placeholder field-placeholder--lg loading-box">
             <a-spin /> <span style="margin-left: 8px; color: #999">正在生成正文...</span>
           </div>
-          <a-textarea v-else-if="generatedBody" v-model:value="generatedBody" placeholder="生成的正文"
-            :auto-size="{ minRows: 10, maxRows: 24 }" />
+          <template v-else-if="generatedBody">
+            <a-textarea v-model:value="generatedBody" placeholder="生成的正文"
+              :auto-size="{ minRows: 10, maxRows: 24 }" />
+            <div style="text-align: right; font-size: 12px; margin-top: 3px;"
+              :style="{ color: generatedBody.length > 300 ? '#ff4d4f' : '#999' }">
+              {{ generatedBody.length }}/300 字
+            </div>
+          </template>
           <div v-else class="field-placeholder field-placeholder--lg"></div>
         </a-form-item>
         <a-form-item>
@@ -2239,6 +2245,7 @@ async function generateBody() {
       '',
       '只输出正文本身，不要重复标题，不要任何额外说明。',
       '注意：正文中不得出现任何诱导性内容或引流内容（如"关注我"、"添加微信"、"点击链接"、"私信我"、"加群"等），只需聚焦内容本身。',
+      '【硬性字数要求】正文总字数必须严格控制在300字以内，内容简洁精炼，宁可删减也不超字数，超过300字即视为不合格。',
     ].join('\n')
 
     const res = await chatLlm({
@@ -2251,7 +2258,7 @@ async function generateBody() {
         { role: 'system', content: promptItem.content },
         { role: 'user', content: userContent },
       ],
-      max_tokens: 3000,
+      max_tokens: 800,
       temperature: 0.8,
     })
     const out = (res.content || '').trim()
@@ -2302,6 +2309,7 @@ async function generateBodyFromTemplate(tpl) {
       '',
       '要求：只输出正文，不重复标题，不含任何引流内容（关注我、加微信、私信等），数字和表情符号的使用风格与模版保持一致。',
       '禁止使用网络口头禅或夸张感叹句，例如"谁懂啊家人们"、"后台被问麻了"、"救命"、"真的绷不住"等，语气保持实用、亲切即可。',
+      '【硬性字数要求】正文总字数必须严格控制在300字以内，内容简洁精炼，宁可删减也不超字数，超过300字即视为不合格。',
     ].join('\n')
     const res = await chatLlm({
       provider: active.provider,
@@ -2313,7 +2321,7 @@ async function generateBodyFromTemplate(tpl) {
         { role: 'system', content: promptItem.content },
         { role: 'user', content: userContent },
       ],
-      max_tokens: 3000,
+      max_tokens: 800,
       temperature: 0.8,
     })
     const out = (res.content || '').trim()
