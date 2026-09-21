@@ -66,6 +66,18 @@
           <a-menu-item key="/system/baidu">百度网盘</a-menu-item>
           <a-menu-item key="/system/feishu">飞书配置</a-menu-item>
         </a-sub-menu>
+        <a-sub-menu key="passly">
+          <template #icon>
+            <ReadOutlined />
+          </template>
+          <template #title>上岸刷 PASSLY</template>
+          <a-menu-item key="/passly/dashboard">数据概览</a-menu-item>
+          <a-menu-item key="/passly/users">用户管理</a-menu-item>
+          <a-menu-item key="/passly/login-codes">登录码管理</a-menu-item>
+          <a-menu-item key="/passly/categories">资料分类</a-menu-item>
+          <a-menu-item key="/passly/resources">资料库管理</a-menu-item>
+          <a-menu-item key="/passly/settings">PASSLY设置</a-menu-item>
+        </a-sub-menu>
       </a-menu>
     </a-layout-sider>
 
@@ -118,6 +130,7 @@ import {
   MenuUnfoldOutlined,
   LogoutOutlined,
   RobotOutlined,
+  ReadOutlined,
 } from '@ant-design/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { useLlmStore } from '@/stores/llm'
@@ -129,7 +142,7 @@ const auth = useAuthStore()
 const collapsed = ref(false)
 const selectedKeys = computed(() => [route.path])
 
-const subMenuKeys = ['product', 'user', 'note', 'ai', 'system']
+const subMenuKeys = ['product', 'user', 'note', 'ai', 'system', 'passly']
 const openKeys = ref(getDefaultOpenKeys())
 
 function getDefaultOpenKeys() {
@@ -139,6 +152,7 @@ function getDefaultOpenKeys() {
   if (route.path.startsWith('/note')) return ['note']
   if (route.path.startsWith('/ai')) return ['ai']
   if (route.path.startsWith('/system')) return ['system']
+  if (route.path.startsWith('/passly')) return ['passly']
   return []
 }
 
@@ -154,6 +168,8 @@ watch(() => route.path, (path) => {
     openKeys.value = ['ai']
   } else if (path.startsWith('/system') && !openKeys.value.includes('system')) {
     openKeys.value = ['system']
+  } else if (path.startsWith('/passly') && !openKeys.value.includes('passly')) {
+    openKeys.value = ['passly']
   }
 })
 

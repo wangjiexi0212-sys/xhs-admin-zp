@@ -156,6 +156,36 @@ const router = createRouter({
           component: () => import('../views/system/FeishuConfig.vue'),
         },
         {
+          path: 'passly/dashboard',
+          name: 'passly-dashboard',
+          component: () => import('../views/passly/Dashboard.vue'),
+        },
+        {
+          path: 'passly/users',
+          name: 'passly-users',
+          component: () => import('../views/passly/Users.vue'),
+        },
+        {
+          path: 'passly/login-codes',
+          name: 'passly-login-codes',
+          component: () => import('../views/passly/LoginCodes.vue'),
+        },
+        {
+          path: 'passly/categories',
+          name: 'passly-categories',
+          component: () => import('../views/passly/Categories.vue'),
+        },
+        {
+          path: 'passly/resources',
+          name: 'passly-resources',
+          component: () => import('../views/passly/Resources.vue'),
+        },
+        {
+          path: 'passly/settings',
+          name: 'passly-settings',
+          component: () => import('../views/passly/Settings.vue'),
+        },
+        {
           path: 'ai/rewrite',
           name: 'ai-rewrite',
           component: () => import('../views/ai/Rewrite.vue'),
