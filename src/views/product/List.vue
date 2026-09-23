@@ -75,7 +75,7 @@
           <span style="font-size:12px; color:#555">{{ dirBatchBorderColor }}</span>
           <input type="color" v-model="dirBatchBorderColor" style="width:0;height:0;opacity:0;position:absolute;pointer-events:none" />
         </label>
-        <a-button size="small" type="text" style="font-size:12px;color:#999;padding:0 4px" @click="dirBatchBorderColor = '#F9863B'">重置</a-button>
+        <a-button size="small" type="text" style="font-size:12px;color:#999;padding:0 4px" @click="randomizeDirBatchBorderColor">随机换色</a-button>
       </div>
       <a-divider style="margin: 12px 0" />
       <template v-if="!dirBatchOnlyDir">
@@ -1096,7 +1096,7 @@ function buildNoteDocx(title, body, tags) {
   })
 }
 
-// --- 卡片图（CardBasic 风格，与 Detail.vue CardEditor 保持一致）---
+// --- 卡片图风格池（与生成笔记抽屉 CardEditor 保持一致）---
 
 const CARD_BASIC_SCHEMES = [
   { bg: '#d4f7d4', text: '#2d4a2d', accent: '#52c07a' },
@@ -1104,6 +1104,74 @@ const CARD_BASIC_SCHEMES = [
   { bg: '#dde8ff', text: '#1a2f6e', accent: '#4472ca' },
   { bg: '#ede0ff', text: '#3d1a6e', accent: '#8b5cf6' },
   { bg: '#fce8e8', text: '#6e1a1a', accent: '#e53e3e' },
+]
+
+const CARD_STYLE_SCHEMES = [
+  { id: 'basic', name: '基础', schemes: CARD_BASIC_SCHEMES },
+  {
+    id: 'border',
+    name: '边框',
+    schemes: [
+      { border: '#ff7043', bg: '#ffffff', text: '#1a1a1a' },
+      { border: '#4caf50', bg: '#f6fbf6', text: '#1a1a1a' },
+      { border: '#2196f3', bg: '#f4f8ff', text: '#1a1a1a' },
+      { border: '#9c27b0', bg: '#fcf5ff', text: '#1a1a1a' },
+      { border: '#ff9800', bg: '#fffaf2', text: '#1a1a1a' },
+    ],
+  },
+  {
+    id: 'minimal',
+    name: '简约',
+    schemes: [
+      { bg: '#f8f9fa', text: '#1a1a1a', accent: '#1677ff' },
+      { bg: '#ffffff', text: '#1a1a1a', accent: '#52c41a' },
+      { bg: '#f8f9fa', text: '#1a1a1a', accent: '#eb2f96' },
+      { bg: '#f0f5ff', text: '#1a1a1a', accent: '#722ed1' },
+      { bg: '#fff9e6', text: '#1a1a1a', accent: '#fa8c16' },
+    ],
+  },
+  {
+    id: 'note',
+    name: '便签',
+    schemes: [
+      { bg: '#fffde7', tape: 'rgba(255,255,255,0.7)', text: '#3a3000' },
+      { bg: '#e8f5e9', tape: 'rgba(255,255,255,0.7)', text: '#1b5e20' },
+      { bg: '#e3f2fd', tape: 'rgba(255,255,255,0.7)', text: '#0d47a1' },
+      { bg: '#fce4ec', tape: 'rgba(255,255,255,0.7)', text: '#880e4f' },
+      { bg: '#f3e5f5', tape: 'rgba(255,255,255,0.7)', text: '#4a148c' },
+    ],
+  },
+  {
+    id: 'geometric',
+    name: '几何',
+    schemes: [
+      { bg: '#42b983', text: '#ffffff', quoteColor: 'rgba(255,255,255,0.18)' },
+      { bg: '#ff7043', text: '#ffffff', quoteColor: 'rgba(255,255,255,0.18)' },
+      { bg: '#1e88e5', text: '#ffffff', quoteColor: 'rgba(255,255,255,0.18)' },
+      { bg: '#8b5cf6', text: '#ffffff', quoteColor: 'rgba(255,255,255,0.18)' },
+      { bg: '#1a1a2e', text: '#ffffff', quoteColor: 'rgba(255,255,255,0.12)' },
+    ],
+  },
+  {
+    id: 'diffuse',
+    name: '弥散',
+    schemes: [
+      { bg: '#dff4e3', text: '#1b5e20', circle: 'rgba(200,230,201,0.72)' },
+      { bg: '#ddebfb', text: '#0d47a1', circle: 'rgba(187,222,251,0.72)' },
+      { bg: '#f8d6e1', text: '#880e4f', circle: 'rgba(248,187,208,0.72)' },
+      { bg: '#ead9f0', text: '#4a148c', circle: 'rgba(225,190,231,0.72)' },
+      { bg: '#ffe8c6', text: '#e65100', circle: 'rgba(255,224,178,0.72)' },
+    ],
+  },
+  {
+    id: 'kraft',
+    name: '手账纸质',
+    schemes: [
+      { bg: '#f4ead6', text: '#2a2723', ribbon: '#e89aa6', accent: '#c98a6b' },
+      { bg: '#efe6cf', text: '#23303a', ribbon: '#7fb3d5', accent: '#3a8fb7' },
+      { bg: '#f6e7d8', text: '#3a2418', ribbon: '#c98a6b', accent: '#a04a3a' },
+    ],
+  },
 ]
 
 function wrapTextLines(ctx, text, maxWidth) {
@@ -1268,11 +1336,24 @@ const dirBatchLogs = ref([])
 const dirBatchDone = ref(0)
 const dirBatchTotal = ref(0)
 
+const DIR_BATCH_BORDER_COLORS = [
+  '#F9863B', '#FF6B6B', '#F59E0B', '#10B981', '#14B8A6',
+  '#3B82F6', '#6366F1', '#8B5CF6', '#EC4899', '#EF4444',
+  '#22C55E', '#0EA5E9',
+]
+
+function randomizeDirBatchBorderColor() {
+  const pool = DIR_BATCH_BORDER_COLORS.filter(c => c !== dirBatchBorderColor.value)
+  const colors = pool.length ? pool : DIR_BATCH_BORDER_COLORS
+  dirBatchBorderColor.value = colors[Math.floor(Math.random() * colors.length)]
+}
+
 async function onBatchGenerateDirImages() {
   if (!selectedRowKeys.value.length) {
     message.warning('请先勾选商品')
     return
   }
+  randomizeDirBatchBorderColor()
   dirBatchSettingsVisible.value = true
 }
 
@@ -1378,7 +1459,7 @@ async function runBatchDirImages(onlyDirImages, useBgImage = false, borderColor 
       titlePool: TITLE_POOL,
       historyTitlePool: HISTORY_TITLE_POOL,
       mockTitlePool: MOCK_TITLE_POOL,
-      cardSchemes: CARD_BASIC_SCHEMES,
+      cardSchemes: CARD_STYLE_SCHEMES,
     })
   }).catch((err) => {
     dirBatchLogs.value.push({ text: `Worker 异常退出：${err.message}`, type: 'error' })

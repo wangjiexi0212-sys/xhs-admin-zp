@@ -397,23 +397,51 @@ async function buildDirImageForBatch(path, type, title, onlyDir, bgUrl) {
   return renderCompositeImage(files, title, _borderColor, pickBgColor(), 0.35, bgUrl)
 }
 
-// ── 卡片图（CardBasic，OffscreenCanvas 版）──────────────────────────
-async function renderCardImage(text, scheme) {
+function normalizeCardStyle(input) {
+  if (input?.id && Array.isArray(input.schemes)) {
+    return {
+      id: input.id,
+      scheme: rndPick(input.schemes) || {},
+    }
+  }
+  return { id: 'basic', scheme: input || { bg: '#d4f7d4', text: '#2d4a2d', accent: '#52c07a' } }
+}
+
+// ── 卡片图（与生成笔记抽屉风格池保持一致，OffscreenCanvas 版）────────────
+async function renderCardImage(text, styleInput) {
+  const picked = normalizeCardStyle(styleInput)
+  const style = picked.id
+  const scheme = picked.scheme
   const SCALE = 3
   const W = 360 * SCALE, H = 480 * SCALE
   const PAD_L = 40 * SCALE, PAD_R = 40 * SCALE, PAD_T = 44 * SCALE, PAD_B = 36 * SCALE
   const RADIUS = 20 * SCALE
   const canvas = new OffscreenCanvas(W, H)
   const ctx = canvas.getContext('2d')
-  ctx.fillStyle = scheme.bg
-  ctx.beginPath(); ctx.roundRect(0, 0, W, H, RADIUS); ctx.fill()
-  const QUOTE_FONT_SIZE = 72 * SCALE
-  ctx.save(); ctx.globalAlpha = 0.75; ctx.fillStyle = scheme.accent
-  ctx.font = `bold ${QUOTE_FONT_SIZE}px Georgia, serif`; ctx.textBaseline = 'top'
-  ctx.fillText('\u201C', PAD_L, PAD_T); ctx.restore()
+  drawCardBackground(ctx, W, H, RADIUS, style, scheme, SCALE)
+  const accent = scheme.accent || scheme.border || scheme.ribbon || scheme.quoteColor || '#52c07a'
+  const textColor = scheme.text || '#1a1a1a'
+  const showQuote = !['minimal', 'border', 'note', 'kraft'].includes(style)
+  const QUOTE_FONT_SIZE = showQuote ? 72 * SCALE : 0
+  if (showQuote) {
+    ctx.save(); ctx.globalAlpha = 0.75; ctx.fillStyle = accent
+    ctx.font = `bold ${QUOTE_FONT_SIZE}px Georgia, serif`; ctx.textBaseline = 'top'
+    ctx.fillText(style === 'geometric' ? '\u201D' : '\u201C', PAD_L, PAD_T); ctx.restore()
+  }
+  if (style === 'minimal') {
+    ctx.fillStyle = accent
+    ctx.beginPath(); ctx.roundRect(0, 0, 8 * SCALE, H, 2 * SCALE); ctx.fill()
+  }
+  if (style === 'note') {
+    ctx.fillStyle = scheme.tape || 'rgba(255,255,255,0.7)'
+    ctx.beginPath(); ctx.roundRect(W / 2 - 44 * SCALE, 0, 88 * SCALE, 24 * SCALE, 0); ctx.fill()
+  }
+  if (style === 'kraft') {
+    drawKraftDecoration(ctx, W, H, scheme, SCALE)
+  }
   const FONT_SIZE = 36 * SCALE
   const LINE_HEIGHT = FONT_SIZE * 1.75
-  const TEXT_TOP = PAD_T + QUOTE_FONT_SIZE * 0.8 + 16 * SCALE
+  const TEXT_TOP = PAD_T + (showQuote ? QUOTE_FONT_SIZE * 0.8 + 16 * SCALE : 68 * SCALE)
   const TEXT_WIDTH = W - PAD_L - PAD_R
   const BAR_H = 4 * SCALE
   const TEXT_BOTTOM = H - PAD_B - BAR_H - 8 * SCALE
@@ -445,14 +473,16 @@ async function renderCardImage(text, scheme) {
     if (hlPart) {
       ctx.font = FONT_BOLD
       const hlW = ctx.measureText(hlPart).width
-      ctx.fillStyle = HL_COLOR; ctx.fillRect(x, y + FONT_SIZE * 0.55, hlW, FONT_SIZE * 0.47)
-      ctx.fillStyle = scheme.text; ctx.fillText(hlPart, x, y); x += hlW
+      if (!['geometric', 'border'].includes(style)) {
+        ctx.fillStyle = HL_COLOR; ctx.fillRect(x, y + FONT_SIZE * 0.55, hlW, FONT_SIZE * 0.47)
+      }
+      ctx.fillStyle = textColor; ctx.fillText(hlPart, x, y); x += hlW
     }
-    if (normalPart) { ctx.font = FONT_NORMAL; ctx.fillStyle = scheme.text; ctx.fillText(normalPart, x, y) }
+    if (normalPart) { ctx.font = FONT_NORMAL; ctx.fillStyle = textColor; ctx.fillText(normalPart, x, y) }
     y += LINE_HEIGHT
   }
   const BAR_W = 40 * SCALE
-  ctx.fillStyle = scheme.accent
+  ctx.fillStyle = accent
   ctx.beginPath(); ctx.roundRect(PAD_L, H - PAD_B - BAR_H, BAR_W, BAR_H, 2 * SCALE); ctx.fill()
   // ─── 底部固定文字：左滑查看更多备考资料（重点样式，同 xxx笔试 高亮）──
   const BTM_FONT_SIZE = 22 * SCALE
@@ -462,9 +492,43 @@ async function renderCardImage(text, scheme) {
   const btmTextW = ctx.measureText(BTM_TEXT).width
   const btmX = W - PAD_R - btmTextW
   const btmY = H - 160 - BTM_FONT_SIZE
-  ctx.fillStyle = HL_COLOR; ctx.fillRect(btmX, btmY + BTM_FONT_SIZE * 0.55, btmTextW, BTM_FONT_SIZE * 0.47)
-  ctx.fillStyle = scheme.text; ctx.fillText(BTM_TEXT, btmX, btmY)
+  if (!['geometric', 'border'].includes(style)) {
+    ctx.fillStyle = HL_COLOR; ctx.fillRect(btmX, btmY + BTM_FONT_SIZE * 0.55, btmTextW, BTM_FONT_SIZE * 0.47)
+  }
+  ctx.fillStyle = textColor; ctx.fillText(BTM_TEXT, btmX, btmY)
   return offscreenToDataUrl(canvas)
+}
+
+function drawCardBackground(ctx, W, H, radius, style, scheme, scale) {
+  if (style === 'diffuse') {
+    ctx.fillStyle = scheme.bg || '#dff4e3'
+    ctx.beginPath(); ctx.roundRect(0, 0, W, H, radius); ctx.fill()
+    ctx.save()
+    ctx.globalAlpha = 0.9
+    ctx.fillStyle = scheme.circle || 'rgba(200,230,201,0.72)'
+    ctx.beginPath(); ctx.arc(W * 0.28, H * 0.25, W * 0.42, 0, Math.PI * 2); ctx.fill()
+    ctx.beginPath(); ctx.arc(W * 0.78, H * 0.78, W * 0.36, 0, Math.PI * 2); ctx.fill()
+    ctx.restore()
+    return
+  }
+  ctx.fillStyle = scheme.bg || '#d4f7d4'
+  ctx.beginPath(); ctx.roundRect(0, 0, W, H, radius); ctx.fill()
+  if (style === 'border') {
+    ctx.lineWidth = 10 * scale
+    ctx.strokeStyle = scheme.border || '#ff7043'
+    ctx.stroke()
+  }
+}
+
+function drawKraftDecoration(ctx, W, H, scheme, scale) {
+  ctx.save()
+  ctx.globalAlpha = 0.55
+  ctx.strokeStyle = scheme.ribbon || '#e89aa6'
+  ctx.lineWidth = 2 * scale
+  ctx.beginPath(); ctx.moveTo(30 * scale, 8 * scale); ctx.lineTo(30 * scale, 70 * scale); ctx.stroke()
+  ctx.beginPath(); ctx.moveTo(20 * scale, 16 * scale); ctx.lineTo(40 * scale, 16 * scale); ctx.stroke()
+  ctx.beginPath(); ctx.moveTo(W - 58 * scale, H - 86 * scale); ctx.lineTo(W - 24 * scale, H - 86 * scale); ctx.stroke()
+  ctx.restore()
 }
 
 // ── 主批量循环 ───────────────────────────────────────────────────────
