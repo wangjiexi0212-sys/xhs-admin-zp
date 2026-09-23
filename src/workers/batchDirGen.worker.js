@@ -231,12 +231,230 @@ function drawPdfIcon(ctx, x, y, size) {
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'
 }
 
-// ── renderCompositeImage（OffscreenCanvas 版）────────────────────────
-async function renderCompositeImage(files, title, borderColor, bgColor, bgOpacity, bgImageUrl) {
+const DIR_IMAGE_STYLES = [
+  'classic',
+  'drive',
+  'sheet',
+  'table',
+  'checklist',
+  'sticky',
+  'dark',
+  'magazine',
+  'soft',
+  'split',
+  'terminal',
+  'blueprint',
+  'receipt',
+  'book',
+  'index',
+  'bubble',
+  'stamp',
+  'mint',
+  'calendar',
+  'folder_wall',
+  'rainbow',
+  'outline',
+  'cream',
+  'mono',
+]
+
+function wrapCanvasText(ctx, text, maxWidth) {
+  const lines = []
+  let cur = ''
+  for (const ch of String(text || '')) {
+    const test = cur + ch
+    if (ctx.measureText(test).width > maxWidth && cur) {
+      lines.push(cur)
+      cur = ch
+    } else {
+      cur = test
+    }
+  }
+  if (cur) lines.push(cur)
+  return lines.length ? lines : ['']
+}
+
+function measureDirRows(files, maxWidth, fontSize = 17) {
+  const canvas = new OffscreenCanvas(1, 1)
+  const ctx = canvas.getContext('2d')
+  ctx.font = `${fontSize}px "PingFang SC", "Microsoft YaHei", sans-serif`
+  return files.map(file => {
+    const lines = wrapCanvasText(ctx, file.name, maxWidth)
+    return { file, lines, height: Math.max(48, lines.length * (fontSize + 7) + 18) }
+  })
+}
+
+function drawWrappedLines(ctx, lines, x, y, lineHeight, fontSize, blockSize = 10) {
+  lines.forEach((line, i) => {
+    const yy = y + i * lineHeight
+    ctx.fillText(line, x, yy)
+    mosaicText(ctx, line, x, yy, fontSize, blockSize)
+  })
+}
+
+function drawDirBg(ctx, W, H, style, borderColor, bgColor, bgOpacity) {
+  if (style === 'classic') {
+    ctx.fillStyle = borderColor; ctx.fillRect(0, 0, W, H)
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(10, 10, W - 20, H - 20)
+    drawGridBg(ctx, 10, 10, W - 20, H - 20, bgColor, bgOpacity)
+  } else if (style === 'drive') {
+    const grad = ctx.createLinearGradient(0, 0, 0, H)
+    grad.addColorStop(0, '#f7fbff'); grad.addColorStop(1, '#eef6ff')
+    ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H)
+  } else if (style === 'sheet') {
+    ctx.fillStyle = '#fffefa'; ctx.fillRect(0, 0, W, H)
+    drawGridBg(ctx, 0, 0, W, H, '#d8ecff', 0.45, 26)
+  } else if (style === 'table') {
+    ctx.fillStyle = '#18c38a'; ctx.fillRect(0, 0, W, H)
+    ctx.fillStyle = '#fffdfa'; ctx.fillRect(12, 12, W - 24, H - 24)
+  } else if (style === 'checklist') {
+    const grad = ctx.createLinearGradient(0, 0, 0, H)
+    grad.addColorStop(0, '#f4fff9'); grad.addColorStop(1, '#ffffff')
+    ctx.fillStyle = '#35c98a'; ctx.fillRect(0, 0, W, H)
+    ctx.fillStyle = grad; ctx.fillRect(12, 12, W - 24, H - 24)
+  } else if (style === 'sticky') {
+    ctx.fillStyle = '#fff8e8'; ctx.fillRect(0, 0, W, H)
+    ctx.globalAlpha = 0.45
+    ctx.fillStyle = '#ffdd6c'; ctx.beginPath(); ctx.arc(W * 0.86, H * 0.12, 110, 0, Math.PI * 2); ctx.fill()
+    ctx.fillStyle = '#ff96aa'; ctx.beginPath(); ctx.arc(W * 0.12, H * 0.86, 120, 0, Math.PI * 2); ctx.fill()
+    ctx.globalAlpha = 1
+  } else if (style === 'dark') {
+    const grad = ctx.createLinearGradient(0, 0, 0, H)
+    grad.addColorStop(0, '#111827'); grad.addColorStop(1, '#1f2937')
+    ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H)
+  } else if (style === 'magazine') {
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H)
+    ctx.fillStyle = '#ffe9ec'
+    ctx.beginPath(); ctx.moveTo(W * 0.62, 0); ctx.lineTo(W, 0); ctx.lineTo(W, H); ctx.lineTo(W * 0.86, H); ctx.closePath(); ctx.fill()
+  } else if (style === 'split') {
+    ctx.fillStyle = '#fff7e6'; ctx.fillRect(0, 0, W * 0.36, H)
+    ctx.fillStyle = '#eef7ff'; ctx.fillRect(W * 0.36, 0, W * 0.64, H)
+  } else if (style === 'terminal') {
+    ctx.fillStyle = '#101722'; ctx.fillRect(0, 0, W, H)
+  } else if (style === 'blueprint') {
+    ctx.fillStyle = '#123b66'; ctx.fillRect(0, 0, W, H)
+    drawGridBg(ctx, 0, 0, W, H, '#ffffff', 0.12, 28)
+  } else if (style === 'receipt') {
+    ctx.fillStyle = '#f7f1e5'; ctx.fillRect(0, 0, W, H)
+    ctx.fillStyle = '#fffdf7'
+    ctx.beginPath(); ctx.roundRect(26, 24, W - 52, H - 48, 8); ctx.fill()
+    ctx.setLineDash([8, 8]); ctx.strokeStyle = '#b7a98d'; ctx.stroke(); ctx.setLineDash([])
+  } else if (style === 'book') {
+    ctx.fillStyle = '#f4ead6'; ctx.fillRect(0, 0, W, H)
+    ctx.fillStyle = '#fffdf6'; ctx.fillRect(34, 24, W - 58, H - 48)
+    ctx.fillStyle = '#b45309'; ctx.fillRect(34, 24, 14, H - 48)
+  } else if (style === 'index') {
+    ctx.fillStyle = '#f7fbff'; ctx.fillRect(0, 0, W, H)
+  } else if (style === 'bubble') {
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H)
+    ctx.globalAlpha = 0.62
+    ctx.fillStyle = '#dff7ff'; ctx.beginPath(); ctx.arc(W * 0.18, H * 0.14, 120, 0, Math.PI * 2); ctx.fill()
+    ctx.fillStyle = '#ffe2eb'; ctx.beginPath(); ctx.arc(W * 0.9, H * 0.15, 120, 0, Math.PI * 2); ctx.fill()
+    ctx.globalAlpha = 1
+  } else if (style === 'stamp') {
+    ctx.fillStyle = '#de2f2f'; ctx.fillRect(0, 0, W, H)
+    ctx.fillStyle = '#fff8f8'; ctx.fillRect(12, 12, W - 24, H - 24)
+  } else if (style === 'mint') {
+    const grad = ctx.createLinearGradient(0, 0, 0, H)
+    grad.addColorStop(0, '#eafff5'); grad.addColorStop(1, '#f8fffc')
+    ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H)
+  } else if (style === 'calendar') {
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H)
+  } else if (style === 'folder_wall') {
+    ctx.fillStyle = '#f8fafc'; ctx.fillRect(0, 0, W, H)
+  } else if (style === 'rainbow') {
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H)
+  } else if (style === 'outline') {
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H)
+  } else if (style === 'cream') {
+    ctx.fillStyle = '#e8cfa7'; ctx.fillRect(0, 0, W, H)
+    ctx.fillStyle = '#fff8ed'; ctx.fillRect(12, 12, W - 24, H - 24)
+  } else if (style === 'mono') {
+    ctx.fillStyle = '#f5f5f5'; ctx.fillRect(0, 0, W, H)
+  } else {
+    const grad = ctx.createLinearGradient(0, 0, 0, H)
+    grad.addColorStop(0, '#f6fbff'); grad.addColorStop(1, '#fff7fb')
+    ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H)
+  }
+}
+
+function drawDirTitleBlock(ctx, title, style, W, y) {
+  ctx.textAlign = style === 'magazine' || style === 'terminal' || style === 'book' || style === 'mono' ? 'left' : 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillStyle = style === 'dark' ? '#ff6b6b'
+    : style === 'terminal' ? '#78ffbd'
+      : style === 'blueprint' ? '#ffffff'
+        : style === 'mint' ? '#059669'
+          : style === 'cream' ? '#8a4b18'
+            : style === 'mono' ? '#111111'
+              : '#ff0000'
+  ctx.font = `bold ${style === 'magazine' || style === 'terminal' || style === 'book' ? 32 : 34}px "PingFang SC", "Microsoft YaHei", sans-serif`
+  ctx.fillText(title, style === 'magazine' || style === 'terminal' || style === 'book' || style === 'mono' ? 40 : W / 2, y)
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'alphabetic'
+}
+
+function drawStyledIcon(ctx, file, style, x, y, size, index) {
+  if (style === 'checklist' || style === 'outline') {
+    ctx.fillStyle = style === 'outline' ? '#2f7cf6' : '#22c55e'
+    ctx.beginPath(); ctx.roundRect(x, y, size, size, 8); ctx.fill()
+    ctx.fillStyle = '#fff'; ctx.font = `bold ${Math.round(size * 0.56)}px sans-serif`
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(style === 'outline' ? String(index + 1) : '✓', x + size / 2, y + size / 2)
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'
+    return
+  }
+  if (style === 'terminal') {
+    ctx.fillStyle = '#78ffbd'
+    ctx.font = `bold 18px ui-monospace, monospace`
+    ctx.fillText('>', x, y + 20)
+    return
+  }
+  if (style === 'table' || style === 'sheet' || style === 'dark' || style === 'soft' || style === 'magazine' || style === 'split' || style === 'blueprint' || style === 'receipt' || style === 'book' || style === 'index' || style === 'bubble' || style === 'stamp' || style === 'mint' || style === 'cream' || style === 'mono') {
+    const badgeW = style === 'soft' ? size + 10 : 56
+    ctx.fillStyle = style === 'blueprint' || style === 'receipt' || style === 'stamp' || style === 'mono'
+      ? 'transparent'
+      : file.isdir === 1 ? '#f6aa22' : '#ff6470'
+    ctx.beginPath(); ctx.roundRect(x, y, badgeW, Math.max(24, size - 2), 8); ctx.fill()
+    if (style === 'blueprint' || style === 'receipt' || style === 'stamp' || style === 'mono') {
+      ctx.strokeStyle = style === 'blueprint' ? 'rgba(255,255,255,0.72)' : style === 'stamp' ? '#de2f2f' : '#333333'
+      ctx.stroke()
+    }
+    ctx.fillStyle = style === 'blueprint' ? '#ffffff' : style === 'receipt' || style === 'mono' ? '#333333' : style === 'stamp' ? '#de2f2f' : '#fff'
+    ctx.font = `bold 12px "PingFang SC", sans-serif`
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+    ctx.fillText(style === 'soft' ? String(index + 1).padStart(2, '0') : (file.isdir === 1 ? '文件夹' : 'PDF'), x + badgeW / 2, y + Math.max(24, size - 2) / 2)
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'
+    return
+  }
+  file.isdir === 1 ? drawFolderIcon(ctx, x, y, size) : drawPdfIcon(ctx, x, y, size)
+}
+
+async function renderCompositeImage(files, title, borderColor, bgColor, bgOpacity, bgImageUrl, style = 'classic') {
   const DPR = 2, W = 600
-  const BORDER = bgImageUrl ? 0 : 10
-  const PADDING = 28, ICON_SIZE = 30, ROW_H = 52, TITLE_H = 88
-  const H = BORDER + TITLE_H + ROW_H * files.length + PADDING + BORDER
+  const activeStyle = DIR_IMAGE_STYLES.includes(style) ? style : 'classic'
+  const BORDER = bgImageUrl ? 0 : (activeStyle === 'classic' ? 10 : 0)
+  const gridStyles = ['sticky', 'calendar', 'folder_wall', 'rainbow']
+  const PADDING = activeStyle === 'magazine' || activeStyle === 'terminal' || activeStyle === 'book' || activeStyle === 'mono' ? 40 : 34
+  const ICON_SIZE = activeStyle === 'classic' || activeStyle === 'drive' ? 30 : 32
+  const BADGE_W = activeStyle === 'table' || activeStyle === 'sheet' || activeStyle === 'dark' || activeStyle === 'magazine' || activeStyle === 'split' || activeStyle === 'blueprint' || activeStyle === 'receipt' || activeStyle === 'book' || activeStyle === 'index' || activeStyle === 'bubble' || activeStyle === 'stamp' || activeStyle === 'mint' || activeStyle === 'cream' || activeStyle === 'mono'
+    ? 56
+    : activeStyle === 'soft'
+      ? ICON_SIZE + 10
+      : ICON_SIZE
+  const ICON_TEXT_GAP = activeStyle === 'classic' || activeStyle === 'drive' ? 26 : 22
+  const TITLE_H = activeStyle === 'magazine' || activeStyle === 'terminal' || activeStyle === 'book' || activeStyle === 'mono' ? 118 : 102
+  const textX = activeStyle === 'table' || activeStyle === 'sheet' || activeStyle === 'dark' || activeStyle === 'split' || activeStyle === 'blueprint' || activeStyle === 'receipt' || activeStyle === 'book' || activeStyle === 'index' || activeStyle === 'bubble' || activeStyle === 'stamp' || activeStyle === 'mint' || activeStyle === 'cream' || activeStyle === 'mono'
+    ? BORDER + PADDING + 130
+    : BORDER + PADDING + BADGE_W + ICON_TEXT_GAP
+  const maxTextW = W - textX - PADDING - BORDER
+  const fontSize = activeStyle === 'drive' || activeStyle === 'table' || activeStyle === 'sheet' || activeStyle === 'dark' || activeStyle === 'terminal' || activeStyle === 'blueprint' || activeStyle === 'mono' ? 18 : 17
+  const rows = measureDirRows(files, maxTextW, fontSize)
+  const rowGap = ['sticky', 'soft', 'checklist', 'bubble', 'mint', 'rainbow'].includes(activeStyle) ? 14 : 0
+  const gridCardH = activeStyle === 'calendar' || activeStyle === 'folder_wall' || activeStyle === 'rainbow' ? 128 : 126
+  const bodyH = gridStyles.includes(activeStyle)
+    ? Math.ceil(files.length / 2) * gridCardH
+    : rows.reduce((sum, row) => sum + row.height + rowGap, 0)
+  const H = BORDER + TITLE_H + bodyH + PADDING + BORDER + (activeStyle === 'drive' ? 44 : 0)
   const canvas = new OffscreenCanvas(W * DPR, H * DPR)
   const ctx = canvas.getContext('2d')
   ctx.scale(DPR, DPR)
@@ -246,34 +464,118 @@ async function renderCompositeImage(files, title, borderColor, bgColor, bgOpacit
     const bw = bgImg.width * scale, bh = bgImg.height * scale
     ctx.drawImage(bgImg, (W - bw) / 2, (H - bh) / 2, bw, bh)
   } else {
-    ctx.fillStyle = borderColor; ctx.fillRect(0, 0, W, H)
-    ctx.fillStyle = '#ffffff'; ctx.fillRect(BORDER, BORDER, W - BORDER * 2, H - BORDER * 2)
-    drawGridBg(ctx, BORDER, BORDER, W - BORDER * 2, H - BORDER * 2, bgColor, bgOpacity)
+    drawDirBg(ctx, W, H, activeStyle, borderColor, bgColor, bgOpacity)
   }
-  ctx.fillStyle = '#FF0000'
-  ctx.font = `bold 34px "PingFang SC", "Microsoft YaHei", sans-serif`
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-  ctx.fillText(title, W / 2, BORDER + TITLE_H / 2)
-  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'
-  ctx.strokeStyle = '#eeeeee'; ctx.lineWidth = 1
-  ctx.beginPath()
-  ctx.moveTo(BORDER + PADDING, BORDER + TITLE_H); ctx.lineTo(W - BORDER - PADDING, BORDER + TITLE_H); ctx.stroke()
+  drawDirTitleBlock(ctx, title, activeStyle, W, BORDER + TITLE_H / 2)
+  if (activeStyle === 'drive') {
+    const winX = BORDER + 20, winY = BORDER + 88, winW = W - BORDER * 2 - 40, winH = H - winY - 24
+    ctx.fillStyle = 'rgba(255,255,255,0.86)'; ctx.beginPath(); ctx.roundRect(winX, winY, winW, winH, 12); ctx.fill()
+    ctx.strokeStyle = 'rgba(30,41,59,0.12)'; ctx.stroke()
+    ctx.fillStyle = '#ff5f57'; ctx.beginPath(); ctx.arc(winX + 18, winY + 18, 5, 0, Math.PI * 2); ctx.fill()
+    ctx.fillStyle = '#ffbd2e'; ctx.beginPath(); ctx.arc(winX + 34, winY + 18, 5, 0, Math.PI * 2); ctx.fill()
+    ctx.fillStyle = '#28c840'; ctx.beginPath(); ctx.arc(winX + 50, winY + 18, 5, 0, Math.PI * 2); ctx.fill()
+  }
+  if (activeStyle === 'split') {
+    ctx.fillStyle = '#9a4e00'
+    ctx.font = `bold 26px "PingFang SC", sans-serif`
+    ctx.fillText('2026', 40, 150)
+    ctx.fillText('备考资料包', 40, 184)
+  }
+  if (activeStyle === 'table' || activeStyle === 'dark') {
+    const headerY = BORDER + TITLE_H - 18
+    ctx.fillStyle = activeStyle === 'dark' ? 'rgba(255,255,255,0.1)' : '#243044'
+    ctx.fillRect(BORDER + PADDING - 10, headerY, W - BORDER * 2 - PADDING * 2 + 20, 36)
+    ctx.fillStyle = '#fff'; ctx.font = `bold 14px "PingFang SC", sans-serif`
+    ctx.fillText('序号', BORDER + PADDING, headerY + 23)
+    ctx.fillText('类型', BORDER + PADDING + 58, headerY + 23)
+    ctx.fillText('文件名称', textX, headerY + 23)
+  } else if (activeStyle === 'classic') {
+    ctx.strokeStyle = '#eeeeee'; ctx.lineWidth = 1
+    ctx.beginPath(); ctx.moveTo(BORDER + PADDING, BORDER + TITLE_H); ctx.lineTo(W - BORDER - PADDING, BORDER + TITLE_H); ctx.stroke()
+  }
   const listTop = BORDER + TITLE_H
-  files.forEach((file, i) => {
-    const y = listTop + i * ROW_H, iconY = y + (ROW_H - ICON_SIZE) / 2
-    file.isdir === 1 ? drawFolderIcon(ctx, BORDER + PADDING, iconY, ICON_SIZE) : drawPdfIcon(ctx, BORDER + PADDING, iconY, ICON_SIZE)
-    ctx.fillStyle = '#333333'
-    ctx.font = `15px "PingFang SC", "Microsoft YaHei", sans-serif`
-    const maxWidth = W - BORDER * 2 - PADDING * 2 - ICON_SIZE - 12
-    let name = file.name
-    while (ctx.measureText(name).width > maxWidth && name.length > 1) name = name.slice(0, -1)
-    if (name !== file.name) name = name.slice(0, -1) + '...'
-    ctx.fillText(name, BORDER + PADDING + ICON_SIZE + 12, y + ROW_H / 2 + 6)
-    mosaicText(ctx, name, BORDER + PADDING + ICON_SIZE + 12, y + ROW_H / 2 + 6, 15, 10)
-    if (i < files.length - 1) {
-      ctx.strokeStyle = '#f5f5f5'; ctx.lineWidth = 1
-      ctx.beginPath(); ctx.moveTo(BORDER + PADDING, y + ROW_H); ctx.lineTo(W - BORDER - PADDING, y + ROW_H); ctx.stroke()
+  let y = listTop + (activeStyle === 'table' || activeStyle === 'dark' ? 24 : 0)
+  const stickyColors = ['#fff3b0', '#d8f5ff', '#dff8d8', '#ffe0ea', '#eadfff', '#fff0d2', '#e7f7ed', '#f4e7ff']
+  const rainbowColors = ['#fff1f0', '#e6f7ff', '#f6ffed', '#fff7e6', '#f9f0ff', '#e6fffb', '#fffbe6', '#f0f5ff']
+  rows.forEach((row, i) => {
+    const { file, lines, height } = row
+    if (gridStyles.includes(activeStyle)) {
+      const col = i % 2
+      const cardW = (W - 84) / 2
+      const cardX = 34 + col * (cardW + 16)
+      const cardY = listTop + Math.floor(i / 2) * gridCardH
+      const cardH = gridCardH - 22
+      ctx.save()
+      if (activeStyle === 'sticky') {
+        ctx.translate(cardX + cardW / 2, cardY + cardH / 2)
+        ctx.rotate((i % 2 ? 0.012 : -0.012))
+        ctx.fillStyle = stickyColors[i % stickyColors.length]
+        ctx.beginPath(); ctx.roundRect(-cardW / 2, -cardH / 2, cardW, cardH, 9); ctx.fill()
+        ctx.fillStyle = '#243044'; ctx.font = `600 15px "PingFang SC", "Microsoft YaHei", sans-serif`
+        drawWrappedLines(ctx, wrapCanvasText(ctx, file.name, cardW - 26), -cardW / 2 + 13, -18, 21, 15)
+      } else if (activeStyle === 'calendar') {
+        ctx.fillStyle = '#ffffff'
+        ctx.beginPath(); ctx.roundRect(cardX, cardY, cardW, cardH, 14); ctx.fill()
+        ctx.strokeStyle = 'rgba(30,41,59,0.12)'; ctx.stroke()
+        ctx.fillStyle = '#e92222'; ctx.beginPath(); ctx.roundRect(cardX, cardY, cardW, 30, 14); ctx.fill()
+        ctx.fillRect(cardX, cardY + 16, cardW, 14)
+        ctx.fillStyle = '#fff'; ctx.font = `bold 13px "PingFang SC", sans-serif`; ctx.fillText(`${String(i + 1).padStart(2, '0')} ${file.isdir === 1 ? '文件夹' : 'PDF'}`, cardX + 12, cardY + 20)
+        ctx.fillStyle = '#202938'; ctx.font = `600 15px "PingFang SC", sans-serif`
+        drawWrappedLines(ctx, wrapCanvasText(ctx, file.name, cardW - 24), cardX + 12, cardY + 54, 21, 15)
+      } else if (activeStyle === 'folder_wall') {
+        ctx.fillStyle = '#fff7d6'
+        ctx.beginPath(); ctx.roundRect(cardX, cardY + 10, cardW, cardH - 10, 18); ctx.fill()
+        ctx.strokeStyle = '#f5d980'; ctx.stroke()
+        ctx.fillStyle = '#ffe082'; ctx.beginPath(); ctx.roundRect(cardX + 18, cardY, 70, 22, 8); ctx.fill()
+        ctx.fillStyle = '#202938'; ctx.font = `600 15px "PingFang SC", sans-serif`
+        drawWrappedLines(ctx, wrapCanvasText(ctx, file.name, cardW - 30), cardX + 15, cardY + 50, 21, 15)
+      } else {
+        ctx.fillStyle = rainbowColors[i % rainbowColors.length]
+        ctx.beginPath(); ctx.roundRect(cardX, cardY, cardW, cardH, 14); ctx.fill()
+        ctx.fillStyle = file.isdir === 1 ? '#f6aa22' : '#ff6470'
+        ctx.beginPath(); ctx.roundRect(cardX + 12, cardY + 12, 46, 24, 8); ctx.fill()
+        ctx.fillStyle = '#fff'; ctx.font = `bold 12px "PingFang SC", sans-serif`; ctx.textAlign = 'center'; ctx.fillText(file.isdir === 1 ? '夹' : 'PDF', cardX + 35, cardY + 29); ctx.textAlign = 'left'
+        ctx.fillStyle = '#202938'; ctx.font = `600 15px "PingFang SC", sans-serif`
+        drawWrappedLines(ctx, wrapCanvasText(ctx, file.name, cardW - 30), cardX + 15, cardY + 60, 21, 15)
+      }
+      ctx.restore()
+      if (i === rows.length - 1) y = cardY + cardH
+      return
     }
+    if (activeStyle === 'soft' || activeStyle === 'checklist' || activeStyle === 'bubble' || activeStyle === 'mint' || activeStyle === 'rainbow') {
+      const x = BORDER + PADDING - 4
+      const w = W - BORDER * 2 - PADDING * 2 + 8
+      ctx.fillStyle = activeStyle === 'mint' ? '#ffffff' : activeStyle === 'bubble' ? 'rgba(255,255,255,0.82)' : 'rgba(255,255,255,0.78)'
+      ctx.beginPath(); ctx.roundRect(x, y + 7, w, height - 8, activeStyle === 'bubble' ? 24 : 14); ctx.fill()
+      if (activeStyle === 'mint') {
+        ctx.fillStyle = '#10b981'; ctx.fillRect(x, y + 7, 6, height - 8)
+      }
+      ctx.strokeStyle = 'rgba(30,41,59,0.08)'; ctx.stroke()
+    }
+    if (activeStyle === 'outline' && i < rows.length - 1) {
+      ctx.strokeStyle = 'rgba(30,41,59,0.15)'
+      ctx.lineWidth = 2
+      ctx.beginPath(); ctx.moveTo(BORDER + PADDING + 16, y + 32); ctx.lineTo(BORDER + PADDING + 16, y + height + rowGap + 20); ctx.stroke()
+    }
+    const iconX = activeStyle === 'table' || activeStyle === 'sheet' || activeStyle === 'dark' || activeStyle === 'split' || activeStyle === 'blueprint' || activeStyle === 'receipt' || activeStyle === 'book' || activeStyle === 'index' || activeStyle === 'bubble' || activeStyle === 'stamp' || activeStyle === 'mint' || activeStyle === 'cream' || activeStyle === 'mono'
+      ? BORDER + PADDING + 58
+      : BORDER + PADDING
+    const noX = BORDER + PADDING
+    if (activeStyle === 'table' || activeStyle === 'sheet' || activeStyle === 'dark' || activeStyle === 'split' || activeStyle === 'blueprint' || activeStyle === 'receipt' || activeStyle === 'book' || activeStyle === 'index' || activeStyle === 'bubble' || activeStyle === 'stamp' || activeStyle === 'mint' || activeStyle === 'cream' || activeStyle === 'mono') {
+      ctx.fillStyle = activeStyle === 'dark' ? 'rgba(237,242,255,0.78)' : '#6c7482'
+      ctx.font = `bold 15px "PingFang SC", sans-serif`
+      ctx.fillText(String(i + 1).padStart(2, '0'), noX, y + 34)
+    }
+    drawStyledIcon(ctx, file, activeStyle, iconX, y + 15, ICON_SIZE, i)
+    ctx.fillStyle = activeStyle === 'dark' || activeStyle === 'terminal' || activeStyle === 'blueprint' ? '#f8fbff' : activeStyle === 'cream' ? '#6f3f14' : '#333333'
+    ctx.font = `${activeStyle === 'magazine' || activeStyle === 'terminal' ? '600' : '500'} ${fontSize}px "PingFang SC", "Microsoft YaHei", sans-serif`
+    drawWrappedLines(ctx, lines, textX, y + 35, fontSize + 7, fontSize, 10)
+    if (!['sticky', 'soft', 'checklist'].includes(activeStyle) && i < rows.length - 1) {
+      ctx.strokeStyle = activeStyle === 'dark' || activeStyle === 'terminal' || activeStyle === 'blueprint' ? 'rgba(255,255,255,0.10)' : activeStyle === 'stamp' ? 'rgba(222,47,47,0.16)' : '#eeeeee'
+      ctx.lineWidth = 1
+      ctx.beginPath(); ctx.moveTo(BORDER + PADDING, y + height); ctx.lineTo(W - BORDER - PADDING, y + height); ctx.stroke()
+    }
+    y += height + rowGap
   })
   return offscreenToDataUrl(canvas)
 }
@@ -366,7 +668,7 @@ async function renderPdfPage(pdfPath) {
 }
 
 // ── buildDirImageForBatch（Worker 版）──────────────────────────────
-async function buildDirImageForBatch(path, type, title, onlyDir, bgUrl) {
+async function buildDirImageForBatch(path, type, title, onlyDir, bgUrl, dirStyle) {
   const res = await getBaiduFilesWithRetry(path)
   const files = (res.files || []).sort((a, b) => b.isdir - a.isdir)
   if (!files.length) throw new Error('目录为空')
@@ -381,7 +683,7 @@ async function buildDirImageForBatch(path, type, title, onlyDir, bgUrl) {
         } catch (_) {}
       }
     }
-    return renderCompositeImage(files, title, _borderColor, pickBgColor(), 0.35, bgUrl)
+    return renderCompositeImage(files, title, _borderColor, pickBgColor(), 0.35, bgUrl, dirStyle)
   }
   if (type === 'custom') {
     if (!onlyDir) {
@@ -394,7 +696,7 @@ async function buildDirImageForBatch(path, type, title, onlyDir, bgUrl) {
       }
     }
   }
-  return renderCompositeImage(files, title, _borderColor, pickBgColor(), 0.35, bgUrl)
+  return renderCompositeImage(files, title, _borderColor, pickBgColor(), 0.35, bgUrl, dirStyle)
 }
 
 function normalizeCardStyle(input) {
@@ -407,8 +709,295 @@ function normalizeCardStyle(input) {
   return { id: 'basic', scheme: input || { bg: '#d4f7d4', text: '#2d4a2d', accent: '#52c07a' } }
 }
 
+const CARD_TEMPLATE_STYLES = [
+  'poster','check','tags','folder','note2','mono','exam','stamp','dark2','app',
+  'course','wrong','side','gridnote','paperclip','blue','photo','cutout','softpink','greenfile',
+  'orangeburst','blueprint_card','receipt_card','neon','vertical','filetab','calendar_card','folderwall_card','outline_card','cream_card','stamp2','marker',
+]
+
+function splitCardText(text) {
+  const raw = String(text || '').trim()
+  const m = raw.match(/^(.+?笔试)[，,、\s]*(.*)$/)
+  if (m) return { main: m[1], sub: m[2] || '备考资料已整理' }
+  const comma = raw.search(/[，,]/)
+  if (comma > 0) return { main: raw.slice(0, comma), sub: raw.slice(comma + 1) }
+  return { main: raw, sub: '备考资料已整理' }
+}
+
+function wrapCardLines(ctx, text, maxWidth) {
+  const lines = []
+  let cur = ''
+  for (const ch of String(text || '')) {
+    const test = cur + ch
+    if (ctx.measureText(test).width > maxWidth && cur) {
+      lines.push(cur)
+      cur = ch
+    } else {
+      cur = test
+    }
+  }
+  if (cur) lines.push(cur)
+  return lines
+}
+
+function drawCardLines(ctx, lines, x, y, lineHeight, maxLines = 5) {
+  lines.slice(0, maxLines).forEach((line, i) => ctx.fillText(line, x, y + i * lineHeight))
+}
+
+function drawRightHint(ctx, W, H, scale, color = '#1a1a1a', highlight = '#ffea7a') {
+  const text = '左滑查看更多备考资料'
+  const fontSize = 22 * scale
+  const right = 40 * scale
+  const y = H - 128 * scale
+  ctx.font = `bold ${fontSize}px "PingFang SC", "Helvetica Neue", sans-serif`
+  ctx.textBaseline = 'top'
+  const w = ctx.measureText(text).width
+  ctx.fillStyle = highlight
+  ctx.fillRect(W - right - w, y + fontSize * 0.55, w, fontSize * 0.48)
+  ctx.fillStyle = color
+  ctx.fillText(text, W - right - w, y)
+}
+
+function drawTemplateCardBackground(ctx, W, H, style, scale) {
+  const r = 22 * scale
+  ctx.clearRect(0, 0, W, H)
+  if (style === 'poster') {
+    ctx.fillStyle = '#eef4ff'; ctx.beginPath(); ctx.roundRect(0, 0, W, H, r); ctx.fill()
+    ctx.fillStyle = '#7a35d8'; ctx.fillRect(0, 0, 18 * scale, H)
+  } else if (style === 'check') {
+    ctx.fillStyle = '#28c985'; ctx.beginPath(); ctx.roundRect(0, 0, W, H, r); ctx.fill()
+    ctx.fillStyle = '#f0fff7'; ctx.beginPath(); ctx.roundRect(10 * scale, 10 * scale, W - 20 * scale, H - 20 * scale, r - 8 * scale); ctx.fill()
+  } else if (style === 'tags') {
+    ctx.fillStyle = '#fffdf8'; ctx.beginPath(); ctx.roundRect(0, 0, W, H, r); ctx.fill()
+    ctx.globalAlpha = 0.75
+    ctx.fillStyle = '#fff4b8'; ctx.beginPath(); ctx.arc(W * 0.22, H * 0.18, 120 * scale, 0, Math.PI * 2); ctx.fill()
+    ctx.fillStyle = '#bcecff'; ctx.beginPath(); ctx.arc(W * 0.88, H * 0.82, 130 * scale, 0, Math.PI * 2); ctx.fill()
+    ctx.globalAlpha = 1
+  } else if (style === 'folder') {
+    ctx.fillStyle = '#fff7d7'; ctx.beginPath(); ctx.roundRect(0, 0, W, H, r); ctx.fill()
+    ctx.fillStyle = '#ffd15d'; ctx.beginPath(); ctx.roundRect(0, 0, 210 * scale, 58 * scale, 0); ctx.fill()
+  } else if (style === 'note2') {
+    ctx.fillStyle = '#fff9e8'; ctx.beginPath(); ctx.roundRect(0, 0, W, H, r); ctx.fill()
+    ctx.fillStyle = 'rgba(255,255,255,0.72)'; ctx.fillRect(W / 2 - 49 * scale, 0, 98 * scale, 28 * scale)
+  } else if (style === 'mono') {
+    ctx.fillStyle = '#f5f5f5'; ctx.beginPath(); ctx.roundRect(0, 0, W, H, r); ctx.fill()
+    ctx.lineWidth = 2 * scale; ctx.strokeStyle = '#111'; ctx.stroke()
+  } else if (style === 'exam') {
+    const grad = ctx.createLinearGradient(0, 0, W, H)
+    grad.addColorStop(0, '#ffefe8'); grad.addColorStop(0.48, '#ffffff'); grad.addColorStop(0.49, '#edf5ff')
+    ctx.fillStyle = grad; ctx.beginPath(); ctx.roundRect(0, 0, W, H, r); ctx.fill()
+  } else if (style === 'stamp') {
+    ctx.fillStyle = '#df3434'; ctx.beginPath(); ctx.roundRect(0, 0, W, H, r); ctx.fill()
+    ctx.fillStyle = '#fff8f8'; ctx.beginPath(); ctx.roundRect(10 * scale, 10 * scale, W - 20 * scale, H - 20 * scale, r - 8 * scale); ctx.fill()
+  } else if (style === 'dark2' || style === 'cutout' || style === 'neon') {
+    const grad = ctx.createLinearGradient(0, 0, 0, H)
+    grad.addColorStop(0, style === 'neon' ? '#0f1020' : '#111827'); grad.addColorStop(1, '#1f2937')
+    ctx.fillStyle = grad; ctx.beginPath(); ctx.roundRect(0, 0, W, H, r); ctx.fill()
+  } else if (style === 'app') {
+    ctx.fillStyle = '#f7fbff'; ctx.beginPath(); ctx.roundRect(0, 0, W, H, r); ctx.fill()
+    ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.roundRect(26 * scale, 26 * scale, W - 52 * scale, H - 52 * scale, r); ctx.fill()
+  } else if (style === 'course') {
+    ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.roundRect(0, 0, W, H, r); ctx.fill()
+    ctx.fillStyle = '#1877f2'; ctx.fillRect(0, 0, W, 18 * scale)
+  } else if (style === 'wrong') {
+    ctx.fillStyle = '#fffdf6'; ctx.beginPath(); ctx.roundRect(0, 0, W, H, r); ctx.fill()
+    ctx.strokeStyle = '#e9d8b8'; ctx.lineWidth = 1 * scale
+    for (let y = 36 * scale; y < H; y += 35 * scale) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke() }
+  } else if (style === 'side') {
+    ctx.fillStyle = '#f7fbff'; ctx.beginPath(); ctx.roundRect(0, 0, W, H, r); ctx.fill()
+    ctx.fillStyle = '#1677ff'; ctx.fillRect(W - 18 * scale, 0, 18 * scale, H)
+  } else if (style === 'gridnote') {
+    ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.roundRect(0, 0, W, H, r); ctx.fill()
+    ctx.strokeStyle = '#edf5ff'; ctx.lineWidth = 1 * scale
+    for (let x = 0; x < W; x += 28 * scale) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke() }
+    for (let y = 0; y < H; y += 28 * scale) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke() }
+  } else if (style === 'paperclip') {
+    ctx.fillStyle = '#fffaf0'; ctx.beginPath(); ctx.roundRect(0, 0, W, H, r); ctx.fill()
+    ctx.lineWidth = 7 * scale; ctx.strokeStyle = '#9ca3af'; ctx.beginPath(); ctx.roundRect(W - 72 * scale, 28 * scale, 38 * scale, 76 * scale, 20 * scale); ctx.stroke()
+  } else if (style === 'blue') {
+    const grad = ctx.createLinearGradient(0, 0, 0, H)
+    grad.addColorStop(0, '#eaf4ff'); grad.addColorStop(1, '#ffffff')
+    ctx.fillStyle = grad; ctx.beginPath(); ctx.roundRect(0, 0, W, H, r); ctx.fill()
+  } else if (style === 'photo') {
+    const grad = ctx.createLinearGradient(0, 0, W, H)
+    grad.addColorStop(0, '#e8f4ec'); grad.addColorStop(1, '#fff3e1')
+    ctx.fillStyle = grad; ctx.beginPath(); ctx.roundRect(0, 0, W, H, r); ctx.fill()
+    ctx.fillStyle = 'rgba(255,255,255,0.62)'; ctx.beginPath(); ctx.roundRect(32 * scale, H - 190 * scale, W - 64 * scale, 84 * scale, 18 * scale); ctx.fill()
+  } else if (style === 'softpink') {
+    const grad = ctx.createLinearGradient(0, 0, 0, H)
+    grad.addColorStop(0, '#fff0f5'); grad.addColorStop(1, '#ffffff')
+    ctx.fillStyle = grad; ctx.beginPath(); ctx.roundRect(0, 0, W, H, r); ctx.fill()
+  } else if (style === 'greenfile') {
+    ctx.fillStyle = '#ecfdf5'; ctx.beginPath(); ctx.roundRect(0, 0, W, H, r); ctx.fill()
+    ctx.fillStyle = '#10b981'; ctx.fillRect(0, 0, 18 * scale, H)
+  } else if (style === 'orangeburst') {
+    ctx.fillStyle = '#fff7ed'; ctx.beginPath(); ctx.roundRect(0, 0, W, H, r); ctx.fill()
+    ctx.fillStyle = '#fed7aa'; ctx.beginPath(); ctx.arc(W * 0.82, H * 0.2, 130 * scale, 0, Math.PI * 2); ctx.fill()
+  } else if (style === 'blueprint_card') {
+    ctx.fillStyle = '#123b66'; ctx.beginPath(); ctx.roundRect(0, 0, W, H, r); ctx.fill()
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.lineWidth = 1 * scale
+    for (let x = 0; x < W; x += 26 * scale) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke() }
+    for (let y = 0; y < H; y += 26 * scale) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke() }
+  } else if (style === 'receipt_card') {
+    ctx.fillStyle = '#f7f1e5'; ctx.beginPath(); ctx.roundRect(0, 0, W, H, r); ctx.fill()
+    ctx.fillStyle = '#fffdf7'; ctx.beginPath(); ctx.roundRect(24 * scale, 24 * scale, W - 48 * scale, H - 48 * scale, 8 * scale); ctx.fill()
+  } else if (style === 'vertical') {
+    ctx.fillStyle = '#fffdf7'; ctx.beginPath(); ctx.roundRect(0, 0, W, H, r); ctx.fill()
+  } else if (style === 'filetab') {
+    ctx.fillStyle = '#f8fafc'; ctx.beginPath(); ctx.roundRect(0, 0, W, H, r); ctx.fill()
+    ctx.fillStyle = '#c7d2fe'; ctx.beginPath(); ctx.roundRect(0, 0, 180 * scale, 54 * scale, 0); ctx.fill()
+  } else if (style === 'calendar_card') {
+    ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.roundRect(0, 0, W, H, r); ctx.fill()
+    ctx.fillStyle = '#ef4444'; ctx.fillRect(0, 0, W, 62 * scale)
+  } else if (style === 'folderwall_card') {
+    ctx.fillStyle = '#fff7d6'; ctx.beginPath(); ctx.roundRect(0, 0, W, H, r); ctx.fill()
+  } else if (style === 'outline_card') {
+    ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.roundRect(0, 0, W, H, r); ctx.fill()
+    ctx.fillStyle = '#2563eb'; ctx.fillRect(34 * scale, 64 * scale, 8 * scale, 170 * scale)
+  } else if (style === 'cream_card') {
+    ctx.fillStyle = '#e8cfa7'; ctx.beginPath(); ctx.roundRect(0, 0, W, H, r); ctx.fill()
+    ctx.fillStyle = '#fff8ed'; ctx.beginPath(); ctx.roundRect(12 * scale, 12 * scale, W - 24 * scale, H - 24 * scale, r - 8 * scale); ctx.fill()
+  } else if (style === 'stamp2') {
+    ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.roundRect(0, 0, W, H, r); ctx.fill()
+  } else if (style === 'marker') {
+    ctx.fillStyle = '#fefce8'; ctx.beginPath(); ctx.roundRect(0, 0, W, H, r); ctx.fill()
+  } else {
+    drawCardBackground(ctx, W, H, r, style, {}, scale)
+  }
+}
+
+function getTemplateCardPalette(style) {
+  if (['dark2', 'cutout', 'neon', 'blueprint_card'].includes(style)) {
+    return { text: '#ffffff', sub: '#e5edf8', accent: '#7dd3fc', highlight: 'rgba(125,211,252,0.28)', hint: '#ffffff', hintHighlight: 'rgba(255,234,122,0.24)' }
+  }
+  if (['stamp', 'stamp2', 'exam', 'calendar_card'].includes(style)) {
+    return { text: '#1f2328', sub: '#2f3338', accent: '#df2f2f', highlight: 'rgba(255,224,92,0.76)', hint: '#171a1f', hintHighlight: 'rgba(255,224,92,0.82)' }
+  }
+  if (['check', 'greenfile'].includes(style)) {
+    return { text: '#123c2a', sub: '#23614a', accent: '#10b981', highlight: 'rgba(134,239,172,0.68)', hint: '#123c2a', hintHighlight: 'rgba(252,231,98,0.75)' }
+  }
+  if (['folder', 'folderwall_card', 'cream_card', 'receipt_card', 'note2', 'wrong'].includes(style)) {
+    return { text: '#3c2f1f', sub: '#66533b', accent: '#d97706', highlight: 'rgba(255,218,94,0.72)', hint: '#3c2f1f', hintHighlight: 'rgba(255,218,94,0.78)' }
+  }
+  if (['blue', 'side', 'course', 'filetab', 'outline_card', 'app'].includes(style)) {
+    return { text: '#162033', sub: '#334155', accent: '#2563eb', highlight: 'rgba(147,197,253,0.48)', hint: '#162033', hintHighlight: 'rgba(255,234,122,0.72)' }
+  }
+  return { text: '#171a20', sub: '#313640', accent: '#7c3aed', highlight: 'rgba(255,234,122,0.78)', hint: '#171a20', hintHighlight: 'rgba(255,234,122,0.82)' }
+}
+
+function drawTemplateTag(ctx, x, y, text, fill, color, scale) {
+  ctx.font = `bold ${13 * scale}px "PingFang SC", "Helvetica Neue", sans-serif`
+  const w = ctx.measureText(text).width + 18 * scale
+  ctx.fillStyle = fill
+  ctx.beginPath(); ctx.roundRect(x, y, w, 26 * scale, 13 * scale); ctx.fill()
+  ctx.fillStyle = color
+  ctx.fillText(text, x + 9 * scale, y + 6 * scale)
+  return w
+}
+
+function drawTemplateCardTitle(ctx, lines, x, y, maxWidth, style, palette, scale) {
+  const fontSize = (['poster', 'stamp2', 'marker'].includes(style) ? 38 : 34) * scale
+  const lineHeight = fontSize * 1.22
+  ctx.textBaseline = 'top'
+  lines.slice(0, 4).forEach((line, i) => {
+    const yy = y + i * lineHeight
+    const w = Math.min(ctx.measureText(line).width, maxWidth)
+    if (style === 'stamp2') {
+      ctx.lineWidth = 2 * scale
+      ctx.strokeStyle = palette.accent
+      ctx.beginPath(); ctx.roundRect(x - 3 * scale, yy - 3 * scale, w + 10 * scale, fontSize + 8 * scale, 5 * scale); ctx.stroke()
+    } else if (['cutout', 'gridnote', 'folderwall_card'].includes(style)) {
+      ctx.fillStyle = style === 'cutout' ? 'rgba(255,255,255,0.12)' : '#ffffff'
+      ctx.beginPath(); ctx.roundRect(x - 6 * scale, yy - 2 * scale, w + 14 * scale, fontSize + 8 * scale, 8 * scale); ctx.fill()
+    } else if (style === 'blueprint_card') {
+      ctx.strokeStyle = 'rgba(255,255,255,0.55)'
+      ctx.lineWidth = 1.5 * scale
+      ctx.beginPath(); ctx.roundRect(x - 5 * scale, yy - 3 * scale, w + 14 * scale, fontSize + 8 * scale, 5 * scale); ctx.stroke()
+    } else {
+      ctx.fillStyle = palette.highlight
+      ctx.fillRect(x, yy + fontSize * 0.55, w, fontSize * 0.42)
+    }
+    ctx.fillStyle = palette.text
+    ctx.fillText(line, x, yy)
+  })
+  return y + Math.min(lines.length, 4) * lineHeight
+}
+
+function drawTemplateCardDecor(ctx, W, H, style, palette, scale) {
+  ctx.save()
+  if (style === 'stamp2') {
+    ctx.strokeStyle = palette.accent
+    ctx.lineWidth = 2.5 * scale
+    ctx.beginPath(); ctx.arc(W - 70 * scale, 65 * scale, 36 * scale, 0, Math.PI * 2); ctx.stroke()
+    ctx.font = `bold ${16 * scale}px "PingFang SC", sans-serif`
+    ctx.textAlign = 'center'; ctx.fillStyle = palette.accent; ctx.fillText('备考', W - 70 * scale, 58 * scale); ctx.fillText('资料', W - 70 * scale, 78 * scale)
+    ctx.textAlign = 'left'
+  } else if (style === 'check') {
+    ctx.fillStyle = palette.accent
+    ;['真题', '模拟', '公基'].forEach((t, i) => {
+      const y = 275 * scale + i * 33 * scale
+      ctx.beginPath(); ctx.arc(56 * scale, y + 8 * scale, 8 * scale, 0, Math.PI * 2); ctx.fill()
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2 * scale; ctx.beginPath(); ctx.moveTo(51 * scale, y + 8 * scale); ctx.lineTo(56 * scale, y + 13 * scale); ctx.lineTo(64 * scale, y + 3 * scale); ctx.stroke()
+      ctx.fillStyle = palette.sub; ctx.font = `600 ${15 * scale}px "PingFang SC", sans-serif`; ctx.fillText(`${t}资料已整理`, 75 * scale, y)
+      ctx.fillStyle = palette.accent
+    })
+  } else if (style === 'tags') {
+    let x = 42 * scale, y = 282 * scale
+    ;['资料齐全', '重点清晰', '备考省心'].forEach((t, i) => {
+      const w = drawTemplateTag(ctx, x, y, t, ['#fff4b8', '#dbeafe', '#dcfce7'][i], '#1f2937', scale)
+      x += w + 8 * scale
+    })
+  } else if (style === 'calendar_card') {
+    ctx.fillStyle = '#ffffff'
+    ctx.font = `bold ${18 * scale}px "PingFang SC", sans-serif`
+    ctx.fillText('备考清单', 36 * scale, 20 * scale)
+  } else if (style === 'vertical') {
+    ctx.strokeStyle = '#e5decf'; ctx.lineWidth = 1 * scale
+    for (let x = 68 * scale; x < W - 35 * scale; x += 36 * scale) {
+      ctx.beginPath(); ctx.moveTo(x, 44 * scale); ctx.lineTo(x, H - 76 * scale); ctx.stroke()
+    }
+  } else if (style === 'marker') {
+    ctx.strokeStyle = palette.accent; ctx.lineWidth = 4 * scale
+    ctx.beginPath(); ctx.moveTo(42 * scale, 86 * scale); ctx.lineTo(W - 56 * scale, 72 * scale); ctx.stroke()
+  }
+  ctx.restore()
+}
+
+async function renderTemplateCardImage(text, templateStyle) {
+  const SCALE = 3
+  const W = 360 * SCALE, H = 480 * SCALE
+  const canvas = new OffscreenCanvas(W, H)
+  const ctx = canvas.getContext('2d')
+  const style = templateStyle || rndPick(CARD_TEMPLATE_STYLES)
+  const palette = getTemplateCardPalette(style)
+  drawTemplateCardBackground(ctx, W, H, style, SCALE)
+  drawTemplateCardDecor(ctx, W, H, style, palette, SCALE)
+
+  const { main, sub } = splitCardText(text)
+  const x = style === 'app' || style === 'receipt_card' ? 48 * SCALE : 38 * SCALE
+  const maxWidth = W - x - (style === 'side' ? 58 * SCALE : 38 * SCALE)
+  const top = ['folder', 'filetab', 'calendar_card'].includes(style) ? 78 * SCALE : 86 * SCALE
+  ctx.font = `900 ${(['poster', 'stamp2', 'marker'].includes(style) ? 38 : 34) * SCALE}px "PingFang SC", "Helvetica Neue", sans-serif`
+  const titleLines = wrapCardLines(ctx, main, maxWidth)
+  const afterTitleY = drawTemplateCardTitle(ctx, titleLines, x, top, maxWidth, style, palette, SCALE)
+
+  ctx.textBaseline = 'top'
+  ctx.fillStyle = palette.sub
+  ctx.font = `800 ${24 * SCALE}px "PingFang SC", "Helvetica Neue", sans-serif`
+  const subLines = wrapCardLines(ctx, sub || '备考资料已整理', maxWidth)
+  drawCardLines(ctx, subLines, x, afterTitleY + 24 * SCALE, 35 * SCALE, 4)
+
+  ctx.fillStyle = palette.accent
+  ctx.beginPath(); ctx.roundRect(x, H - 78 * SCALE, 40 * SCALE, 5 * SCALE, 3 * SCALE); ctx.fill()
+  drawRightHint(ctx, W, H, SCALE, palette.hint, palette.hintHighlight)
+  return offscreenToDataUrl(canvas)
+}
+
 // ── 卡片图（与生成笔记抽屉风格池保持一致，OffscreenCanvas 版）────────────
 async function renderCardImage(text, styleInput) {
+  if (Math.random() < 0.85) {
+    return renderTemplateCardImage(text, rndPick(CARD_TEMPLATE_STYLES))
+  }
   const picked = normalizeCardStyle(styleInput)
   const style = picked.id
   const scheme = picked.scheme
@@ -550,6 +1139,7 @@ async function runBatch({ productDetails, onlyDirImages, bgPool, borderColor, ti
     const buf = new Uint32Array(1)
     crypto.getRandomValues(buf)
     const productBgUrl = bgImagePool.length ? bgImagePool[buf[0] % bgImagePool.length] : null
+    const dirStyle = rndPick(DIR_IMAGE_STYLES) || 'classic'
 
     // 构建任务列表（与主线程逻辑一致）
     const tasks = []
@@ -588,7 +1178,7 @@ async function runBatch({ productDetails, onlyDirImages, bgPool, borderColor, ti
           const pdfCanvas = await renderPdfPage(culturePdf.path)
           dataUrl = await buildHistoryComposite(pdfCanvas, files, _borderColor, task.title, pickBgColor(), 0.35, productBgUrl)
         } else {
-          dataUrl = await buildDirImageForBatch(task.path, task.type, task.title, onlyDirImages, productBgUrl)
+          dataUrl = await buildDirImageForBatch(task.path, task.type, task.title, onlyDirImages, productBgUrl, dirStyle)
         }
         images.push({ label: task.label, base64: dataUrl.replace(/^data:image\/png;base64,/, '') })
         log(`  └ ${task.label} ✓`, 'success')

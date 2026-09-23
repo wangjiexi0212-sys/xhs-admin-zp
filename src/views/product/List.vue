@@ -1038,7 +1038,7 @@ async function generateNoteForProduct(detail, presetTitle = null) {
   // --- 生成标题：优先使用预设标题（卡片图文案），否则从 TITLE_POOL 随机取一条 ---
   const title = presetTitle || `${detail.company_name || ''}笔试，${TITLE_POOL[Math.floor(Math.random() * TITLE_POOL.length)]}`
 
-  // --- 生成正文：从 BODY_TEMPLATES（6个固定风格模版）随机取一条，与单品页面保持一致 ---
+  // --- 生成正文：从 BODY_TEMPLATES 固定风格模版池随机取一条，与单品页面保持一致 ---
   const tpl = BODY_TEMPLATES[Math.floor(Math.random() * BODY_TEMPLATES.length)]
 
   const bodyPromptRes = await getPromptList({ scene: 'content', page: 1, pageSize: 1 })
