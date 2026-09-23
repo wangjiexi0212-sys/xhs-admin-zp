@@ -534,11 +534,13 @@ async function runBatch({ productDetails, onlyDirImages, bgPool, borderColor, ti
     }
 
     // 生成卡片图
+    // cardText 同步回主线程，作为笔记标题，保证卡片图文案与笔记标题完全一致
+    let cardText = ''
     log(`  └ 生成卡片图中...`, 'info')
     try {
       const scheme = rndPick(_CARD_SCHEMES) || { bg: '#d4f7d4', text: '#2d4a2d', accent: '#52c07a' }
       const cardTitle = rndPick(_TITLE_POOL) || ''
-      const cardText = `${detail.company_name || ''}笔试，${cardTitle}`
+      cardText = `${detail.company_name || ''}笔试，${cardTitle}`
       const cardDataUrl = await renderCardImage(cardText, scheme)
       images.push({ label: '卡片图', base64: cardDataUrl.replace(/^data:image\/png;base64,/, '') })
       log(`  └ 卡片图 ✓`, 'success')
@@ -547,7 +549,8 @@ async function runBatch({ productDetails, onlyDirImages, bgPool, borderColor, ti
     }
 
     // 把本商品所有图片发回主线程（主线程负责：笔记生成 + docx + ZIP + 飞书）
-    post({ type: 'product-images', id, company, images })
+    // cardText：卡片图使用的文案，主线程直接用于笔记标题，无需重新随机
+    post({ type: 'product-images', id, company, images, cardText })
 
     done++; prog(done, total)
   }

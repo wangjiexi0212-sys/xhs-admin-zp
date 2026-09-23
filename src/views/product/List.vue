@@ -1026,13 +1026,17 @@ function pickRandom(arr) {
 }
 
 // 为单个商品生成标题 + 正文，返回 { title, body }，失败抛出异常
-async function generateNoteForProduct(detail) {
+/**
+ * @param {object} detail       商品详情
+ * @param {string} [presetTitle] 预设标题（批量生成时由 Worker 传入，与卡片图文案保持一致）
+ *                               不传时从 TITLE_POOL 随机生成
+ */
+async function generateNoteForProduct(detail, presetTitle = null) {
   const active = llmStore.active
   if (!active) throw new Error('未配置使用中的模型')
 
-  // --- 生成标题：从 TITLE_POOL 随机取一条拼接单位名称，不调大模型 ---
-  const randomTitle = TITLE_POOL[Math.floor(Math.random() * TITLE_POOL.length)]
-  const title = `${detail.company_name || ''}笔试，${randomTitle}`
+  // --- 生成标题：优先使用预设标题（卡片图文案），否则从 TITLE_POOL 随机取一条 ---
+  const title = presetTitle || `${detail.company_name || ''}笔试，${TITLE_POOL[Math.floor(Math.random() * TITLE_POOL.length)]}`
 
   // --- 生成正文：从 BODY_TEMPLATES（6个固定风格模版）随机取一条，与单品页面保持一致 ---
   const tpl = BODY_TEMPLATES[Math.floor(Math.random() * BODY_TEMPLATES.length)]
@@ -1343,14 +1347,15 @@ async function runBatchDirImages(onlyDirImages, useBgImage = false, borderColor 
         dirBatchDone.value = data.done
         dirBatchTotal.value = data.total
       } else if (data.type === 'product-images') {
-        const { company, id, images } = data
+        const { company, id, images, cardText } = data
         const folder = zip.folder(company)
         for (const { label, base64 } of images) {
           folder.file(`${label}.png`, base64, { base64: true })
           totalImages++
         }
         const detail = productDetails.find(p => p.id === id)?.detail
-        productImageMap[company] = { detail, folder, images }
+        // cardText：Worker 生成卡片图时使用的文案，存入 map 供后续笔记标题复用
+        productImageMap[company] = { detail, folder, images, cardText }
       } else if (data.type === 'done') {
         worker.terminate()
         resolve()
@@ -1381,22 +1386,24 @@ async function runBatchDirImages(onlyDirImages, useBgImage = false, borderColor 
 
   // ── 5. Worker 完成后：生成笔记内容 + docx + 飞书（主线程处理）──
   for (const company of Object.keys(productImageMap)) {
-    const { detail, folder, images } = productImageMap[company]
+    const { detail, folder, images, cardText } = productImageMap[company]
     if (!detail) continue
 
     dirBatchLogs.value.push({ text: `${company} - 生成笔记内容中...`, type: 'info' })
     let noteResult = null
     try {
       let title, body
+      // cardText 由 Worker 生成卡片图时确定，此处直接复用，确保笔记标题与卡片图文案完全一致
+      // 若 Worker 未生成卡片图（onlyDirImages 模式下卡片图仍会生成，但作为兜底保留随机逻辑）
+      const noteTitle = cardText || `${detail.company_name || ''}笔试，${TITLE_POOL[Math.floor(Math.random() * TITLE_POOL.length)]}`
       if (genBody) {
-        // 完整生成：标题（本地随机）+ 正文（LLM）
-        const res = await generateNoteForProduct(detail)
+        // 完整生成：标题复用卡片图文案 + 正文（LLM）
+        const res = await generateNoteForProduct(detail, noteTitle)
         title = res.title
         body = res.body
       } else {
         // 仅生成标题，跳过正文 LLM 调用
-        const randomTitle = TITLE_POOL[Math.floor(Math.random() * TITLE_POOL.length)]
-        title = `${detail.company_name || ''}笔试，${randomTitle}`
+        title = noteTitle
         body = null
       }
       noteResult = { title, body }
