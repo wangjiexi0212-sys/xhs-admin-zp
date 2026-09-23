@@ -41,3 +41,9 @@ export const deletePasslyResource = (id) =>
 export const getPasslySettings = () => request('/api/admin/passly/settings')
 export const updatePasslySettings = (data) =>
   request('/api/admin/passly/settings', { method: 'PUT', body: data })
+
+export const getPasslyQuestions = (params) => request(`/api/admin/passly/questions${qs(params)}`)
+export const updatePasslyQuestion = (id, data) =>
+  request(`/api/admin/passly/questions/${id}`, { method: 'PATCH', body: data })
+export const updatePasslyQuestionStatus = (id, status) =>
+  request(`/api/admin/passly/questions/${id}/status`, { method: 'PATCH', body: { status } })

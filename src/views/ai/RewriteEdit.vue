@@ -173,20 +173,52 @@
                 size="small"
                 class="section-ai-btn"
                 :loading="batchGenerating"
-                :disabled="rewriting || !images.length"
+                :disabled="rewriting || !images.length || extractMode"
                 @click="onBatchGenerate"
               >
                 <PictureOutlined v-if="!batchGenerating" />
                 AI 批量生成
+              </a-button>
+              <!-- 提取图片文字 -->
+              <template v-if="extractMode">
+                <a-button
+                  size="small"
+                  type="primary"
+                  class="section-ai-btn"
+                  :disabled="!selectedImgIdxs.length"
+                  @click="startExtract"
+                >
+                  <FileTextOutlined /> 提取所选（{{ selectedImgIdxs.length }}）
+                </a-button>
+                <a-button size="small" @click="toggleExtractMode">取消</a-button>
+              </template>
+              <a-button
+                v-else
+                size="small"
+                class="section-ai-btn"
+                :disabled="!images.length"
+                @click="toggleExtractMode"
+              >
+                <FileTextOutlined /> 提取文字
               </a-button>
             </div>
           </div>
           <div class="img-grid">
             <div v-for="(img, ii) in images" :key="ii" class="img-cell">
               <!-- 原图 -->
-              <div class="img-slot original">
+              <div
+                class="img-slot original"
+                :class="{ 'extract-selected': extractMode && selectedImgIdxs.includes(ii) }"
+                :style="extractMode ? 'cursor:pointer' : 'cursor:zoom-in'"
+                @click="extractMode ? toggleImgSelect(ii) : (previewImg.url = xhsImgProxyUrl(img.src), previewImg.visible = true)"
+              >
                 <img :src="xhsImgProxyUrl(img.src)" class="img-thumb" />
                 <div class="img-label">原图</div>
+                <!-- 选择模式勾选层 -->
+                <div v-if="extractMode" class="extract-check-overlay">
+                  <CheckCircleFilled v-if="selectedImgIdxs.includes(ii)" class="extract-check-icon selected" />
+                  <div v-else class="extract-check-icon-empty" />
+                </div>
               </div>
               <!-- AI 生成图 -->
               <div class="img-slot ai-slot">
@@ -318,6 +350,153 @@
       <RewritePromptPanel />
     </a-drawer>
 
+  <!-- 提取图片文字 Drawer -->
+  <a-drawer
+    v-model:open="extractDrawerVisible"
+    title="图片文字提取"
+    :width="640"
+    :body-style="{ padding: '16px' }"
+  >
+    <div v-if="!extractResults.length" class="extract-empty">暂无提取结果</div>
+    <template v-else>
+      <!-- 提取结果列表 -->
+      <div class="extract-result-list">
+        <div v-for="(item, ri) in extractResults" :key="ri" class="extract-result-item">
+          <!-- 左：图片缩略图 + 状态 -->
+          <div class="extract-img-preview">
+            <img :src="xhsImgProxyUrl(item.src)" class="extract-thumb" />
+            <div class="extract-item-status">
+              <a-spin v-if="item.status === 'running'" size="small" />
+              <CheckCircleFilled v-else-if="item.status === 'done'" style="color:#52c41a;font-size:16px" />
+              <CloseCircleFilled v-else-if="item.status === 'error'" style="color:#ff4d4f;font-size:16px" />
+              <span v-else class="extract-pending-dot" />
+            </div>
+          </div>
+          <!-- 右：提取文字 + 二创结果 -->
+          <div class="extract-text-area">
+            <div v-if="item.status === 'pending'" class="extract-status-hint">等待提取…</div>
+            <div v-else-if="item.status === 'running'" class="extract-status-hint">
+              <a-spin size="small" style="margin-right:6px" /> 提取中…
+            </div>
+            <template v-else>
+              <!-- 原文 -->
+              <a-textarea
+                v-model:value="item.text"
+                :auto-size="{ minRows: 4, maxRows: 16 }"
+                :status="item.status === 'error' ? 'error' : ''"
+                style="font-size:13px;line-height:1.7"
+              />
+              <!-- 二创结果 -->
+              <template v-if="item.rewriteStatus !== 'idle'">
+                <div class="item-rewrite-divider">
+                  <span class="item-rewrite-label">
+                    <ThunderboltOutlined style="color:#ff2442;margin-right:3px" />AI 优化二创
+                  </span>
+                </div>
+                <div v-if="item.rewriteStatus === 'pending'" class="extract-status-hint">等待优化…</div>
+                <div v-else-if="item.rewriteStatus === 'running'" class="extract-status-hint">
+                  <a-spin size="small" style="margin-right:6px" /> 优化中…
+                </div>
+                <div v-else class="rewrite-result-wrap">
+                  <a-textarea
+                    v-model:value="item.rewriteText"
+                    :auto-size="{ minRows: 4, maxRows: 16 }"
+                    :status="item.rewriteStatus === 'error' ? 'error' : ''"
+                    style="font-size:13px;line-height:1.7"
+                  />
+                  <a-button size="small" class="rewrite-copy-btn" @click="copyItemRewrite(item.rewriteText)">
+                    <CopyOutlined /> 复制
+                  </a-button>
+                </div>
+
+                <!-- ── 生成图片区域 ─────────────────────────────── -->
+                <template v-if="item.rewriteStatus === 'done' || item.rewriteStatus === 'error'">
+                  <div class="item-genimg-divider">
+                    <span class="item-genimg-label">
+                      <PictureOutlined style="color:#ff2442;margin-right:3px" />AI 生成图片
+                    </span>
+                  </div>
+
+                  <!-- 待生成 / 重新生成 按钮 -->
+                  <a-button
+                    v-if="item.genImgStatus === 'idle' || item.genImgStatus === 'error'"
+                    size="small"
+                    type="primary"
+                    class="genimg-btn"
+                    :loading="false"
+                    @click="generateItemImage(extractResults.indexOf(item))"
+                  >
+                    <PictureOutlined />
+                    {{ item.genImgStatus === 'error' ? '重新生成' : '生成图片' }}
+                  </a-button>
+                  <div v-if="item.genImgStatus === 'error'" class="genimg-err-text">{{ item.genImgErrMsg }}</div>
+
+                  <!-- 生成中 -->
+                  <div v-if="item.genImgStatus === 'running'" class="genimg-loading">
+                    <a-spin size="small" />
+                    <span>生成中，请稍候…</span>
+                  </div>
+
+                  <!-- 生成完成 -->
+                  <div v-if="item.genImgStatus === 'done' && item.genImgUrl" class="genimg-result">
+                    <img
+                      :src="item.genImgUrl"
+                      class="genimg-thumb"
+                      style="cursor:zoom-in"
+                      @click="previewImg.url = item.genImgUrl; previewImg.visible = true"
+                    />
+                    <div class="genimg-actions">
+                      <a-button size="small" @click="generateItemImage(extractResults.indexOf(item))">
+                        <ReloadOutlined /> 重新生成
+                      </a-button>
+                      <a-button size="small" type="primary" ghost @click="copyItemRewrite(item.genImgUrl)">
+                        <CopyOutlined /> 复制链接
+                      </a-button>
+                    </div>
+                  </div>
+                </template>
+              </template>
+            </template>
+          </div>
+        </div>
+      </div>
+
+      <!-- 底部：触发二创按钮 -->
+      <div
+        v-if="extractResults.some(r => r.status === 'done')"
+        class="rewrite-section"
+      >
+        <a-button
+          type="primary"
+          :loading="rewriteLoading"
+          :disabled="extractResults.some(r => r.status === 'running' || r.status === 'pending')"
+          class="rewrite-btn"
+          @click="startRewrite"
+        >
+          <ThunderboltOutlined v-if="!rewriteLoading" />
+          {{ extractResults.some(r => r.rewriteStatus !== 'idle') ? '重新优化二创' : '开始优化二创' }}
+        </a-button>
+        <span class="rewrite-hint">每张图片文字单独优化，保留核心内容与文意</span>
+      </div>
+
+      <!-- 一键下载所有已生成图片 -->
+      <div
+        v-if="extractResults.some(r => r.genImgStatus === 'done' && r.genImgUrl)"
+        class="rewrite-section"
+        style="margin-top:8px"
+      >
+        <a-button
+          :loading="extractGenImgBatchDownloading"
+          :disabled="extractGenImgBatchDownloading"
+          @click="downloadAllGenImgs"
+        >
+          <DownloadOutlined v-if="!extractGenImgBatchDownloading" />
+          一键下载全部 AI 图（{{ extractResults.filter(r => r.genImgStatus === 'done' && r.genImgUrl).length }} 张）
+        </a-button>
+      </div>
+    </template>
+  </a-drawer>
+
   <!-- 大图预览 Modal -->
   <a-modal
     v-model:open="previewImg.visible"
@@ -345,10 +524,13 @@ import {
   LoadingOutlined, MinusCircleOutlined, SettingOutlined, UnorderedListOutlined,
   DownOutlined, PlusOutlined, DownloadOutlined, ReloadOutlined, RollbackOutlined,
   ExclamationCircleOutlined, PictureOutlined, CopyOutlined, SaveOutlined,
-  AppstoreOutlined, EyeOutlined,
+  AppstoreOutlined, EyeOutlined, FileTextOutlined,
 } from '@ant-design/icons-vue'
 import RewritePromptPanel from './RewritePrompt.vue'
 import { rewriteContent, rewriteImage, uploadXhsImageViaWorker, proxyImageForDownload, xhsImgProxyUrl } from '@/api/xhsRewrite'
+import { chatLlm } from '@/api/llm'
+import { drawCoverStream } from '@/api/draw'
+import { getActiveLlmConfig } from '@/api/llmConfig'
 import { getRewritePromptList } from '@/api/rewritePrompts'
 import { processImageForDownload, triggerBlobDownload } from '@/utils/imageProcess'
 import { saveDraft as saveDraftFn } from '@/utils/draftStorage'
@@ -380,6 +562,15 @@ const rewritingContent = ref(false)   // 单独改写正文 loading
 const batchGenerating  = ref(false)
 const batchDownloading = ref(false)
 const showPromptDrawer = ref(false)
+
+// ─── 提取图片文字 ──────────────────────────────────────────
+const extractMode          = ref(false)   // 是否处于图片选择模式
+const selectedImgIdxs      = ref([])      // 已选图片索引列表
+const extractDrawerVisible = ref(false)   // 提取结果侧边抽屉
+const extractResults       = ref([])      // [{ idx, src, text, status }]
+const rewriteLoading                = ref(false)
+const rewriteResult                 = ref('')
+const extractGenImgBatchDownloading = ref(false)
 
 // ─── 日志 ────────────────────────────────────────────────
 const logs        = ref([])   // { time, type:'success'|'error'|'info'|'running', text, detail }
@@ -702,6 +893,246 @@ async function copyAll() {
     message.success('已复制标题 + 正文 + 标签')
     addLog('已复制标题+正文+标签到剪贴板', 'success')
   } catch { message.error('复制失败') }
+}
+
+// ─── 提取图片文字 ─────────────────────────────────────────
+function toggleExtractMode() {
+  extractMode.value = !extractMode.value
+  if (!extractMode.value) selectedImgIdxs.value = []
+}
+
+function toggleImgSelect(idx) {
+  const i = selectedImgIdxs.value.indexOf(idx)
+  if (i === -1) selectedImgIdxs.value.push(idx)
+  else selectedImgIdxs.value.splice(i, 1)
+}
+
+async function startExtract() {
+  if (!selectedImgIdxs.value.length) return
+  const llm = getActiveLlmConfig()
+  if (!llm) {
+    message.error('请先在「系统设置 → LLM 配置」中将某个渠道设为使用中')
+    return
+  }
+
+  const targets = selectedImgIdxs.value.map(idx => ({
+    idx,
+    src: images.value[idx]?.src || '',
+    text: '',
+    status: 'pending',
+    rewriteText: '',
+    rewriteStatus: 'idle',   // idle | pending | running | done | error
+    genImgStatus: 'idle',    // idle | running | done | error
+    genImgUrl: '',
+    genImgErrMsg: '',
+  }))
+  extractResults.value = targets
+  extractDrawerVisible.value = true
+  extractMode.value = false
+  selectedImgIdxs.value = []
+
+  // 并发 worker 池：最多同时处理 3 张，某张完成后立即补入下一张
+  const CONCURRENCY = 3
+  let nextIdx = 0
+
+  async function extractOne(i) {
+    // 通过响应式引用修改，确保 Vue 侦测到变更
+    extractResults.value[i].status = 'running'
+    try {
+      const src = extractResults.value[i].src
+      const proxyUrl = xhsImgProxyUrl(src)
+      const imgRes = await fetch(proxyUrl)
+      if (!imgRes.ok) throw new Error(`图片加载失败 (${imgRes.status})`)
+      const blob = await imgRes.blob()
+      const base64DataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload  = () => resolve(reader.result)
+        reader.onerror = reject
+        reader.readAsDataURL(blob)
+      })
+      const res = await chatLlm({
+        provider: llm.provider,
+        api_key: llm.api_key,
+        base_url: llm.base_url || '',
+        model: llm.default_model,
+        api_format: llm.api_format ?? '',
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'image_url', image_url: { url: base64DataUrl } },
+            { type: 'text', text: '请提取并输出这张图片中的所有文字内容，保持原有的排版和段落结构。如果某些文字被遮挡、打码、模糊或马赛克处理而无法识别，请在该位置用【马赛克】标注，不要猜测或补充被遮挡的内容。只输出文字内容，不要添加任何解释说明。' },
+          ],
+        }],
+        max_tokens: 2000,
+      })
+      extractResults.value[i].text   = res.content || '（未提取到文字）'
+      extractResults.value[i].status = 'done'
+    } catch (e) {
+      extractResults.value[i].text   = e.message || '提取失败'
+      extractResults.value[i].status = 'error'
+    }
+  }
+
+  async function worker() {
+    while (nextIdx < targets.length) {
+      await extractOne(nextIdx++)
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(CONCURRENCY, targets.length) }, () => worker())
+  )
+}
+
+// ─── 提取文字二创优化（每条独立，并发 3）──────────────────
+async function startRewrite() {
+  const llm = getActiveLlmConfig()
+  if (!llm) { message.error('请先在「系统设置 → LLM 配置」中配置大模型'); return }
+
+  // 找出所有提取成功的条目的索引
+  const doneIdxs = extractResults.value
+    .map((r, i) => i)
+    .filter(i => extractResults.value[i].status === 'done' && extractResults.value[i].text.trim())
+  if (!doneIdxs.length) return
+
+  rewriteLoading.value = true
+  // 重置二创状态
+  doneIdxs.forEach(i => {
+    extractResults.value[i].rewriteText   = ''
+    extractResults.value[i].rewriteStatus = 'pending'
+  })
+
+  let nextPtr = 0
+
+  async function rewriteOne(resultIdx) {
+    const item = extractResults.value[resultIdx]
+    item.rewriteStatus = 'running'
+    try {
+      const res = await chatLlm({
+        provider:    llm.provider,
+        api_key:     llm.api_key,
+        base_url:    llm.base_url || '',
+        model:       llm.default_model,
+        api_format:  llm.api_format ?? '',
+        messages: [{
+          role: 'user',
+          content: `以下是从图片中提取的文字内容，请进行文字优化和二创改写。\n\n改写要求：\n1. 严格保留原文核心内容、核心观点、关键数字和文意，不得遗漏或篡改任何重要信息\n2. 优化表达方式，使文字更流畅自然、易于阅读\n3. 可以灵活调整措辞、句式，但不改变信息的准确性\n4. 保持原有的逻辑结构和层次关系\n5. 如果原文中有【马赛克】标记，必须原样保留【马赛克】，不得猜测、替换或删除马赛克内容\n6. 直接输出优化后的内容，不需要任何解释或说明\n\n原文：\n\n${item.text.trim()}`,
+        }],
+        max_tokens: 4096,
+        temperature: 0.7,
+      })
+      item.rewriteText   = res.content || '（无内容返回）'
+      item.rewriteStatus = 'done'
+    } catch (e) {
+      item.rewriteText   = e.message || '优化失败'
+      item.rewriteStatus = 'error'
+    }
+  }
+
+  async function worker() {
+    while (nextPtr < doneIdxs.length) {
+      await rewriteOne(doneIdxs[nextPtr++])
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(3, doneIdxs.length) }, () => worker()))
+  rewriteLoading.value = false
+}
+
+async function copyItemRewrite(text) {
+  try {
+    await navigator.clipboard.writeText(text)
+    message.success('已复制到剪贴板')
+  } catch { message.error('复制失败') }
+}
+
+async function downloadAllGenImgs() {
+  const done = extractResults.value.filter(r => r.genImgStatus === 'done' && r.genImgUrl)
+  if (!done.length) return
+  extractGenImgBatchDownloading.value = true
+  const hide = message.loading(`处理 ${done.length} 张…`, 0)
+  let ok = 0
+  for (let i = 0; i < done.length; i++) {
+    const item = done[i]
+    try {
+      const blob = await _getProcessedBlob(item.genImgUrl)
+      triggerBlobDownload(blob, `extract_ai_${i + 1}.jpg`)
+      ok++
+      if (i < done.length - 1) await new Promise(r => setTimeout(r, 600))
+    } catch { /* 单张失败不中断 */ }
+  }
+  hide()
+  extractGenImgBatchDownloading.value = false
+  message.success(`已下载 ${ok} / ${done.length} 张`)
+}
+
+// ─── 按条目生成图片（二创文案 + 原图参考 → 全能绘图）──────────
+async function generateItemImage(i) {
+  const item = extractResults.value[i]
+  if (!item?.rewriteText?.trim()) {
+    message.warning('请先完成二创优化')
+    return
+  }
+  item.genImgStatus = 'running'
+  item.genImgUrl    = ''
+  item.genImgErrMsg = ''
+
+  try {
+    // 获取原图的公开 URL（复用已上传的 R2 地址）
+    const origImg = images.value.find(img => img.src === item.src)
+    let refImageUrl = ''
+    if (origImg) {
+      if (!origImg.publicSrc) {
+        const uploaded = await uploadXhsImageViaWorker(origImg.src)
+        origImg.publicSrc = uploaded.url
+      }
+      refImageUrl = origImg.publicSrc
+    }
+
+    const rewriteText = item.rewriteText.trim()
+    const hasMosaic = rewriteText.includes('【马赛克】')
+    const mosaicNote = hasMosaic
+      ? '\n6. 文字中标注【马赛克】的位置，在图片对应区域使用马赛克或模糊效果遮挡，不显示任何具体内容。'
+      : ''
+    // 明确要求绘图模型照搬文字，不得自行添加标题、分类或装饰性文字
+    const prompt = `请参考参考图的排版风格和视觉设计，生成一张内容图片。
+
+图片中的文字内容必须严格使用以下文本，逐字照搬，不得添加、修改、删除或替换任何内容：
+
+---
+${rewriteText}
+---
+
+严格要求：
+1. 图片文字与上方文本完全一致，禁止自行添加任何标题、分类标签、装饰性文字或额外说明
+2. 不得在图片中出现上方文本以外的任何文字内容
+3. 保持参考图的整体排版布局风格和配色
+4. 文字层次、段落结构与原文保持一致
+5. 禁止推断主题并添加相关联想内容${mosaicNote}`
+
+    await new Promise((resolve, reject) => {
+      drawCoverStream(
+        { prompt, reference_image_url: refImageUrl },
+        {
+          onProgress() {},
+          onDone(data) {
+            extractResults.value[i].genImgUrl    = data?.url || ''
+            extractResults.value[i].genImgStatus = 'done'
+            resolve()
+          },
+          onError(err) {
+            extractResults.value[i].genImgStatus  = 'error'
+            extractResults.value[i].genImgErrMsg  = err?.message || '生成失败'
+            reject(err)
+          },
+        },
+      )
+    })
+  } catch (e) {
+    item.genImgStatus  = 'error'
+    item.genImgErrMsg  = e?.message || '生成失败'
+    message.error(e?.message || '图片生成失败')
+  }
 }
 
 function saveDraft() {
@@ -1082,5 +1513,226 @@ function saveDraft() {
 .ai-rewrite-btn:not(:disabled):hover {
   background: #e01f3b !important;
   border-color: #e01f3b !important;
+}
+
+/* ─── 提取图片文字 ─────────────────────────────────────────── */
+.extract-check-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: 4px;
+  pointer-events: none;
+  background: rgba(0, 0, 0, .15);
+  transition: background .15s;
+}
+.img-slot.original:hover .extract-check-overlay { background: rgba(0, 0, 0, .28); }
+.img-slot.extract-selected { outline: 2px solid #1677ff; outline-offset: -1px; }
+.img-slot.extract-selected .extract-check-overlay { background: rgba(22, 119, 255, .12); }
+
+.extract-check-icon {
+  font-size: 17px;
+  color: #1677ff;
+  background: #fff;
+  border-radius: 50%;
+  line-height: 1;
+}
+.extract-check-icon-empty {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, .85);
+  background: transparent;
+}
+
+/* ─── 提取结果抽屉 ─────────────────────────────────────────── */
+.extract-result-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.extract-result-item {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  align-items: flex-start;
+}
+.extract-img-preview {
+  flex-shrink: 0;
+  width: 76px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.extract-thumb {
+  width: 76px;
+  height: 100px;
+  object-fit: cover;
+  border-radius: 5px;
+  border: 1px solid #e5e7eb;
+}
+.extract-item-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 20px;
+}
+.extract-pending-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #d1d5db;
+}
+.extract-text-area {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.extract-status-hint {
+  display: flex;
+  align-items: center;
+  color: #9ca3af;
+  font-size: 13px;
+  padding: 10px 0;
+}
+.extract-empty {
+  text-align: center;
+  color: #9ca3af;
+  padding: 48px 0;
+  font-size: 14px;
+}
+
+/* ─── 条目内二创分隔 ────────────────────────────────────── */
+.item-rewrite-divider {
+  display: flex;
+  align-items: center;
+  margin: 10px 0 6px;
+  gap: 6px;
+}
+.item-rewrite-divider::before,
+.item-rewrite-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #f0f0f0;
+}
+.item-rewrite-label {
+  font-size: 11px;
+  color: #9ca3af;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+}
+
+/* ─── 二创优化底部触发区 ─────────────────────────────────── */
+.rewrite-section {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1.5px dashed #e5e7eb;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.rewrite-hint {
+  font-size: 12px;
+  color: #9ca3af;
+}
+.rewrite-btn {
+  flex-shrink: 0;
+  background: #ff2442 !important;
+  border-color: #ff2442 !important;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.rewrite-btn:not(:disabled):hover {
+  background: #e01f3b !important;
+  border-color: #e01f3b !important;
+}
+.rewrite-result-wrap {
+  position: relative;
+}
+.rewrite-copy-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  font-size: 12px !important;
+  opacity: 0.65;
+  z-index: 1;
+}
+.rewrite-copy-btn:hover { opacity: 1; }
+
+/* ─── 条目内生成图片区域 ─────────────────────────────────── */
+.item-genimg-divider {
+  display: flex;
+  align-items: center;
+  margin: 10px 0 6px;
+  gap: 6px;
+}
+.item-genimg-divider::before,
+.item-genimg-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #f0f0f0;
+}
+.item-genimg-label {
+  font-size: 11px;
+  color: #9ca3af;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+}
+
+.genimg-btn {
+  background: #ff2442 !important;
+  border-color: #ff2442 !important;
+  font-size: 12px !important;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.genimg-btn:not(:disabled):hover {
+  background: #e01f3b !important;
+  border-color: #e01f3b !important;
+}
+
+.genimg-err-text {
+  font-size: 12px;
+  color: #ff4d4f;
+  margin-top: 4px;
+}
+
+.genimg-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #9ca3af;
+  font-size: 13px;
+  padding: 8px 0;
+}
+
+.genimg-result {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+.genimg-thumb {
+  width: 100%;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+  object-fit: cover;
+}
+.genimg-actions {
+  display: flex;
+  gap: 8px;
 }
 </style>

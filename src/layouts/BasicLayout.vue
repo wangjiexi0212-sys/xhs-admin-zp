@@ -76,6 +76,7 @@
           <a-menu-item key="/passly/login-codes">登录码管理</a-menu-item>
           <a-menu-item key="/passly/categories">资料分类</a-menu-item>
           <a-menu-item key="/passly/resources">资料库管理</a-menu-item>
+          <a-menu-item key="/passly/questions">题库管理</a-menu-item>
           <a-menu-item key="/passly/settings">PASSLY设置</a-menu-item>
         </a-sub-menu>
       </a-menu>

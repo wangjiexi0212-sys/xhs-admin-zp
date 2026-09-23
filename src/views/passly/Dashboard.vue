@@ -44,6 +44,8 @@ const stats = computed(() => [
   { label: '资料数量', value: dashboard.value.resourceTotal || 0 },
   { label: '今日浏览', value: dashboard.value.todayView || 0 },
   { label: '累计浏览', value: dashboard.value.totalView || 0 },
+  { label: '题目数量', value: dashboard.value.questionTotal || 0 },
+  { label: '答题次数', value: dashboard.value.attemptTotal || 0 },
 ])
 
 async function load() {
