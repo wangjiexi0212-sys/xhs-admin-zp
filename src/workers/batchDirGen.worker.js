@@ -257,6 +257,13 @@ const DIR_IMAGE_STYLES = [
   'outline',
   'cream',
   'mono',
+  'year_card',
+  'timeline_card',
+  'ticket_card',
+  'tag_card',
+  'stagger_card',
+  'grouped_card',
+  'border_card',
 ]
 
 const PDF_SINGLE_STYLES = ['classic', 'folder', 'desk', 'stamp', 'split', 'phone', 'blueprint', 'minimal']
@@ -438,7 +445,8 @@ async function renderCompositeImage(files, title, borderColor, bgColor, bgOpacit
   const DPR = 2, W = 600
   const activeStyle = DIR_IMAGE_STYLES.includes(style) ? style : 'classic'
   const BORDER = bgImageUrl ? 0 : (activeStyle === 'classic' ? 10 : 0)
-  const gridStyles = ['sticky', 'calendar', 'folder_wall', 'rainbow']
+  const infoCardStyles = ['year_card', 'timeline_card', 'ticket_card', 'tag_card', 'stagger_card', 'grouped_card', 'border_card']
+  const gridStyles = ['sticky', 'calendar', 'folder_wall', 'rainbow', ...infoCardStyles]
   const PADDING = activeStyle === 'magazine' || activeStyle === 'terminal' || activeStyle === 'book' || activeStyle === 'mono' ? 40 : 34
   const ICON_SIZE = activeStyle === 'classic' || activeStyle === 'drive' ? 30 : 32
   const BADGE_W = activeStyle === 'table' || activeStyle === 'sheet' || activeStyle === 'dark' || activeStyle === 'magazine' || activeStyle === 'split' || activeStyle === 'blueprint' || activeStyle === 'receipt' || activeStyle === 'book' || activeStyle === 'index' || activeStyle === 'bubble' || activeStyle === 'stamp' || activeStyle === 'mint' || activeStyle === 'cream' || activeStyle === 'mono'
@@ -455,9 +463,22 @@ async function renderCompositeImage(files, title, borderColor, bgColor, bgOpacit
   const fontSize = activeStyle === 'drive' || activeStyle === 'table' || activeStyle === 'sheet' || activeStyle === 'dark' || activeStyle === 'terminal' || activeStyle === 'blueprint' || activeStyle === 'mono' ? 18 : 17
   const rows = measureDirRows(files, maxTextW, fontSize)
   const rowGap = ['sticky', 'soft', 'checklist', 'bubble', 'mint', 'rainbow'].includes(activeStyle) ? 14 : 0
+  const infoMeasureCanvas = new OffscreenCanvas(1, 1)
+  const infoMeasureCtx = infoMeasureCanvas.getContext('2d')
+  infoMeasureCtx.font = '600 15px "PingFang SC", "Microsoft YaHei", sans-serif'
+  const infoCardW = (W - 84) / 2
+  const infoCardRows = infoCardStyles.includes(activeStyle)
+    ? files.map(file => wrapCanvasText(infoMeasureCtx, file.name, infoCardW - (activeStyle === 'year_card' ? 86 : 30)))
+    : []
+  const infoRowHeights = infoCardStyles.includes(activeStyle)
+    ? Array.from({ length: Math.ceil(files.length / 2) }, (_, rowIndex) => {
+        const maxLines = Math.max(infoCardRows[rowIndex * 2]?.length || 1, infoCardRows[rowIndex * 2 + 1]?.length || 1)
+        return Math.max(108, maxLines * 22 + (activeStyle === 'tag_card' ? 70 : 54))
+      })
+    : []
   const gridCardH = activeStyle === 'calendar' || activeStyle === 'folder_wall' || activeStyle === 'rainbow' ? 128 : 126
   const bodyH = gridStyles.includes(activeStyle)
-    ? Math.ceil(files.length / 2) * gridCardH
+    ? infoCardStyles.includes(activeStyle) ? infoRowHeights.reduce((sum, height) => sum + height, 0) : Math.ceil(files.length / 2) * gridCardH
     : rows.reduce((sum, row) => sum + row.height + rowGap, 0)
   const H = BORDER + TITLE_H + bodyH + PADDING + BORDER + (activeStyle === 'drive' ? 44 : 0)
   const canvas = new OffscreenCanvas(W * DPR, H * DPR)
@@ -508,10 +529,51 @@ async function renderCompositeImage(files, title, borderColor, bgColor, bgOpacit
       const col = i % 2
       const cardW = (W - 84) / 2
       const cardX = 34 + col * (cardW + 16)
-      const cardY = listTop + Math.floor(i / 2) * gridCardH
-      const cardH = gridCardH - 22
+      const infoRow = Math.floor(i / 2)
+      const cardY = infoCardStyles.includes(activeStyle)
+        ? listTop + infoRowHeights.slice(0, infoRow).reduce((sum, value) => sum + value, 0) + (activeStyle === 'stagger_card' && col ? 12 : 0)
+        : listTop + infoRow * gridCardH
+      const cardH = infoCardStyles.includes(activeStyle) ? infoRowHeights[infoRow] - 16 : gridCardH - 22
       ctx.save()
-      if (activeStyle === 'sticky') {
+      if (infoCardStyles.includes(activeStyle)) {
+        const palette = ['#fff0f0', '#e7f6ff', '#f3fbea', '#fff6e5']
+        const accent = ['#ff5d70', '#3e8edb', '#55a96b', '#e29a25'][i % 4]
+        const yearMatch = String(file.name || '').match(/20\d{2}/)
+        const year = yearMatch ? yearMatch[0] : String(i + 1).padStart(2, '0')
+        if (activeStyle === 'timeline_card') {
+          ctx.strokeStyle = '#d6dfeb'; ctx.lineWidth = 2
+          ctx.beginPath(); ctx.moveTo(cardX + 26, cardY); ctx.lineTo(cardX + 26, cardY + cardH); ctx.stroke()
+          ctx.fillStyle = accent; ctx.beginPath(); ctx.arc(cardX + 26, cardY + 28, 8, 0, Math.PI * 2); ctx.fill()
+          ctx.fillStyle = palette[i % palette.length]; ctx.beginPath(); ctx.roundRect(cardX + 46, cardY, cardW - 46, cardH, 14); ctx.fill()
+          ctx.fillStyle = accent; ctx.font = 'bold 20px "PingFang SC", sans-serif'; ctx.fillText(year, cardX + 62, cardY + 30)
+          ctx.fillStyle = '#202938'; ctx.font = '600 15px "PingFang SC", sans-serif'
+          drawWrappedLines(ctx, wrapCanvasText(ctx, file.name, cardW - 76), cardX + 62, cardY + 58, 22, 15)
+        } else {
+          ctx.fillStyle = activeStyle === 'border_card' ? '#ffffff' : palette[i % palette.length]
+          ctx.beginPath(); ctx.roundRect(cardX, cardY, cardW, cardH, activeStyle === 'ticket_card' ? 4 : 16); ctx.fill()
+          if (activeStyle === 'border_card') {
+            ctx.strokeStyle = accent; ctx.lineWidth = 2; ctx.stroke()
+          }
+          if (activeStyle === 'ticket_card') {
+            ctx.fillStyle = accent; ctx.fillRect(cardX, cardY, 6, cardH)
+          }
+          if (activeStyle === 'year_card') {
+            ctx.fillStyle = accent; ctx.font = 'bold 24px "PingFang SC", sans-serif'; ctx.fillText(year, cardX + 14, cardY + 34)
+            ctx.fillStyle = '#202938'; ctx.font = '600 15px "PingFang SC", sans-serif'
+            drawWrappedLines(ctx, wrapCanvasText(ctx, file.name, cardW - 86), cardX + 72, cardY + 29, 22, 15)
+          } else {
+            ctx.fillStyle = accent; ctx.beginPath(); ctx.roundRect(cardX + 14, cardY + 13, activeStyle === 'grouped_card' ? 72 : 46, 25, 8); ctx.fill()
+            ctx.fillStyle = '#fff'; ctx.font = 'bold 12px "PingFang SC", sans-serif'; ctx.textAlign = 'center'
+            ctx.fillText(activeStyle === 'grouped_card' ? `${year} 真题` : (file.isdir === 1 ? '文件夹' : 'PDF'), cardX + 14 + (activeStyle === 'grouped_card' ? 36 : 23), cardY + 30); ctx.textAlign = 'left'
+            ctx.fillStyle = '#202938'; ctx.font = '600 15px "PingFang SC", sans-serif'
+            drawWrappedLines(ctx, wrapCanvasText(ctx, file.name, cardW - 28), cardX + 14, cardY + 62, 22, 15)
+            if (activeStyle === 'tag_card') {
+              ctx.fillStyle = 'rgba(32,41,56,0.08)'; ctx.beginPath(); ctx.roundRect(cardX + 70, cardY + 16, 52, 19, 5); ctx.fill()
+              ctx.fillStyle = '#667085'; ctx.font = '11px "PingFang SC", sans-serif'; ctx.fillText('回忆版', cardX + 78, cardY + 30)
+            }
+          }
+        }
+      } else if (activeStyle === 'sticky') {
         ctx.translate(cardX + cardW / 2, cardY + cardH / 2)
         ctx.rotate((i % 2 ? 0.012 : -0.012))
         ctx.fillStyle = stickyColors[i % stickyColors.length]
