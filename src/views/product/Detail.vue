@@ -2581,7 +2581,7 @@ const DIR_IMAGE_STYLE_OPTIONS = [
   { value: 'outline', label: '竖线编号' },
   { value: 'cream', label: '奶油纸张' },
   { value: 'mono', label: '黑白极简' },
-  { value: 'year_card', label: '年份大号卡片' },
+  { value: 'year_card', label: '大号序号卡片' },
   { value: 'timeline_card', label: '年份时间轴' },
   { value: 'ticket_card', label: '横向票据卡片' },
   { value: 'tag_card', label: '考试标签卡片' },
@@ -2885,9 +2885,9 @@ async function renderStyledCompositeImage(files, title, borderColor, bgColor, bg
     ? 56
     : activeStyle === 'soft' ? ICON_SIZE + 10 : ICON_SIZE
   const ICON_TEXT_GAP = activeStyle === 'drive' ? 26 : 22
-  const TITLE_H = ['magazine', 'terminal', 'book', 'mono'].includes(activeStyle) ? 118 : 102
+  const TITLE_H = activeStyle === 'split' ? 170 : ['magazine', 'terminal', 'book', 'mono'].includes(activeStyle) ? 118 : 102
   const textX = ['table', 'sheet', 'dark', 'split', 'blueprint', 'receipt', 'book', 'index', 'bubble', 'stamp', 'mint', 'cream', 'mono'].includes(activeStyle)
-    ? BORDER + PADDING + 130
+    ? BORDER + PADDING + (activeStyle === 'book' ? 154 : 130)
     : BORDER + PADDING + BADGE_W + ICON_TEXT_GAP
   const maxTextW = W - textX - PADDING - BORDER
   const fontSize = ['drive', 'table', 'sheet', 'dark', 'terminal', 'blueprint', 'mono'].includes(activeStyle) ? 18 : 17
@@ -2902,7 +2902,8 @@ async function renderStyledCompositeImage(files, title, borderColor, bgColor, bg
   const infoRowHeights = infoCardStyles.includes(activeStyle)
     ? Array.from({ length: Math.ceil(files.length / 2) }, (_, rowIndex) => {
         const maxLines = Math.max(infoCardRows[rowIndex * 2]?.length || 1, infoCardRows[rowIndex * 2 + 1]?.length || 1)
-        return Math.max(108, maxLines * 22 + (activeStyle === 'tag_card' ? 70 : 54))
+        const verticalSpace = activeStyle === 'year_card' ? 54 : 78
+        return Math.max(108, maxLines * 22 + verticalSpace)
       })
     : []
   const gridCardH = activeStyle === 'calendar' || activeStyle === 'folder_wall' || activeStyle === 'rainbow' ? 128 : 126
@@ -2945,9 +2946,9 @@ async function renderStyledCompositeImage(files, title, borderColor, bgColor, bg
   }
   if (activeStyle === 'split') {
     ctx.fillStyle = '#9a4e00'
-    ctx.font = 'bold 26px "PingFang SC", sans-serif'
-    ctx.fillText('2026', 40, 150)
-    ctx.fillText('备考资料包', 40, 184)
+    ctx.font = 'bold 22px "PingFang SC", sans-serif'
+    ctx.fillText('2026', 40, 126)
+    ctx.fillText('备考资料包', 40, 154)
   }
   if (activeStyle === 'table' || activeStyle === 'dark') {
     const headerY = BORDER + TITLE_H - 18
@@ -2998,7 +2999,7 @@ async function renderStyledCompositeImage(files, title, borderColor, bgColor, bg
             ctx.fillStyle = accent; ctx.fillRect(cardX, cardY, 6, cardH)
           }
           if (activeStyle === 'year_card') {
-            ctx.fillStyle = accent; ctx.font = 'bold 24px "PingFang SC", sans-serif'; ctx.fillText(year, cardX + 14, cardY + 34)
+            ctx.fillStyle = accent; ctx.font = 'bold 24px "PingFang SC", sans-serif'; ctx.fillText(String(i + 1).padStart(2, '0'), cardX + 14, cardY + 34)
             ctx.fillStyle = '#202938'; ctx.font = '600 15px "PingFang SC", sans-serif'
             drawDirLines(ctx, wrapDirText(ctx, file.name, cardW - 86), cardX + 72, cardY + 29, 22, 15)
           } else {
@@ -3007,10 +3008,6 @@ async function renderStyledCompositeImage(files, title, borderColor, bgColor, bg
             ctx.fillText(activeStyle === 'grouped_card' ? `${year} 真题` : (file.isdir === 1 ? '文件夹' : 'PDF'), cardX + 14 + (activeStyle === 'grouped_card' ? 36 : 23), cardY + 30); ctx.textAlign = 'left'
             ctx.fillStyle = '#202938'; ctx.font = '600 15px "PingFang SC", sans-serif'
             drawDirLines(ctx, wrapDirText(ctx, file.name, cardW - 28), cardX + 14, cardY + 62, 22, 15)
-            if (activeStyle === 'tag_card') {
-              ctx.fillStyle = 'rgba(32,41,56,0.08)'; ctx.beginPath(); ctx.roundRect(cardX + 70, cardY + 16, 52, 19, 5); ctx.fill()
-              ctx.fillStyle = '#667085'; ctx.font = '11px "PingFang SC", sans-serif'; ctx.fillText('回忆版', cardX + 78, cardY + 30)
-            }
           }
         }
       } else if (activeStyle === 'sticky') {
@@ -3064,8 +3061,8 @@ async function renderStyledCompositeImage(files, title, borderColor, bgColor, bg
       ctx.beginPath(); ctx.moveTo(BORDER + PADDING + 16, y + 32); ctx.lineTo(BORDER + PADDING + 16, y + height + rowGap + 20); ctx.stroke()
     }
     const tabularStyles = ['table', 'sheet', 'dark', 'split', 'blueprint', 'receipt', 'book', 'index', 'bubble', 'stamp', 'mint', 'cream', 'mono']
-    const iconX = tabularStyles.includes(activeStyle) ? BORDER + PADDING + 58 : BORDER + PADDING
-    const noX = BORDER + PADDING
+    const iconX = tabularStyles.includes(activeStyle) ? BORDER + PADDING + (activeStyle === 'book' ? 78 : 58) : BORDER + PADDING
+    const noX = activeStyle === 'book' ? BORDER + PADDING + 24 : BORDER + PADDING
     if (tabularStyles.includes(activeStyle)) {
       ctx.fillStyle = activeStyle === 'dark' ? 'rgba(237,242,255,0.78)' : '#6c7482'
       ctx.font = 'bold 15px "PingFang SC", sans-serif'
