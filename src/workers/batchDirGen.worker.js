@@ -9,11 +9,12 @@
 
 /* eslint-disable no-undef */
 importScripts(
-  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
 )
 
-// 禁用 PDF.js 内部 worker，避免嵌套 Worker 可靠性问题（从 Worker 里再 spawn Worker）
-// PDF.js 会在本线程同步解析 PDF，对批量生成场景完全够用
+// 批量生成本身运行在 Web Worker 中；预加载 pdf.worker 后，让 PDF.js 的
+// fake worker 直接复用当前线程内的 WorkerMessageHandler，避免访问 document。
 pdfjsLib.GlobalWorkerOptions.workerSrc = ''
 
 // ── 全局配置（由主线程通过 start 消息初始化）──────────────────────
@@ -257,6 +258,10 @@ const DIR_IMAGE_STYLES = [
   'cream',
   'mono',
 ]
+
+const PDF_SINGLE_STYLES = ['classic', 'folder', 'desk', 'stamp', 'split', 'phone', 'blueprint', 'minimal']
+const PDF_GRID_STYLES = ['classic', 'desk', 'folder', 'phone', 'stamp', 'checklist', 'blueprint', 'album', 'pinboard', 'minimalLine']
+const PDF_GRID_TITLE_STYLES = ['solidRed', 'pill', 'stroke', 'card', 'shadow']
 
 function wrapCanvasText(ctx, text, maxWidth) {
   const lines = []
@@ -581,7 +586,11 @@ async function renderCompositeImage(files, title, borderColor, bgColor, bgOpacit
 }
 
 // ── buildHistoryComposite（OffscreenCanvas 版）───────────────────────
-async function buildHistoryComposite(pdfOffscreen, files, borderColor, title, bgColor, bgOpacity, bgImageUrl) {
+async function buildHistoryComposite(pdfOffscreen, files, borderColor, title, bgColor, bgOpacity, bgImageUrl, style = 'classic') {
+  const activeStyle = PDF_SINGLE_STYLES.includes(style) ? style : 'classic'
+  if (activeStyle !== 'classic') {
+    return buildStyledSinglePdfComposite(pdfOffscreen, files, borderColor, title, activeStyle)
+  }
   const CANVAS_W = 1242, CANVAS_H = 1656
   const BORDER = bgImageUrl ? 0 : 12
   const TITLE_H = 120
@@ -652,13 +661,98 @@ async function buildHistoryComposite(pdfOffscreen, files, borderColor, title, bg
   return offscreenToDataUrl(canvas)
 }
 
+async function buildStyledSinglePdfComposite(pdfOffscreen, files, borderColor, title, style = 'classic') {
+  const CANVAS_W = 1242, CANVAS_H = 1656
+  const canvas = new OffscreenCanvas(CANVAS_W, CANVAS_H)
+  const ctx = canvas.getContext('2d')
+  const pdfBitmap = await createImageBitmap(pdfOffscreen)
+  const pdfFiles = files.filter(f => f.isdir === 0)
+
+  const fillBg = (fill, border = null) => {
+    ctx.fillStyle = fill; ctx.fillRect(0, 0, CANVAS_W, CANVAS_H)
+    if (border) { ctx.strokeStyle = border; ctx.lineWidth = 12; ctx.strokeRect(6, 6, CANVAS_W - 12, CANVAS_H - 12) }
+  }
+  const titleText = (x, y, color = '#f00', size = 58, align = 'center') => {
+    ctx.fillStyle = color
+    ctx.font = `bold ${size}px "PingFang SC", "Microsoft YaHei", sans-serif`
+    ctx.textAlign = align; ctx.textBaseline = 'middle'
+    ctx.fillText(title, x, y)
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'
+  }
+  const drawPage = ({ x, y, w, h, r = 16, rotate = 0, shadow = true }) => {
+    const cx = x + w / 2, cy = y + h / 2
+    ctx.save(); ctx.translate(cx, cy); ctx.rotate(rotate * Math.PI / 180)
+    if (shadow) { ctx.shadowColor = 'rgba(0,0,0,.24)'; ctx.shadowBlur = 18; ctx.shadowOffsetY = 8 }
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.roundRect(-w / 2, -h / 2, w, h, r); ctx.fill()
+    ctx.shadowColor = 'transparent'; ctx.beginPath(); ctx.roundRect(-w / 2, -h / 2, w, h, r); ctx.clip()
+    ctx.fillStyle = '#fff'; ctx.fillRect(-w / 2, -h / 2, w, h)
+    const crop = 40
+    const srcW = pdfBitmap.width - crop * 2, srcH = pdfBitmap.height - crop * 2
+    const scale = Math.min(w / srcW, h / srcH)
+    const dw = srcW * scale, dh = srcH * scale
+    ctx.drawImage(pdfBitmap, crop, crop, srcW, srcH, -dw / 2, -dh / 2, dw, dh)
+    ctx.restore()
+  }
+  const drawOverlay = (x, y, width = 540) => {
+    const fontSize = 22, rowH = 70, iconSize = 40, pad = 22
+    ctx.font = `${fontSize}px "PingFang SC", "Microsoft YaHei", sans-serif`
+    const maxTextW = width - pad * 2 - iconSize - 14
+    const rows = pdfFiles.map(file => {
+      const lines = wrapCanvasText(ctx, file.name, maxTextW)
+      return { file, lines, height: Math.max(rowH, lines.length * (fontSize + 8) + 22) }
+    })
+    const height = rows.reduce((sum, row) => sum + row.height, 0) + pad * 2
+    x = Math.min(Math.max(24, x), CANVAS_W - width - 24)
+    y = Math.min(Math.max(24, y), CANVAS_H - height - 24)
+    ctx.shadowColor = 'rgba(0,0,0,.22)'; ctx.shadowBlur = 18; ctx.shadowOffsetY = 6
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.roundRect(x, y, width, height, 14); ctx.fill()
+    ctx.shadowColor = 'transparent'; ctx.strokeStyle = 'rgba(0,0,0,.08)'; ctx.stroke()
+    let cy = y + pad
+    rows.forEach((row, i) => {
+      drawPdfIcon(ctx, x + pad, cy + (rowH - iconSize) / 2, iconSize)
+      ctx.fillStyle = '#333'; ctx.font = `${fontSize}px "PingFang SC", "Microsoft YaHei", sans-serif`
+      drawWrappedLines(ctx, row.lines, x + pad + iconSize + 14, cy + Math.max(fontSize + 8, (row.height - row.lines.length * (fontSize + 8)) / 2 + fontSize), fontSize + 8, fontSize, 12)
+      if (i < rows.length - 1) {
+        ctx.strokeStyle = '#eee'; ctx.beginPath(); ctx.moveTo(x + pad, cy + row.height); ctx.lineTo(x + width - pad, cy + row.height); ctx.stroke()
+      }
+      cy += row.height
+    })
+  }
+
+  if (style === 'folder') {
+    fillBg('#f1c46b'); ctx.fillStyle = '#fff2cf'; ctx.beginPath(); ctx.roundRect(70, 150, CANVAS_W - 140, CANVAS_H - 220, 34); ctx.fill()
+    titleText(158, 145, '#7a4306', 54, 'left'); drawPage({ x: 285, y: 300, w: 650, h: 950 }); drawOverlay(655, 1150, 510)
+  } else if (style === 'desk') {
+    fillBg('#eef7f2'); ctx.fillStyle = '#f8e2cf'; ctx.save(); ctx.translate(-140, 1060); ctx.rotate(-0.14); ctx.fillRect(0, 0, 1120, 320); ctx.restore()
+    titleText(90, 120, '#814c1d', 54, 'left'); drawPage({ x: 120, y: 230, w: 660, h: 980, rotate: -3 }); drawOverlay(645, 1120, 520)
+  } else if (style === 'stamp') {
+    fillBg('#fff8f1', borderColor); ctx.strokeStyle = '#d92727'; ctx.lineWidth = 6; ctx.strokeRect(42, 42, CANVAS_W - 84, CANVAS_H - 84)
+    titleText(CANVAS_W / 2, 96, '#d92727', 58); drawPage({ x: 130, y: 205, w: 680, h: 1045, r: 10 }); drawOverlay(655, 1135, 520)
+  } else if (style === 'split') {
+    fillBg('#eef7ff'); ctx.fillStyle = '#fff7e6'; ctx.fillRect(0, 0, 430, CANVAS_H)
+    titleText(88, 180, '#9a4e00', 46, 'left'); drawPage({ x: 485, y: 130, w: 650, h: 965 }); drawOverlay(88, 945, 430)
+  } else if (style === 'phone') {
+    fillBg('#101827'); ctx.fillStyle = '#f8fafc'; ctx.beginPath(); ctx.roundRect(210, 58, 820, 1540, 70); ctx.fill()
+    ctx.strokeStyle = '#1f2937'; ctx.lineWidth = 18; ctx.beginPath(); ctx.roundRect(210, 58, 820, 1540, 70); ctx.stroke()
+    titleText(290, 190, '#111827', 44, 'left'); drawPage({ x: 315, y: 275, w: 610, h: 895, r: 14 }); drawOverlay(330, 1215, 580)
+  } else if (style === 'blueprint') {
+    fillBg('#123b66'); drawGridBg(ctx, 0, 0, CANVAS_W, CANVAS_H, '#ffffff', 0.10, 42)
+    titleText(92, 138, '#fff', 48, 'left'); drawPage({ x: 115, y: 240, w: 670, h: 980, r: 10 }); drawOverlay(660, 1110, 510)
+  } else {
+    fillBg('#fff'); ctx.fillStyle = '#111827'; ctx.fillRect(72, 0, 28, CANVAS_H)
+    titleText(150, 122, '#111827', 48, 'left'); ctx.strokeStyle = '#111827'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(150, 172); ctx.lineTo(930, 172); ctx.stroke()
+    drawPage({ x: 150, y: 240, w: 650, h: 970, r: 2, shadow: false }); ctx.strokeStyle = '#111827'; ctx.strokeRect(150, 240, 650, 970); drawOverlay(610, 1120, 520)
+  }
+  return offscreenToDataUrl(canvas)
+}
+
 // ── PDF 第一页渲染（OffscreenCanvas 版）─────────────────────────────
 async function renderPdfPage(pdfPath) {
   const url = _apiBase + `/api/baidu/proxy-pdf?path=${encodeURIComponent(pdfPath)}`
   const res = await fetch(url, { headers: { Authorization: `Bearer ${_token}` } })
   if (!res.ok) throw new Error(`PDF加载失败 (${res.status})`)
   const buffer = await res.arrayBuffer()
-  const doc = await pdfjsLib.getDocument({ data: buffer }).promise
+  const doc = await pdfjsLib.getDocument({ data: buffer, disableWorker: true }).promise
   const page = await doc.getPage(1)
   const viewport = page.getViewport({ scale: 2 })
   const canvas = new OffscreenCanvas(viewport.width, viewport.height)
@@ -667,8 +761,162 @@ async function renderPdfPage(pdfPath) {
   return canvas  // 返回 OffscreenCanvas（可传入 buildHistoryComposite）
 }
 
+async function renderPdfPages(pdfPath, count = 4) {
+  const url = _apiBase + `/api/baidu/proxy-pdf?path=${encodeURIComponent(pdfPath)}`
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${_token}` } })
+  if (!res.ok) throw new Error(`PDF加载失败 (${res.status})`)
+  const buffer = await res.arrayBuffer()
+  const doc = await pdfjsLib.getDocument({ data: buffer, disableWorker: true }).promise
+  const pages = []
+  for (let i = 1; i <= Math.min(count, doc.numPages); i++) {
+    const page = await doc.getPage(i)
+    const viewport = page.getViewport({ scale: 2 })
+    const canvas = new OffscreenCanvas(viewport.width, viewport.height)
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise
+    await applyPdfMosaic(canvas, page, viewport)
+    pages.push(canvas)
+  }
+  while (pages.length < count && pages.length) pages.push(pages[pages.length - 1])
+  return pages
+}
+
+async function buildPdfGridComposite(pageCanvases, borderColor, style = 'classic', titleText = '', titleStyle = 'solidRed') {
+  const CANVAS_W = 1242, CANVAS_H = 1656
+  const canvas = new OffscreenCanvas(CANVAS_W, CANVAS_H)
+  const ctx = canvas.getContext('2d')
+  const imgs = await Promise.all(pageCanvases.map(c => createImageBitmap(c)))
+  const active = PDF_GRID_STYLES.includes(style) ? style : 'classic'
+
+  const bg = (fill, border = null) => {
+    ctx.fillStyle = fill; ctx.fillRect(0, 0, CANVAS_W, CANVAS_H)
+    if (border) { ctx.strokeStyle = border; ctx.lineWidth = 12; ctx.strokeRect(6, 6, CANVAS_W - 12, CANVAS_H - 12) }
+  }
+  const page = (img, rect, opts = {}) => {
+    const { x, y, w, h, r = 18, rotate = 0 } = rect
+    ctx.save(); ctx.translate(x + w / 2, y + h / 2); ctx.rotate(rotate * Math.PI / 180)
+    ctx.shadowColor = opts.shadow === false ? 'transparent' : (opts.shadowColor || 'rgba(0,0,0,.22)')
+    ctx.shadowBlur = opts.shadow === false ? 0 : 12
+    ctx.shadowOffsetY = opts.shadow === false ? 0 : 6
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.roundRect(-w / 2, -h / 2, w, h, r); ctx.fill()
+    ctx.shadowColor = 'transparent'; ctx.beginPath(); ctx.roundRect(-w / 2, -h / 2, w, h, r); ctx.clip()
+    const scale = Math.min(w / img.width, h / img.height)
+    const dw = img.width * scale, dh = img.height * scale
+    ctx.drawImage(img, -dw / 2, -dh / 2, dw, dh)
+    ctx.restore()
+  }
+  const title = (text, x, y, fill, color = '#fff') => {
+    ctx.fillStyle = fill; ctx.beginPath(); ctx.roundRect(x, y, 430, 70, 35); ctx.fill()
+    ctx.fillStyle = color; ctx.font = 'bold 36px "PingFang SC", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+    ctx.fillText(text, x + 215, y + 35); ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'
+  }
+  const drawTitleOverlay = (text, titleStyleName) => {
+    if (!text) return
+    const cx = CANVAS_W / 2
+    const cy = CANVAS_H * 0.50
+    const fontSize = 82
+    ctx.save()
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.font = `bold ${fontSize}px "PingFang SC", "Microsoft YaHei", sans-serif`
+    const tw = ctx.measureText(text).width
+    if (titleStyleName === 'pill') {
+      const padX = fontSize * 0.65
+      const padY = fontSize * 0.42
+      const bw = Math.min(CANVAS_W - 120, tw + padX * 2)
+      const bh = fontSize + padY * 2
+      ctx.fillStyle = 'rgba(20,20,20,0.66)'
+      ctx.beginPath(); ctx.roundRect(cx - bw / 2, cy - bh / 2, bw, bh, bh / 2); ctx.fill()
+      ctx.fillStyle = '#fff'
+      ctx.fillText(text, cx, cy)
+    } else if (titleStyleName === 'stroke') {
+      ctx.lineWidth = 8
+      ctx.strokeStyle = 'rgba(0,0,0,.9)'
+      ctx.lineJoin = 'round'
+      ctx.strokeText(text, cx, cy)
+      ctx.fillStyle = '#fff'
+      ctx.fillText(text, cx, cy)
+    } else if (titleStyleName === 'card') {
+      const padX = fontSize * 0.8
+      const padY = fontSize * 0.55
+      const bw = Math.min(CANVAS_W - 120, Math.max(tw + padX * 2, CANVAS_W * 0.42))
+      const bh = fontSize + padY * 2
+      ctx.shadowColor = 'rgba(0,0,0,.24)'
+      ctx.shadowBlur = 24
+      ctx.shadowOffsetY = 12
+      ctx.fillStyle = '#fff'
+      ctx.beginPath(); ctx.roundRect(cx - bw / 2, cy - bh / 2, bw, bh, 22); ctx.fill()
+      ctx.shadowColor = 'transparent'
+      ctx.strokeStyle = borderColor
+      ctx.lineWidth = 5
+      ctx.beginPath(); ctx.roundRect(cx - bw / 2 + 3, cy - bh / 2 + 3, bw - 6, bh - 6, 19); ctx.stroke()
+      ctx.fillStyle = '#1a1a1a'
+      ctx.fillText(text, cx, cy + fontSize * 0.08)
+    } else if (titleStyleName === 'shadow') {
+      ctx.shadowColor = 'rgba(0,0,0,.88)'
+      ctx.shadowBlur = 30
+      ctx.shadowOffsetY = 5
+      ctx.fillStyle = '#fff'
+      ctx.fillText(text, cx, cy)
+    } else {
+      const padX = fontSize * 0.72
+      const padY = fontSize * 0.38
+      const bw = Math.min(CANVAS_W - 120, tw + padX * 2)
+      const bh = fontSize + padY * 2
+      const grad = ctx.createLinearGradient(cx - bw / 2, cy, cx + bw / 2, cy)
+      grad.addColorStop(0, '#ff6b35')
+      grad.addColorStop(1, '#ff2d55')
+      ctx.shadowColor = 'rgba(255,45,85,.35)'
+      ctx.shadowBlur = 24
+      ctx.shadowOffsetY = 8
+      ctx.fillStyle = grad
+      ctx.beginPath(); ctx.roundRect(cx - bw / 2, cy - bh / 2, bw, bh, bh / 2); ctx.fill()
+      ctx.shadowColor = 'transparent'
+      ctx.fillStyle = '#fff'
+      ctx.fillText(text, cx, cy)
+    }
+    ctx.restore()
+  }
+  const four = (cells, opts = {}) => cells.forEach((r, i) => page(imgs[i], r, opts))
+
+  if (active === 'desk') {
+    bg('#f7efe2'); ctx.fillStyle = '#e8f4ec'; ctx.fillRect(0, 1030, CANVAS_W, 626)
+    four([{ x: 92, y: 120, w: 520, h: 650, rotate: -3 }, { x: 620, y: 160, w: 500, h: 620, rotate: 2.5 }, { x: 120, y: 815, w: 500, h: 620, rotate: 2 }, { x: 640, y: 790, w: 500, h: 650, rotate: -2.5 }])
+    title('真题先刷，少走弯路', 406, 760, '#fff4c4', '#814c1d')
+  } else if (active === 'folder') {
+    bg('#f1c46b'); ctx.fillStyle = '#fff2cf'; ctx.beginPath(); ctx.roundRect(56, 126, CANVAS_W - 112, CANVAS_H - 176, 30); ctx.fill()
+    four([{ x: 98, y: 200, w: 490, h: 570 }, { x: 654, y: 200, w: 490, h: 570 }, { x: 98, y: 848, w: 490, h: 570 }, { x: 654, y: 848, w: 490, h: 570 }])
+  } else if (active === 'phone') {
+    bg('#101827'); ctx.fillStyle = '#f8fafc'; ctx.beginPath(); ctx.roundRect(162, 62, 918, 1532, 70); ctx.fill()
+    four([{ x: 238, y: 260, w: 352, h: 470 }, { x: 652, y: 260, w: 352, h: 470 }, { x: 238, y: 806, w: 352, h: 470 }, { x: 652, y: 806, w: 352, h: 470 }])
+  } else if (active === 'stamp') {
+    bg('#fff8f1', borderColor); ctx.strokeStyle = '#d92727'; ctx.lineWidth = 6; ctx.strokeRect(42, 42, CANVAS_W - 84, CANVAS_H - 84)
+    four([{ x: 88, y: 132, w: 500, h: 620 }, { x: 654, y: 132, w: 500, h: 620 }, { x: 88, y: 884, w: 500, h: 620 }, { x: 654, y: 884, w: 500, h: 620 }])
+  } else if (active === 'checklist') {
+    bg('#eaf4ff'); four([{ x: 70, y: 130, w: 430, h: 560, rotate: -1.5 }, { x: 70, y: 860, w: 430, h: 560, rotate: 1.2 }, { x: 690, y: 140, w: 450, h: 560, rotate: 1.5 }, { x: 690, y: 862, w: 450, h: 560, rotate: -1.2 }])
+    title('整理真题，汇总高频考点', 410, 770, borderColor)
+  } else if (active === 'blueprint') {
+    bg('#123b66'); drawGridBg(ctx, 0, 0, CANVAS_W, CANVAS_H, '#ffffff', 0.12, 42)
+    four([{ x: 86, y: 205, w: 500, h: 570 }, { x: 656, y: 205, w: 500, h: 570 }, { x: 86, y: 850, w: 500, h: 570 }, { x: 656, y: 850, w: 500, h: 570 }], { shadowColor: 'rgba(0,0,0,.3)' })
+  } else if (active === 'album') {
+    bg('#111827'); ctx.fillStyle = '#f9fafb'; ctx.beginPath(); ctx.roundRect(58, 70, CANVAS_W - 116, CANVAS_H - 140, 34); ctx.fill()
+    four([{ x: 96, y: 218, w: 500, h: 560, r: 6 }, { x: 646, y: 218, w: 500, h: 560, r: 6 }, { x: 96, y: 848, w: 500, h: 560, r: 6 }, { x: 646, y: 848, w: 500, h: 560, r: 6 }], { shadow: false })
+  } else if (active === 'pinboard') {
+    bg('#fefce8'); four([{ x: 96, y: 165, w: 486, h: 565, rotate: -1 }, { x: 660, y: 165, w: 486, h: 565, rotate: 1 }, { x: 96, y: 885, w: 486, h: 565, rotate: 1 }, { x: 660, y: 885, w: 486, h: 565, rotate: -1 }])
+    title('回忆版真题', 456, 770, '#111827')
+  } else if (active === 'minimalLine') {
+    bg('#ffffff'); ctx.fillStyle = '#111827'; ctx.fillRect(74, 0, 24, CANVAS_H)
+    four([{ x: 150, y: 215, w: 450, h: 540, r: 2 }, { x: 680, y: 215, w: 450, h: 540, r: 2 }, { x: 150, y: 875, w: 450, h: 540, r: 2 }, { x: 680, y: 875, w: 450, h: 540, r: 2 }], { shadow: false })
+  } else {
+    bg('#f2f2f2', borderColor)
+    const pad = 32, gap = 20, w = Math.floor((CANVAS_W - pad * 2 - gap) / 2), h = Math.floor((CANVAS_H - pad * 2 - gap) / 2)
+    four([{ x: pad, y: pad, w, h }, { x: pad + w + gap, y: pad, w, h }, { x: pad, y: pad + h + gap, w, h }, { x: pad + w + gap, y: pad + h + gap, w, h }])
+  }
+  drawTitleOverlay(titleText, titleStyle)
+  return offscreenToDataUrl(canvas)
+}
+
 // ── buildDirImageForBatch（Worker 版）──────────────────────────────
-async function buildDirImageForBatch(path, type, title, onlyDir, bgUrl, dirStyle) {
+async function buildDirImageForBatch(path, type, title, onlyDir, bgUrl, dirStyle, pdfSingleStyle = 'classic') {
   const res = await getBaiduFilesWithRetry(path)
   const files = (res.files || []).sort((a, b) => b.isdir - a.isdir)
   if (!files.length) throw new Error('目录为空')
@@ -679,7 +927,7 @@ async function buildDirImageForBatch(path, type, title, onlyDir, bgUrl, dirStyle
       if (pdf) {
         try {
           const pdfCanvas = await renderPdfPage(pdf.path)
-          return await buildHistoryComposite(pdfCanvas, files, _borderColor, title, pickBgColor(), 0.35, bgUrl)
+          return await buildHistoryComposite(pdfCanvas, files, _borderColor, title, pickBgColor(), 0.35, bgUrl, pdfSingleStyle)
         } catch (_) {}
       }
     }
@@ -691,12 +939,28 @@ async function buildDirImageForBatch(path, type, title, onlyDir, bgUrl, dirStyle
       if (pdfs.length) {
         try {
           const pdfCanvas = await renderPdfPage(rndPick(pdfs).path)
-          return await buildHistoryComposite(pdfCanvas, files, _borderColor, title, pickBgColor(), 0.35, bgUrl)
+          return await buildHistoryComposite(pdfCanvas, files, _borderColor, title, pickBgColor(), 0.35, bgUrl, pdfSingleStyle)
         } catch (_) {}
       }
     }
   }
   return renderCompositeImage(files, title, _borderColor, pickBgColor(), 0.35, bgUrl, dirStyle)
+}
+
+async function buildPaperImageForBatch(path, type, mode, pdfGridStyle, pdfSingleStyle, title, pdfGridTitleStyle) {
+  const res = await getBaiduFilesWithRetry(path)
+  const files = (res.files || []).sort((a, b) => b.isdir - a.isdir)
+  if (!files.length) throw new Error('目录为空')
+  const keyword = type === 'mock' ? '2026' : '2025'
+  const pdf = files.find(f => f.isdir === 0 && f.name.includes(keyword)) || files.find(f => f.isdir === 0 && /\.pdf$/i.test(f.name))
+  if (!pdf) throw new Error('未找到PDF试题文件')
+  if (mode === 'examGrid') {
+    const pages = await renderPdfPages(pdf.path, 4)
+    return buildPdfGridComposite(pages, _borderColor, pdfGridStyle, title, pdfGridTitleStyle)
+  }
+  const pdfCanvas = await renderPdfPage(pdf.path)
+  const singleTitle = title || (type === 'mock' ? (rndPick(_MOCK_TITLE_POOL) || '模拟题目录') : (rndPick(_HISTORY_TITLE_POOL) || '真题目录'))
+  return buildHistoryComposite(pdfCanvas, files, _borderColor, singleTitle, pickBgColor(), 0.35, null, pdfSingleStyle)
 }
 
 function normalizeCardStyle(input) {
@@ -1121,7 +1385,7 @@ function drawKraftDecoration(ctx, W, H, scheme, scale) {
 }
 
 // ── 主批量循环 ───────────────────────────────────────────────────────
-async function runBatch({ productDetails, onlyDirImages, bgPool, borderColor, titlePool, historyTitlePool, mockTitlePool, cardSchemes }) {
+async function runBatch({ productDetails, onlyDirImages, generationMode = 'complete', bgPool, borderColor, titlePool, historyTitlePool, mockTitlePool, cardSchemes }) {
   _TITLE_POOL         = titlePool        || []
   _HISTORY_TITLE_POOL = historyTitlePool || []
   _MOCK_TITLE_POOL    = mockTitlePool    || []
@@ -1140,23 +1404,30 @@ async function runBatch({ productDetails, onlyDirImages, bgPool, borderColor, ti
     crypto.getRandomValues(buf)
     const productBgUrl = bgImagePool.length ? bgImagePool[buf[0] % bgImagePool.length] : null
     const dirStyle = rndPick(DIR_IMAGE_STYLES) || 'classic'
+    const pdfGridStyle = rndPick(PDF_GRID_STYLES) || 'classic'
+    const pdfGridTitleStyle = rndPick(PDF_GRID_TITLE_STYLES) || 'solidRed'
+    const pdfSingleStyle = rndPick(PDF_SINGLE_STYLES) || 'classic'
 
     // 构建任务列表（与主线程逻辑一致）
     const tasks = []
-    if (detail.baidu_path_exam) {
-      tasks.push({ path: detail.baidu_path_exam, type: 'exam',    label: '笔试资料目录', title: '笔试资料完整目录' })
-      tasks.push({ path: detail.baidu_path_exam, type: 'culture', label: '企业文化目录', title: '企业近况及文化' })
-    }
-    if (detail.baidu_path_history) {
-      tasks.push({ path: detail.baidu_path_history, type: 'history', label: '真题目录',   title: rndPick(_HISTORY_TITLE_POOL) || '真题目录' })
-    }
-    if (detail.baidu_path_mock) {
-      tasks.push({ path: detail.baidu_path_mock, type: 'mock', label: '模拟题目录', title: rndPick(_MOCK_TITLE_POOL) || '模拟题目录' })
-    }
-    if (detail.baidu_custom_dirs?.length) {
-      detail.baidu_custom_dirs.forEach((item, idx) => {
-        tasks.push({ path: item.path, type: 'custom', label: item.name || `自定义${idx + 1}`, title: item.name || '自定义' })
-      })
+    if (generationMode === 'dirOnly') {
+      if (detail.baidu_path_history) tasks.push({ path: detail.baidu_path_history, type: 'history', label: '真题目录', title: rndPick(_HISTORY_TITLE_POOL) || '真题目录' })
+      if (detail.baidu_path_mock) tasks.push({ path: detail.baidu_path_mock, type: 'mock', label: '模拟题目录', title: rndPick(_MOCK_TITLE_POOL) || '模拟题目录' })
+    } else if (generationMode === 'examGrid' || generationMode === 'examSingle') {
+      if (detail.baidu_path_exam) tasks.push({ path: detail.baidu_path_exam, type: 'exam', label: '笔试资料目录', title: '笔试资料完整目录' })
+      if (detail.baidu_path_history) tasks.push({ path: detail.baidu_path_history, type: 'historyPaper', sourceType: 'history', label: generationMode === 'examGrid' ? '真题拼图' : '真题单图', title: rndPick(_HISTORY_TITLE_POOL) || '真题目录' })
+      if (detail.baidu_path_mock) tasks.push({ path: detail.baidu_path_mock, type: 'mockPaper', sourceType: 'mock', label: generationMode === 'examGrid' ? '模拟题拼图' : '模拟题单图', title: rndPick(_MOCK_TITLE_POOL) || '模拟题目录' })
+    } else {
+      if (detail.baidu_path_exam) {
+        tasks.push({ path: detail.baidu_path_exam, type: 'exam', label: '笔试资料目录', title: '笔试资料完整目录' })
+        tasks.push({ path: detail.baidu_path_exam, type: 'culture', label: '企业文化', title: '企业文化重点速览' })
+      }
+      if (detail.baidu_path_history) {
+        tasks.push({ path: detail.baidu_path_history, type: 'history', label: '真题目录', title: rndPick(_HISTORY_TITLE_POOL) || '真题目录' })
+      }
+      if (detail.baidu_path_mock) {
+        tasks.push({ path: detail.baidu_path_mock, type: 'mock', label: '模拟题目录', title: rndPick(_MOCK_TITLE_POOL) || '模拟题目录' })
+      }
     }
 
     if (!tasks.length) {
@@ -1170,15 +1441,18 @@ async function runBatch({ productDetails, onlyDirImages, bgPool, borderColor, ti
     for (const task of tasks) {
       try {
         let dataUrl
-        if (task.type === 'culture') {
+        if (task.type === 'historyPaper' || task.type === 'mockPaper') {
+          dataUrl = await buildPaperImageForBatch(task.path, task.sourceType, generationMode, pdfGridStyle, pdfSingleStyle, task.title, pdfGridTitleStyle)
+        } else if (task.type === 'culture') {
           const res = await getBaiduFilesWithRetry(task.path)
           const files = (res.files || []).sort((a, b) => b.isdir - a.isdir)
           const culturePdf = files.find(f => f.isdir === 0 && f.name.includes('企业文化'))
           if (!culturePdf) { log(`  └ ${task.label}：未找到"企业文化"PDF，跳过`, 'warn'); continue }
           const pdfCanvas = await renderPdfPage(culturePdf.path)
-          dataUrl = await buildHistoryComposite(pdfCanvas, files, _borderColor, task.title, pickBgColor(), 0.35, productBgUrl)
+          dataUrl = await buildHistoryComposite(pdfCanvas, files, _borderColor, task.title, pickBgColor(), 0.35, productBgUrl, pdfSingleStyle)
         } else {
-          dataUrl = await buildDirImageForBatch(task.path, task.type, task.title, onlyDirImages, productBgUrl, dirStyle)
+          const forceDirOnly = onlyDirImages || generationMode === 'complete'
+          dataUrl = await buildDirImageForBatch(task.path, task.type, task.title, forceDirOnly, productBgUrl, dirStyle, pdfSingleStyle)
         }
         images.push({ label: task.label, base64: dataUrl.replace(/^data:image\/png;base64,/, '') })
         log(`  └ ${task.label} ✓`, 'success')

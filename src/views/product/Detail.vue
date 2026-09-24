@@ -267,6 +267,12 @@
               @change="refreshDirPreview"
             />
           </template>
+          <span style="font-size:13px;color:#555;white-space:nowrap">目录模板：</span>
+          <a-select v-model:value="dirDrawer.dirStyle" style="width:150px" @change="refreshDirPreview">
+            <a-select-option v-for="tpl in DIR_IMAGE_STYLE_OPTIONS" :key="tpl.value" :value="tpl.value">
+              {{ tpl.label }}
+            </a-select-option>
+          </a-select>
           <span style="font-size:13px;color:#555;white-space:nowrap">标题文案：</span>
           <a-input v-model:value="dirDrawer.title" style="width:200px" @input="refreshDirPreview" />
           <span style="font-size:13px;color:#555;white-space:nowrap">标题Y轴：</span>
@@ -291,6 +297,14 @@
             <a-divider type="vertical" style="height:20px" />
             <span style="font-size:13px;color:#555;white-space:nowrap">只生成目录图：</span>
             <a-switch v-model:checked="dirDrawer.dirOnly" @change="refreshDirPreview" />
+          </template>
+          <template v-if="(dirDrawer.type === 'history' || dirDrawer.type === 'mock' || dirDrawer.type === 'custom' || dirDrawer.dirMode === 'culture') && !dirDrawer.dirOnly">
+            <span style="font-size:13px;color:#555;white-space:nowrap">PDF首页模板：</span>
+            <a-select v-model:value="dirDrawer.pdfSingleStyle" style="width:150px" @change="refreshDirPreview">
+              <a-select-option v-for="tpl in PDF_SINGLE_STYLE_OPTIONS" :key="tpl.value" :value="tpl.value">
+                {{ tpl.label }}
+              </a-select-option>
+            </a-select>
           </template>
           <a-button @click="downloadCompositeImage" :disabled="!dirDrawer.previewUrl">下载目录图</a-button>
           <a-button @click="downloadPdfPage" :disabled="!dirDrawer.pdfPreviewUrl">下载PDF首页</a-button>
@@ -465,7 +479,19 @@
           </div>
 
           <!-- ② 模糊 + 下载控制行 -->
-          <div style="display:flex;align-items:center;gap:12px;flex-shrink:0;background:#fff;padding:10px 20px;border-radius:8px;box-shadow:0 1px 6px rgba(0,0,0,0.08)">
+          <div style="display:flex;align-items:center;gap:12px;flex-shrink:0;background:#fff;padding:10px 20px;border-radius:8px;box-shadow:0 1px 6px rgba(0,0,0,0.08);flex-wrap:wrap">
+            <span style="font-size:13px;color:#555;white-space:nowrap">拼图模版：</span>
+            <a-select
+              v-model:value="pdfGridDrawer.gridTemplate"
+              style="width:180px"
+              size="small"
+              @change="onPdfGridTemplateChange"
+            >
+              <a-select-option v-for="tpl in PDF_GRID_TEMPLATES" :key="tpl.value" :value="tpl.value">
+                {{ tpl.label }}
+              </a-select-option>
+            </a-select>
+            <a-divider type="vertical" style="height:20px" />
             <span style="font-size:13px;color:#555;white-space:nowrap">模糊程度：</span>
             <input
               type="range"
@@ -2508,6 +2534,8 @@ const dirDrawer = reactive({
   dirMode: 'dir', // 'dir' | 'culture'，仅 exam 类型可切换
   title: '笔试资料完整目录',
   titleY: null,  // 标题Y坐标（null=自动居中，可手动指定像素值覆盖）
+  dirStyle: 'classic', // 目录图模板，默认保持原来的经典模板
+  pdfSingleStyle: 'classic', // 单张 PDF 首页合成模板
   borderColor: '#F9863B',
   bgColor: pickRandomBgColor(),
   bgOpacity: 0.35,
@@ -2528,6 +2556,46 @@ const dirDrawer = reactive({
   pdfGridMode: false,
 })
 
+const DIR_IMAGE_STYLE_OPTIONS = [
+  { value: 'classic', label: '经典原版' },
+  { value: 'drive', label: '网盘窗口' },
+  { value: 'sheet', label: '表格纸' },
+  { value: 'table', label: '表格清单' },
+  { value: 'checklist', label: '勾选清单' },
+  { value: 'sticky', label: '便利贴' },
+  { value: 'dark', label: '深色报告' },
+  { value: 'magazine', label: '杂志分栏' },
+  { value: 'soft', label: '柔和卡片' },
+  { value: 'split', label: '左右分栏' },
+  { value: 'terminal', label: '终端清单' },
+  { value: 'blueprint', label: '蓝图网格' },
+  { value: 'receipt', label: '小票清单' },
+  { value: 'book', label: '书页目录' },
+  { value: 'index', label: '索引目录' },
+  { value: 'bubble', label: '气泡卡片' },
+  { value: 'stamp', label: '红章资料' },
+  { value: 'mint', label: '薄荷清单' },
+  { value: 'calendar', label: '日历卡片' },
+  { value: 'folder_wall', label: '文件夹墙' },
+  { value: 'rainbow', label: '彩色卡片' },
+  { value: 'outline', label: '竖线编号' },
+  { value: 'cream', label: '奶油纸张' },
+  { value: 'mono', label: '黑白极简' },
+]
+const DIR_IMAGE_STYLES = DIR_IMAGE_STYLE_OPTIONS.map(item => item.value)
+
+const PDF_SINGLE_STYLE_OPTIONS = [
+  { value: 'classic', label: '经典原版' },
+  { value: 'folder', label: '资料夹风' },
+  { value: 'desk', label: '桌面散页' },
+  { value: 'stamp', label: '红章档案' },
+  { value: 'split', label: '左右分栏' },
+  { value: 'phone', label: '手机截图' },
+  { value: 'blueprint', label: '蓝图分析' },
+  { value: 'minimal', label: '极简白底' },
+]
+const PDF_SINGLE_STYLES = PDF_SINGLE_STYLE_OPTIONS.map(item => item.value)
+
 // PDF 4页拼图预览抽屉状态
 const pdfGridDrawer = reactive({
   visible: false,
@@ -2543,7 +2611,37 @@ const pdfGridDrawer = reactive({
   titleY: 50,          // 垂直位置（百分比，0~100，50=居中）
   titleSize: 82,       // 字体大小（px，基于 1242px 画布）
   gridBorderColor: '#FF2D55', // 拼图外围边框颜色
+  gridTemplate: 'classic', // PDF 拼图底图模版
 })
+
+// PDF 拼图底图模版列表（标题文案仍沿用 titleText/titleStyle/titleY/titleSize 逻辑）
+const PDF_GRID_TEMPLATES = [
+  { value: 'classic',   label: '经典四宫格' },
+  { value: 'desk',      label: '错位桌面' },
+  { value: 'folder',    label: '文件夹归档' },
+  { value: 'phone',     label: '手机文档预览' },
+  { value: 'mask',      label: '中央遮罩' },
+  { value: 'waterfall', label: '长图瀑布' },
+  { value: 'stamp',     label: '红章资料' },
+  { value: 'checklist', label: '重点清单' },
+  { value: 'blueprint', label: '蓝图分析' },
+  { value: 'album',     label: '相册胶片' },
+  { value: 'indexTabs', label: '彩色索引标签' },
+  { value: 'newspaper', label: '报纸专栏' },
+  { value: 'spiral',    label: '活页笔记本' },
+  { value: 'chalkboard', label: '黑板讲解' },
+  { value: 'binder',    label: '双页资料夹' },
+  { value: 'polaroid',  label: '拍立得散页' },
+  { value: 'blueCard',  label: '蓝色信息卡' },
+  { value: 'sideNote',  label: '侧栏重点笔记' },
+  { value: 'diagonal',  label: '斜切红条' },
+  { value: 'pinboard',  label: '图钉公告板' },
+  { value: 'darkReport', label: '深色报告板' },
+  { value: 'cornerStamp', label: '角落红章' },
+  { value: 'tornPaper', label: '撕纸资料页' },
+  { value: 'softGradient', label: '柔和渐变卡' },
+  { value: 'minimalLine', label: '极简黑线版' },
+]
 
 // 标题样式预设列表
 const PDF_TITLE_STYLES = [
@@ -2610,7 +2708,327 @@ function drawGridBg(ctx, x, y, w, h, color, opacity, cellSize = 28) {
   ctx.restore()
 }
 
-function renderCompositeImage(files, title, borderColor, bgColor, bgOpacity, bgImageUrl = null, titleY = null) {
+function wrapDirText(ctx, text, maxWidth) {
+  const lines = []
+  let current = ''
+  for (const ch of String(text || '')) {
+    const next = current + ch
+    if (ctx.measureText(next).width > maxWidth && current) {
+      lines.push(current)
+      current = ch
+    } else {
+      current = next
+    }
+  }
+  if (current) lines.push(current)
+  return lines.length ? lines : ['']
+}
+
+function measureDirRows(files, maxWidth, fontSize = 17) {
+  const canvas = document.createElement('canvas')
+  const ctx = canvas.getContext('2d')
+  ctx.font = `${fontSize}px "PingFang SC", "Microsoft YaHei", sans-serif`
+  return files.map(file => {
+    const lines = wrapDirText(ctx, file.name, maxWidth)
+    return { file, lines, height: Math.max(50, lines.length * (fontSize + 7) + 20) }
+  })
+}
+
+function drawDirLines(ctx, lines, x, y, lineHeight, fontSize, blockSize = 10) {
+  lines.forEach((line, i) => {
+    const yy = y + i * lineHeight
+    ctx.fillText(line, x, yy)
+    _mosaicSensitiveInText(ctx, line, x, yy, fontSize, blockSize)
+  })
+}
+
+function drawDirTemplateBg(ctx, W, H, style, borderColor, bgColor, bgOpacity) {
+  if (style === 'drive') {
+    const grad = ctx.createLinearGradient(0, 0, 0, H)
+    grad.addColorStop(0, '#f7fbff'); grad.addColorStop(1, '#eef6ff')
+    ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H)
+  } else if (style === 'sheet') {
+    ctx.fillStyle = '#fffefa'; ctx.fillRect(0, 0, W, H)
+    drawGridBg(ctx, 0, 0, W, H, '#d8ecff', 0.45, 26)
+  } else if (style === 'table') {
+    ctx.fillStyle = '#18c38a'; ctx.fillRect(0, 0, W, H)
+    ctx.fillStyle = '#fffdfa'; ctx.fillRect(12, 12, W - 24, H - 24)
+  } else if (style === 'checklist') {
+    const grad = ctx.createLinearGradient(0, 0, 0, H)
+    grad.addColorStop(0, '#f4fff9'); grad.addColorStop(1, '#ffffff')
+    ctx.fillStyle = '#35c98a'; ctx.fillRect(0, 0, W, H)
+    ctx.fillStyle = grad; ctx.fillRect(12, 12, W - 24, H - 24)
+  } else if (style === 'sticky') {
+    ctx.fillStyle = '#fff8e8'; ctx.fillRect(0, 0, W, H)
+    ctx.globalAlpha = 0.45
+    ctx.fillStyle = '#ffdd6c'; ctx.beginPath(); ctx.arc(W * 0.86, H * 0.12, 110, 0, Math.PI * 2); ctx.fill()
+    ctx.fillStyle = '#ff96aa'; ctx.beginPath(); ctx.arc(W * 0.12, H * 0.86, 120, 0, Math.PI * 2); ctx.fill()
+    ctx.globalAlpha = 1
+  } else if (style === 'dark') {
+    const grad = ctx.createLinearGradient(0, 0, 0, H)
+    grad.addColorStop(0, '#111827'); grad.addColorStop(1, '#1f2937')
+    ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H)
+  } else if (style === 'magazine') {
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H)
+    ctx.fillStyle = '#ffe9ec'
+    ctx.beginPath(); ctx.moveTo(W * 0.62, 0); ctx.lineTo(W, 0); ctx.lineTo(W, H); ctx.lineTo(W * 0.86, H); ctx.closePath(); ctx.fill()
+  } else if (style === 'split') {
+    ctx.fillStyle = '#fff7e6'; ctx.fillRect(0, 0, W * 0.36, H)
+    ctx.fillStyle = '#eef7ff'; ctx.fillRect(W * 0.36, 0, W * 0.64, H)
+  } else if (style === 'terminal') {
+    ctx.fillStyle = '#101722'; ctx.fillRect(0, 0, W, H)
+  } else if (style === 'blueprint') {
+    ctx.fillStyle = '#123b66'; ctx.fillRect(0, 0, W, H)
+    drawGridBg(ctx, 0, 0, W, H, '#ffffff', 0.12, 28)
+  } else if (style === 'receipt') {
+    ctx.fillStyle = '#f7f1e5'; ctx.fillRect(0, 0, W, H)
+    ctx.fillStyle = '#fffdf7'; ctx.beginPath(); ctx.roundRect(26, 24, W - 52, H - 48, 8); ctx.fill()
+    ctx.setLineDash([8, 8]); ctx.strokeStyle = '#b7a98d'; ctx.stroke(); ctx.setLineDash([])
+  } else if (style === 'book') {
+    ctx.fillStyle = '#f4ead6'; ctx.fillRect(0, 0, W, H)
+    ctx.fillStyle = '#fffdf6'; ctx.fillRect(34, 24, W - 58, H - 48)
+    ctx.fillStyle = '#b45309'; ctx.fillRect(34, 24, 14, H - 48)
+  } else if (style === 'bubble') {
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H)
+    ctx.globalAlpha = 0.62
+    ctx.fillStyle = '#dff7ff'; ctx.beginPath(); ctx.arc(W * 0.18, H * 0.14, 120, 0, Math.PI * 2); ctx.fill()
+    ctx.fillStyle = '#ffe2eb'; ctx.beginPath(); ctx.arc(W * 0.9, H * 0.15, 120, 0, Math.PI * 2); ctx.fill()
+    ctx.globalAlpha = 1
+  } else if (style === 'stamp') {
+    ctx.fillStyle = '#de2f2f'; ctx.fillRect(0, 0, W, H)
+    ctx.fillStyle = '#fff8f8'; ctx.fillRect(12, 12, W - 24, H - 24)
+  } else if (style === 'mint') {
+    const grad = ctx.createLinearGradient(0, 0, 0, H)
+    grad.addColorStop(0, '#eafff5'); grad.addColorStop(1, '#f8fffc')
+    ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H)
+  } else if (style === 'cream') {
+    ctx.fillStyle = '#e8cfa7'; ctx.fillRect(0, 0, W, H)
+    ctx.fillStyle = '#fff8ed'; ctx.fillRect(12, 12, W - 24, H - 24)
+  } else if (style === 'mono') {
+    ctx.fillStyle = '#f5f5f5'; ctx.fillRect(0, 0, W, H)
+  } else if (style === 'index' || style === 'calendar' || style === 'folder_wall' || style === 'rainbow' || style === 'outline') {
+    ctx.fillStyle = style === 'folder_wall' ? '#f8fafc' : '#ffffff'; ctx.fillRect(0, 0, W, H)
+  } else {
+    ctx.fillStyle = borderColor; ctx.fillRect(0, 0, W, H)
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(10, 10, W - 20, H - 20)
+    drawGridBg(ctx, 10, 10, W - 20, H - 20, bgColor, bgOpacity)
+  }
+}
+
+function drawDirTemplateTitle(ctx, title, style, W, y) {
+  const leftTitle = ['magazine', 'terminal', 'book', 'mono'].includes(style)
+  ctx.textAlign = leftTitle ? 'left' : 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillStyle = style === 'dark' ? '#ff6b6b'
+    : style === 'terminal' ? '#78ffbd'
+      : style === 'blueprint' ? '#ffffff'
+        : style === 'mint' ? '#059669'
+          : style === 'cream' ? '#8a4b18'
+            : style === 'mono' ? '#111111'
+              : '#ff0000'
+  ctx.font = `bold ${leftTitle ? 32 : 34}px "PingFang SC", "Microsoft YaHei", sans-serif`
+  ctx.fillText(title, leftTitle ? 40 : W / 2, y)
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'alphabetic'
+}
+
+function drawDirTemplateIcon(ctx, file, style, x, y, size, index) {
+  if (style === 'checklist' || style === 'outline') {
+    ctx.fillStyle = style === 'outline' ? '#2f7cf6' : '#22c55e'
+    ctx.beginPath(); ctx.roundRect(x, y, size, size, 8); ctx.fill()
+    ctx.fillStyle = '#fff'; ctx.font = `bold ${Math.round(size * 0.56)}px sans-serif`
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(style === 'outline' ? String(index + 1) : '✓', x + size / 2, y + size / 2)
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'
+    return
+  }
+  if (style === 'terminal') {
+    ctx.fillStyle = '#78ffbd'
+    ctx.font = 'bold 18px ui-monospace, monospace'
+    ctx.fillText('>', x, y + 20)
+    return
+  }
+  if (['table', 'sheet', 'dark', 'soft', 'magazine', 'split', 'blueprint', 'receipt', 'book', 'index', 'bubble', 'stamp', 'mint', 'cream', 'mono'].includes(style)) {
+    const badgeW = style === 'soft' ? size + 10 : 56
+    ctx.fillStyle = ['blueprint', 'receipt', 'stamp', 'mono'].includes(style) ? 'transparent' : file.isdir === 1 ? '#f6aa22' : '#ff6470'
+    ctx.beginPath(); ctx.roundRect(x, y, badgeW, Math.max(24, size - 2), 8); ctx.fill()
+    if (['blueprint', 'receipt', 'stamp', 'mono'].includes(style)) {
+      ctx.strokeStyle = style === 'blueprint' ? 'rgba(255,255,255,0.72)' : style === 'stamp' ? '#de2f2f' : '#333333'
+      ctx.stroke()
+    }
+    ctx.fillStyle = style === 'blueprint' ? '#ffffff' : style === 'receipt' || style === 'mono' ? '#333333' : style === 'stamp' ? '#de2f2f' : '#fff'
+    ctx.font = 'bold 12px "PingFang SC", sans-serif'
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+    ctx.fillText(style === 'soft' ? String(index + 1).padStart(2, '0') : (file.isdir === 1 ? '文件夹' : 'PDF'), x + badgeW / 2, y + Math.max(24, size - 2) / 2)
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'
+    return
+  }
+  file.isdir === 1 ? drawFolderIcon(ctx, x, y, size) : drawPdfIcon(ctx, x, y, size)
+}
+
+async function renderStyledCompositeImage(files, title, borderColor, bgColor, bgOpacity, bgImageUrl, titleY, style) {
+  const DPR = 2
+  const W = 600
+  const activeStyle = DIR_IMAGE_STYLES.includes(style) ? style : 'classic'
+  const BORDER = bgImageUrl ? 0 : 0
+  const gridStyles = ['sticky', 'calendar', 'folder_wall', 'rainbow']
+  const PADDING = ['magazine', 'terminal', 'book', 'mono'].includes(activeStyle) ? 40 : 34
+  const ICON_SIZE = activeStyle === 'drive' ? 30 : 32
+  const BADGE_W = ['table', 'sheet', 'dark', 'magazine', 'split', 'blueprint', 'receipt', 'book', 'index', 'bubble', 'stamp', 'mint', 'cream', 'mono'].includes(activeStyle)
+    ? 56
+    : activeStyle === 'soft' ? ICON_SIZE + 10 : ICON_SIZE
+  const ICON_TEXT_GAP = activeStyle === 'drive' ? 26 : 22
+  const TITLE_H = ['magazine', 'terminal', 'book', 'mono'].includes(activeStyle) ? 118 : 102
+  const textX = ['table', 'sheet', 'dark', 'split', 'blueprint', 'receipt', 'book', 'index', 'bubble', 'stamp', 'mint', 'cream', 'mono'].includes(activeStyle)
+    ? BORDER + PADDING + 130
+    : BORDER + PADDING + BADGE_W + ICON_TEXT_GAP
+  const maxTextW = W - textX - PADDING - BORDER
+  const fontSize = ['drive', 'table', 'sheet', 'dark', 'terminal', 'blueprint', 'mono'].includes(activeStyle) ? 18 : 17
+  const rows = measureDirRows(files, maxTextW, fontSize)
+  const rowGap = ['soft', 'checklist', 'bubble', 'mint'].includes(activeStyle) ? 14 : 0
+  const gridCardH = activeStyle === 'calendar' || activeStyle === 'folder_wall' || activeStyle === 'rainbow' ? 128 : 126
+  const bodyH = gridStyles.includes(activeStyle)
+    ? Math.ceil(files.length / 2) * gridCardH
+    : rows.reduce((sum, row) => sum + row.height + rowGap, 0)
+  const H = BORDER + TITLE_H + bodyH + PADDING + BORDER + (activeStyle === 'drive' ? 44 : 0)
+  const canvas = document.createElement('canvas')
+  canvas.width = W * DPR
+  canvas.height = H * DPR
+  const ctx = canvas.getContext('2d')
+  ctx.scale(DPR, DPR)
+
+  if (bgImageUrl) {
+    try {
+      const bgImg = await loadImage(bgImageUrl)
+      const scale = Math.max(W / bgImg.width, H / bgImg.height)
+      const bw = bgImg.width * scale
+      const bh = bgImg.height * scale
+      ctx.drawImage(bgImg, (W - bw) / 2, (H - bh) / 2, bw, bh)
+    } catch {
+      ctx.fillStyle = '#ffffff'
+      ctx.fillRect(0, 0, W, H)
+    }
+  } else {
+    drawDirTemplateBg(ctx, W, H, activeStyle, borderColor, bgColor, bgOpacity)
+  }
+
+  drawDirTemplateTitle(ctx, title, activeStyle, W, titleY ?? (BORDER + TITLE_H / 2))
+  if (activeStyle === 'drive') {
+    const winX = BORDER + 20
+    const winY = BORDER + 88
+    const winW = W - BORDER * 2 - 40
+    const winH = H - winY - 24
+    ctx.fillStyle = 'rgba(255,255,255,0.86)'; ctx.beginPath(); ctx.roundRect(winX, winY, winW, winH, 12); ctx.fill()
+    ctx.strokeStyle = 'rgba(30,41,59,0.12)'; ctx.stroke()
+    ctx.fillStyle = '#ff5f57'; ctx.beginPath(); ctx.arc(winX + 18, winY + 18, 5, 0, Math.PI * 2); ctx.fill()
+    ctx.fillStyle = '#ffbd2e'; ctx.beginPath(); ctx.arc(winX + 34, winY + 18, 5, 0, Math.PI * 2); ctx.fill()
+    ctx.fillStyle = '#28c840'; ctx.beginPath(); ctx.arc(winX + 50, winY + 18, 5, 0, Math.PI * 2); ctx.fill()
+  }
+  if (activeStyle === 'split') {
+    ctx.fillStyle = '#9a4e00'
+    ctx.font = 'bold 26px "PingFang SC", sans-serif'
+    ctx.fillText('2026', 40, 150)
+    ctx.fillText('备考资料包', 40, 184)
+  }
+  if (activeStyle === 'table' || activeStyle === 'dark') {
+    const headerY = BORDER + TITLE_H - 18
+    ctx.fillStyle = activeStyle === 'dark' ? 'rgba(255,255,255,0.1)' : '#243044'
+    ctx.fillRect(BORDER + PADDING - 10, headerY, W - BORDER * 2 - PADDING * 2 + 20, 36)
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 14px "PingFang SC", sans-serif'
+    ctx.fillText('序号', BORDER + PADDING, headerY + 23)
+    ctx.fillText('类型', BORDER + PADDING + 58, headerY + 23)
+    ctx.fillText('文件名称', textX, headerY + 23)
+  }
+
+  const listTop = BORDER + TITLE_H
+  let y = listTop + (activeStyle === 'table' || activeStyle === 'dark' ? 24 : 0)
+  const stickyColors = ['#fff3b0', '#d8f5ff', '#dff8d8', '#ffe0ea', '#eadfff', '#fff0d2', '#e7f7ed', '#f4e7ff']
+  const rainbowColors = ['#fff1f0', '#e6f7ff', '#f6ffed', '#fff7e6', '#f9f0ff', '#e6fffb', '#fffbe6', '#f0f5ff']
+  rows.forEach((row, i) => {
+    const { file, lines, height } = row
+    if (gridStyles.includes(activeStyle)) {
+      const col = i % 2
+      const cardW = (W - 84) / 2
+      const cardX = 34 + col * (cardW + 16)
+      const cardY = listTop + Math.floor(i / 2) * gridCardH
+      const cardH = gridCardH - 22
+      ctx.save()
+      if (activeStyle === 'sticky') {
+        ctx.translate(cardX + cardW / 2, cardY + cardH / 2)
+        ctx.rotate(i % 2 ? 0.012 : -0.012)
+        ctx.fillStyle = stickyColors[i % stickyColors.length]
+        ctx.beginPath(); ctx.roundRect(-cardW / 2, -cardH / 2, cardW, cardH, 9); ctx.fill()
+        ctx.fillStyle = '#243044'; ctx.font = '600 15px "PingFang SC", "Microsoft YaHei", sans-serif'
+        drawDirLines(ctx, wrapDirText(ctx, file.name, cardW - 26), -cardW / 2 + 13, -18, 21, 15)
+      } else if (activeStyle === 'calendar') {
+        ctx.fillStyle = '#ffffff'
+        ctx.beginPath(); ctx.roundRect(cardX, cardY, cardW, cardH, 14); ctx.fill()
+        ctx.strokeStyle = 'rgba(30,41,59,0.12)'; ctx.stroke()
+        ctx.fillStyle = '#e92222'; ctx.beginPath(); ctx.roundRect(cardX, cardY, cardW, 30, 14); ctx.fill()
+        ctx.fillRect(cardX, cardY + 16, cardW, 14)
+        ctx.fillStyle = '#fff'; ctx.font = 'bold 13px "PingFang SC", sans-serif'; ctx.fillText(`${String(i + 1).padStart(2, '0')} ${file.isdir === 1 ? '文件夹' : 'PDF'}`, cardX + 12, cardY + 20)
+        ctx.fillStyle = '#202938'; ctx.font = '600 15px "PingFang SC", sans-serif'
+        drawDirLines(ctx, wrapDirText(ctx, file.name, cardW - 24), cardX + 12, cardY + 54, 21, 15)
+      } else if (activeStyle === 'folder_wall') {
+        ctx.fillStyle = '#fff7d6'
+        ctx.beginPath(); ctx.roundRect(cardX, cardY + 10, cardW, cardH - 10, 18); ctx.fill()
+        ctx.strokeStyle = '#f5d980'; ctx.stroke()
+        ctx.fillStyle = '#ffe082'; ctx.beginPath(); ctx.roundRect(cardX + 18, cardY, 70, 22, 8); ctx.fill()
+        ctx.fillStyle = '#202938'; ctx.font = '600 15px "PingFang SC", sans-serif'
+        drawDirLines(ctx, wrapDirText(ctx, file.name, cardW - 30), cardX + 15, cardY + 50, 21, 15)
+      } else {
+        ctx.fillStyle = rainbowColors[i % rainbowColors.length]
+        ctx.beginPath(); ctx.roundRect(cardX, cardY, cardW, cardH, 14); ctx.fill()
+        ctx.fillStyle = file.isdir === 1 ? '#f6aa22' : '#ff6470'
+        ctx.beginPath(); ctx.roundRect(cardX + 12, cardY + 12, 46, 24, 8); ctx.fill()
+        ctx.fillStyle = '#fff'; ctx.font = 'bold 12px "PingFang SC", sans-serif'; ctx.textAlign = 'center'; ctx.fillText(file.isdir === 1 ? '夹' : 'PDF', cardX + 35, cardY + 29); ctx.textAlign = 'left'
+        ctx.fillStyle = '#202938'; ctx.font = '600 15px "PingFang SC", sans-serif'
+        drawDirLines(ctx, wrapDirText(ctx, file.name, cardW - 30), cardX + 15, cardY + 60, 21, 15)
+      }
+      ctx.restore()
+      return
+    }
+    if (['soft', 'checklist', 'bubble', 'mint'].includes(activeStyle)) {
+      const x = BORDER + PADDING - 4
+      const w = W - BORDER * 2 - PADDING * 2 + 8
+      ctx.fillStyle = activeStyle === 'mint' ? '#ffffff' : activeStyle === 'bubble' ? 'rgba(255,255,255,0.82)' : 'rgba(255,255,255,0.78)'
+      ctx.beginPath(); ctx.roundRect(x, y + 7, w, height - 8, activeStyle === 'bubble' ? 24 : 14); ctx.fill()
+      if (activeStyle === 'mint') {
+        ctx.fillStyle = '#10b981'; ctx.fillRect(x, y + 7, 6, height - 8)
+      }
+      ctx.strokeStyle = 'rgba(30,41,59,0.08)'; ctx.stroke()
+    }
+    if (activeStyle === 'outline' && i < rows.length - 1) {
+      ctx.strokeStyle = 'rgba(30,41,59,0.15)'
+      ctx.lineWidth = 2
+      ctx.beginPath(); ctx.moveTo(BORDER + PADDING + 16, y + 32); ctx.lineTo(BORDER + PADDING + 16, y + height + rowGap + 20); ctx.stroke()
+    }
+    const tabularStyles = ['table', 'sheet', 'dark', 'split', 'blueprint', 'receipt', 'book', 'index', 'bubble', 'stamp', 'mint', 'cream', 'mono']
+    const iconX = tabularStyles.includes(activeStyle) ? BORDER + PADDING + 58 : BORDER + PADDING
+    const noX = BORDER + PADDING
+    if (tabularStyles.includes(activeStyle)) {
+      ctx.fillStyle = activeStyle === 'dark' ? 'rgba(237,242,255,0.78)' : '#6c7482'
+      ctx.font = 'bold 15px "PingFang SC", sans-serif'
+      ctx.fillText(String(i + 1).padStart(2, '0'), noX, y + 34)
+    }
+    drawDirTemplateIcon(ctx, file, activeStyle, iconX, y + 15, ICON_SIZE, i)
+    ctx.fillStyle = activeStyle === 'dark' || activeStyle === 'terminal' || activeStyle === 'blueprint' ? '#f8fbff' : activeStyle === 'cream' ? '#6f3f14' : '#333333'
+    ctx.font = `${activeStyle === 'magazine' || activeStyle === 'terminal' ? '600' : '500'} ${fontSize}px "PingFang SC", "Microsoft YaHei", sans-serif`
+    drawDirLines(ctx, lines, textX, y + 35, fontSize + 7, fontSize, 10)
+    if (!['soft', 'checklist'].includes(activeStyle) && i < rows.length - 1) {
+      ctx.strokeStyle = activeStyle === 'dark' || activeStyle === 'terminal' || activeStyle === 'blueprint' ? 'rgba(255,255,255,0.10)' : activeStyle === 'stamp' ? 'rgba(222,47,47,0.16)' : '#eeeeee'
+      ctx.lineWidth = 1
+      ctx.beginPath(); ctx.moveTo(BORDER + PADDING, y + height); ctx.lineTo(W - BORDER - PADDING, y + height); ctx.stroke()
+    }
+    y += height + rowGap
+  })
+  return canvas.toDataURL('image/png')
+}
+
+function renderCompositeImage(files, title, borderColor, bgColor, bgOpacity, bgImageUrl = null, titleY = null, style = 'classic') {
+  const activeStyle = DIR_IMAGE_STYLES.includes(style) ? style : 'classic'
+  if (activeStyle !== 'classic') {
+    return renderStyledCompositeImage(files, title, borderColor, bgColor, bgOpacity, bgImageUrl, titleY, activeStyle)
+  }
   const DPR = 2
   const W = 600
   const BORDER = bgImageUrl ? 0 : 10
@@ -2711,10 +3129,10 @@ function refreshDirPreview() {
     && dirDrawer.pdfPageDataUrl
     && !dirDrawer.dirOnly
   if (usePdf) {
-    buildHistoryComposite(dirDrawer.pdfPageDataUrl, dirDrawer.files, dirDrawer.borderColor, dirDrawer.title, dirDrawer.bgColor, dirDrawer.bgOpacity, bgImg, dirDrawer.titleY)
+    buildHistoryComposite(dirDrawer.pdfPageDataUrl, dirDrawer.files, dirDrawer.borderColor, dirDrawer.title, dirDrawer.bgColor, dirDrawer.bgOpacity, bgImg, dirDrawer.titleY, dirDrawer.pdfSingleStyle)
       .then(url => { dirDrawer.previewUrl = url })
   } else {
-    const result = renderCompositeImage(dirDrawer.files, dirDrawer.title, dirDrawer.borderColor, dirDrawer.bgColor, dirDrawer.bgOpacity, bgImg, dirDrawer.titleY)
+    const result = renderCompositeImage(dirDrawer.files, dirDrawer.title, dirDrawer.borderColor, dirDrawer.bgColor, dirDrawer.bgOpacity, bgImg, dirDrawer.titleY, dirDrawer.dirStyle)
     if (result instanceof Promise) {
       result.then(url => { dirDrawer.previewUrl = url })
     } else {
@@ -2724,18 +3142,23 @@ function refreshDirPreview() {
 }
 
 // 新版：整图 1242×1656，外边框，顶部标题 + PDF 铺满 + 右下角目录浮层
-async function buildHistoryComposite(pdfDataUrl, files, borderColor, title, bgColor, bgOpacity, bgImageUrl = null, titleY = null) {
+async function buildHistoryComposite(pdfDataUrl, files, borderColor, title, bgColor, bgOpacity, bgImageUrl = null, titleY = null, style = 'classic') {
   const pdfImg = await loadImage(pdfDataUrl)
 
   const CANVAS_W = 1242
   const CANVAS_H = 1656
   const BORDER = bgImageUrl ? 0 : 12
   const TITLE_H = 120
+  const activeStyle = PDF_SINGLE_STYLES.includes(style) ? style : 'classic'
 
   const canvas = document.createElement('canvas')
   canvas.width = CANVAS_W
   canvas.height = CANVAS_H
   const ctx = canvas.getContext('2d')
+
+  if (activeStyle !== 'classic') {
+    return renderStyledPdfSingleComposite(ctx, canvas, pdfImg, files, borderColor, title, bgColor, bgOpacity, bgImageUrl, titleY, activeStyle)
+  }
 
   if (bgImageUrl) {
     try {
@@ -2868,6 +3291,206 @@ async function buildHistoryComposite(pdfDataUrl, files, borderColor, title, bgCo
   return canvas.toDataURL('image/png')
 }
 
+async function renderStyledPdfSingleComposite(ctx, canvas, pdfImg, files, borderColor, title, bgColor, bgOpacity, bgImageUrl, titleY, style) {
+  const CANVAS_W = canvas.width
+  const CANVAS_H = canvas.height
+  const pdfFiles = files.filter(f => f.isdir === 0)
+  const rndInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min
+
+  const drawBg = async (fill, border = null) => {
+    if (bgImageUrl) {
+      try {
+        const bgImg = await loadImage(bgImageUrl)
+        ctx.drawImage(bgImg, 0, 0, CANVAS_W, CANVAS_H)
+        return
+      } catch {}
+    }
+    ctx.fillStyle = fill
+    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H)
+    if (border) {
+      ctx.strokeStyle = border
+      ctx.lineWidth = 12
+      ctx.strokeRect(6, 6, CANVAS_W - 12, CANVAS_H - 12)
+    }
+  }
+
+  const drawTitle = (x, y, color = '#FF0000', size = 58, align = 'center') => {
+    ctx.fillStyle = color
+    ctx.font = `bold ${size}px "PingFang SC", "Microsoft YaHei", sans-serif`
+    ctx.textAlign = align
+    ctx.textBaseline = 'middle'
+    ctx.fillText(title, x, titleY ?? y)
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'alphabetic'
+  }
+
+  const drawPdfPage = (rect, options = {}) => {
+    const { x, y, w, h, r = 16, rotate = 0, shadow = true, fit = 'contain', crop = true } = rect
+    const cx = x + w / 2
+    const cy = y + h / 2
+    ctx.save()
+    ctx.translate(cx, cy)
+    ctx.rotate(rotate * Math.PI / 180)
+    if (shadow) {
+      ctx.shadowColor = options.shadowColor || 'rgba(0,0,0,0.22)'
+      ctx.shadowBlur = options.shadowBlur ?? 18
+      ctx.shadowOffsetY = options.shadowOffsetY ?? 8
+    }
+    ctx.fillStyle = '#ffffff'
+    ctx.beginPath()
+    ctx.roundRect(-w / 2, -h / 2, w, h, r)
+    ctx.fill()
+    ctx.shadowColor = 'transparent'
+    ctx.shadowBlur = 0
+    ctx.shadowOffsetY = 0
+    ctx.beginPath()
+    ctx.roundRect(-w / 2, -h / 2, w, h, r)
+    ctx.clip()
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(-w / 2, -h / 2, w, h)
+    const cropL = crop ? rndInt(20, 60) : 0
+    const cropR = crop ? rndInt(20, 60) : 0
+    const cropT = crop ? rndInt(20, 60) : 0
+    const cropB = crop ? rndInt(20, 60) : 0
+    const srcX = cropL
+    const srcY = cropT
+    const srcW = Math.max(1, pdfImg.width - cropL - cropR)
+    const srcH = Math.max(1, pdfImg.height - cropT - cropB)
+    const scale = fit === 'cover' ? Math.max(w / srcW, h / srcH) : Math.min(w / srcW, h / srcH)
+    const dw = srcW * scale
+    const dh = srcH * scale
+    ctx.drawImage(pdfImg, srcX, srcY, srcW, srcH, -dw / 2, -dh / 2, dw, dh)
+    ctx.restore()
+  }
+
+  const drawFileOverlay = (x, y, opts = {}) => {
+    const fontSize = opts.fontSize || 24
+    const rowH = opts.rowH || 76
+    const iconSize = opts.iconSize || 40
+    const pad = opts.pad || 24
+    const maxW = opts.width || 560
+    const bg = opts.bg || '#ffffff'
+    const textColor = opts.textColor || '#333333'
+    const border = opts.border || 'rgba(0,0,0,0.06)'
+    ctx.save()
+    ctx.font = `${fontSize}px "PingFang SC", "Microsoft YaHei", sans-serif`
+    const measured = pdfFiles.reduce((max, f) => Math.max(max, ctx.measureText(f.name).width), 0)
+    const w = opts.width || Math.max(430, Math.min(maxW, Math.ceil(measured) + iconSize + pad * 2 + 16))
+    const maxTextWidth = Math.max(120, w - pad * 2 - iconSize - 14)
+    const rows = pdfFiles.map(file => {
+      const lines = wrapDirText(ctx, file.name, maxTextWidth)
+      return {
+        file,
+        lines,
+        height: Math.max(rowH, lines.length * (fontSize + 8) + 22),
+      }
+    })
+    const h = rows.reduce((sum, row) => sum + row.height, 0) + pad * 2
+    x = Math.min(Math.max(24, x), CANVAS_W - w - 24)
+    y = Math.min(Math.max(24, y), CANVAS_H - h - 24)
+    const textX = x + pad + iconSize + 14
+    ctx.shadowColor = opts.shadow === false ? 'transparent' : 'rgba(0,0,0,0.24)'
+    ctx.shadowBlur = opts.shadow === false ? 0 : 18
+    ctx.shadowOffsetY = opts.shadow === false ? 0 : 6
+    ctx.fillStyle = bg
+    ctx.beginPath()
+    ctx.roundRect(x, y, w, h, opts.radius || 14)
+    ctx.fill()
+    ctx.shadowColor = 'transparent'
+    ctx.strokeStyle = border
+    ctx.lineWidth = 1
+    ctx.stroke()
+    let cursorY = y + pad
+    rows.forEach((row, i) => {
+      const { file, lines, height } = row
+      const yy = cursorY
+      drawPdfIcon(ctx, x + pad, yy + (rowH - iconSize) / 2, iconSize)
+      ctx.fillStyle = textColor
+      ctx.font = `${fontSize}px "PingFang SC", "Microsoft YaHei", sans-serif`
+      drawDirLines(ctx, lines, textX, yy + Math.max(fontSize + 8, (height - lines.length * (fontSize + 8)) / 2 + fontSize), fontSize + 8, fontSize, 12)
+      if (i < rows.length - 1) {
+        ctx.strokeStyle = opts.line || '#eeeeee'
+        ctx.beginPath()
+        ctx.moveTo(x + pad, yy + height)
+        ctx.lineTo(x + w - pad, yy + height)
+        ctx.stroke()
+      }
+      cursorY += height
+    })
+    ctx.restore()
+    return { w, h }
+  }
+
+  if (style === 'folder') {
+    await drawBg('#f1c46b')
+    ctx.fillStyle = '#ffe0a3'
+    ctx.beginPath(); ctx.roundRect(118, 72, 430, 112, 22); ctx.fill()
+    ctx.fillStyle = '#fff2cf'
+    ctx.beginPath(); ctx.roundRect(70, 150, CANVAS_W - 140, CANVAS_H - 220, 34); ctx.fill()
+    drawTitle(158, 145, '#7a4306', 54, 'left')
+    drawPdfPage({ x: 285, y: 300, w: 650, h: 950, r: 18 })
+    drawFileOverlay(655, 1150, { width: 510, fontSize: 22, rowH: 70 })
+  } else if (style === 'desk') {
+    const grad = ctx.createLinearGradient(0, 0, CANVAS_W, CANVAS_H)
+    grad.addColorStop(0, '#eef7f2'); grad.addColorStop(1, '#f8e2cf')
+    await drawBg(grad)
+    ctx.fillStyle = 'rgba(194,117,64,0.16)'
+    ctx.save(); ctx.translate(-140, 1060); ctx.rotate(-0.14); ctx.fillRect(0, 0, 1120, 320); ctx.restore()
+    drawTitle(90, 120, '#814c1d', 54, 'left')
+    drawPdfPage({ x: 120, y: 230, w: 660, h: 980, r: 18, rotate: -3 })
+    drawFileOverlay(645, 1120, { width: 520, fontSize: 22, rowH: 70 })
+    ctx.fillStyle = '#fff4c4'
+    ctx.beginPath(); ctx.roundRect(102, 1455, 420, 70, 35); ctx.fill()
+    ctx.fillStyle = '#814c1d'; ctx.font = 'bold 34px "PingFang SC", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+    ctx.fillText('回忆版真题预览', 312, 1490)
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'
+  } else if (style === 'stamp') {
+    await drawBg('#fff8f1', borderColor)
+    ctx.strokeStyle = '#d92727'; ctx.lineWidth = 6; ctx.strokeRect(42, 42, CANVAS_W - 84, CANVAS_H - 84)
+    drawTitle(CANVAS_W / 2, 96, '#d92727', 58)
+    drawPdfPage({ x: 130, y: 205, w: 680, h: 1045, r: 10 })
+    drawFileOverlay(655, 1135, { width: 520, fontSize: 22, rowH: 70 })
+    ctx.save(); ctx.translate(960, 240); ctx.rotate(-0.22)
+    ctx.strokeStyle = '#d92727'; ctx.lineWidth = 9; ctx.beginPath(); ctx.arc(0, 0, 128, 0, Math.PI * 2); ctx.stroke()
+    ctx.fillStyle = '#d92727'; ctx.font = 'bold 44px "PingFang SC", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+    ctx.fillText('回忆版', 0, -26); ctx.fillText('真题', 0, 34); ctx.restore()
+  } else if (style === 'split') {
+    await drawBg('#eef7ff')
+    ctx.fillStyle = '#fff7e6'; ctx.fillRect(0, 0, 430, CANVAS_H)
+    ctx.fillStyle = '#9a4e00'; ctx.font = 'bold 58px "PingFang SC", sans-serif'; ctx.fillText('2026', 88, 150)
+    ctx.font = 'bold 44px "PingFang SC", sans-serif'; ctx.fillText('真题目录', 88, 210)
+    drawPdfPage({ x: 485, y: 130, w: 650, h: 965, r: 18 })
+    ctx.fillStyle = '#9a4e00'; ctx.font = 'bold 36px "PingFang SC", sans-serif'; ctx.fillText('文件清单', 88, 895)
+    drawFileOverlay(88, 945, { width: 430, fontSize: 21, rowH: 70, shadow: false })
+  } else if (style === 'phone') {
+    await drawBg('#101827')
+    ctx.fillStyle = '#f8fafc'; ctx.beginPath(); ctx.roundRect(210, 58, 820, 1540, 70); ctx.fill()
+    ctx.strokeStyle = '#1f2937'; ctx.lineWidth = 18; ctx.beginPath(); ctx.roundRect(210, 58, 820, 1540, 70); ctx.stroke()
+    ctx.fillStyle = '#111827'; ctx.beginPath(); ctx.roundRect(480, 90, 282, 28, 14); ctx.fill()
+    drawTitle(290, 190, '#111827', 44, 'left')
+    drawPdfPage({ x: 315, y: 275, w: 610, h: 895, r: 14 })
+    drawFileOverlay(330, 1215, { width: 580, fontSize: 21, rowH: 66 })
+  } else if (style === 'blueprint') {
+    await drawBg('#123b66')
+    drawGridBg(ctx, 0, 0, CANVAS_W, CANVAS_H, '#ffffff', 0.10, 42)
+    ctx.fillStyle = 'rgba(18,59,102,0.58)'; ctx.fillRect(0, 0, CANVAS_W, CANVAS_H)
+    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 3; ctx.strokeRect(56, 56, CANVAS_W - 112, CANVAS_H - 112)
+    drawTitle(92, 138, '#ffffff', 48, 'left')
+    drawPdfPage({ x: 115, y: 240, w: 670, h: 980, r: 10 }, { shadowColor: 'rgba(0,0,0,0.34)' })
+    drawFileOverlay(660, 1110, { width: 510, fontSize: 21, rowH: 68, bg: 'rgba(255,255,255,0.94)' })
+  } else if (style === 'minimal') {
+    await drawBg('#ffffff')
+    ctx.fillStyle = '#111827'; ctx.fillRect(72, 0, 28, CANVAS_H)
+    drawTitle(150, 122, '#111827', 48, 'left')
+    ctx.strokeStyle = '#111827'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(150, 172); ctx.lineTo(930, 172); ctx.stroke()
+    drawPdfPage({ x: 150, y: 240, w: 650, h: 970, r: 2, shadow: false, crop: true })
+    ctx.strokeStyle = '#111827'; ctx.lineWidth = 2; ctx.strokeRect(150, 240, 650, 970)
+    drawFileOverlay(610, 1120, { width: 520, fontSize: 21, rowH: 68, shadow: false, radius: 4, border: '#111827' })
+  }
+
+  return canvas.toDataURL('image/png')
+}
+
 async function generateDirImage(type) {
   const path = type === 'exam' ? data.value.baidu_path_exam
     : type === 'history' ? data.value.baidu_path_history
@@ -2887,6 +3510,8 @@ async function generateDirImage(type) {
   dirDrawer.dirMode = 'dir'
   dirDrawer.title = titleMap[type]
   dirDrawer.titleY = null
+  dirDrawer.dirStyle = 'classic'
+  dirDrawer.pdfSingleStyle = 'classic'
   dirDrawer.borderColor = '#F9863B'
   dirDrawer.dirOnly = false
   dirDrawer.files = []
@@ -2930,14 +3555,14 @@ async function generateDirImage(type) {
           await applyPdfSensitiveMosaic(pdfCanvas, page, viewport)
           dirDrawer.pdfPageDataUrl = pdfCanvas.toDataURL('image/png')
           dirDrawer.previewUrl = dirDrawer.dirOnly
-            ? await Promise.resolve(renderCompositeImage(files, dirDrawer.title, dirDrawer.borderColor, dirDrawer.bgColor, dirDrawer.bgOpacity, bgImg, dirDrawer.titleY))
-            : await buildHistoryComposite(dirDrawer.pdfPageDataUrl, files, dirDrawer.borderColor, dirDrawer.title, dirDrawer.bgColor, dirDrawer.bgOpacity, bgImg, dirDrawer.titleY)
+            ? await Promise.resolve(renderCompositeImage(files, dirDrawer.title, dirDrawer.borderColor, dirDrawer.bgColor, dirDrawer.bgOpacity, bgImg, dirDrawer.titleY, dirDrawer.dirStyle))
+            : await buildHistoryComposite(dirDrawer.pdfPageDataUrl, files, dirDrawer.borderColor, dirDrawer.title, dirDrawer.bgColor, dirDrawer.bgOpacity, bgImg, dirDrawer.titleY, dirDrawer.pdfSingleStyle)
         } else {
           message.warning(`未找到文件名含"${keyword}"的PDF，降级显示目录列表`)
-          dirDrawer.previewUrl = await Promise.resolve(renderCompositeImage(files, dirDrawer.title, dirDrawer.borderColor, dirDrawer.bgColor, dirDrawer.bgOpacity, bgImg, dirDrawer.titleY))
+          dirDrawer.previewUrl = await Promise.resolve(renderCompositeImage(files, dirDrawer.title, dirDrawer.borderColor, dirDrawer.bgColor, dirDrawer.bgOpacity, bgImg, dirDrawer.titleY, dirDrawer.dirStyle))
         }
       } else {
-        dirDrawer.previewUrl = await Promise.resolve(renderCompositeImage(files, dirDrawer.title, dirDrawer.borderColor, dirDrawer.bgColor, dirDrawer.bgOpacity, bgImg, dirDrawer.titleY))
+        dirDrawer.previewUrl = await Promise.resolve(renderCompositeImage(files, dirDrawer.title, dirDrawer.borderColor, dirDrawer.bgColor, dirDrawer.bgOpacity, bgImg, dirDrawer.titleY, dirDrawer.dirStyle))
       }
       lastErr = null
       break  // 成功，退出重试循环
@@ -2982,7 +3607,7 @@ async function changeDirMode(mode) {
       dirDrawer.pdfPageDataUrl = pdfCanvas.toDataURL('image/png')
       dirDrawer.pdfPreviewUrl = dirDrawer.pdfPageDataUrl
       dirDrawer.pdfFsid = culturePdf.fs_id
-      dirDrawer.previewUrl = await buildHistoryComposite(dirDrawer.pdfPageDataUrl, dirDrawer.files, dirDrawer.borderColor, dirDrawer.title, dirDrawer.bgColor, dirDrawer.bgOpacity, getActiveBgImageUrl(), dirDrawer.titleY)
+      dirDrawer.previewUrl = await buildHistoryComposite(dirDrawer.pdfPageDataUrl, dirDrawer.files, dirDrawer.borderColor, dirDrawer.title, dirDrawer.bgColor, dirDrawer.bgOpacity, getActiveBgImageUrl(), dirDrawer.titleY, dirDrawer.pdfSingleStyle)
     } catch (e) {
       message.error(e.message || '加载企业文化PDF失败')
     } finally {
@@ -2993,7 +3618,7 @@ async function changeDirMode(mode) {
     dirDrawer.pdfPageDataUrl = ''
     dirDrawer.pdfPreviewUrl = ''
     dirDrawer.pdfFsid = null
-    const result = renderCompositeImage(dirDrawer.files, dirDrawer.title, dirDrawer.borderColor, dirDrawer.bgColor, dirDrawer.bgOpacity, getActiveBgImageUrl(), dirDrawer.titleY)
+    const result = renderCompositeImage(dirDrawer.files, dirDrawer.title, dirDrawer.borderColor, dirDrawer.bgColor, dirDrawer.bgOpacity, getActiveBgImageUrl(), dirDrawer.titleY, dirDrawer.dirStyle)
     if (result instanceof Promise) {
       dirDrawer.previewUrl = await result
     } else {
@@ -3331,7 +3956,7 @@ async function renderPdfFirstPage(file) {
     // history / custom 类型：同步更新合成图
     if (dirDrawer.type === 'history' || dirDrawer.type === 'custom') {
       dirDrawer.pdfPageDataUrl = dirDrawer.pdfPreviewUrl
-      dirDrawer.previewUrl = await buildHistoryComposite(dirDrawer.pdfPageDataUrl, dirDrawer.files, dirDrawer.borderColor, dirDrawer.title, dirDrawer.bgColor, dirDrawer.bgOpacity, getActiveBgImageUrl(), dirDrawer.titleY)
+      dirDrawer.previewUrl = await buildHistoryComposite(dirDrawer.pdfPageDataUrl, dirDrawer.files, dirDrawer.borderColor, dirDrawer.title, dirDrawer.bgColor, dirDrawer.bgOpacity, getActiveBgImageUrl(), dirDrawer.titleY, dirDrawer.pdfSingleStyle)
     }
   } catch (e) {
     message.error('PDF渲染失败：' + (e.message || '未知错误'))
@@ -3420,17 +4045,25 @@ let _gridBorderTimer = null
 async function onGridBorderColorChange() {
   clearTimeout(_gridBorderTimer)
   _gridBorderTimer = setTimeout(async () => {
-    if (!pdfGridDrawer.file) return
-    pdfGridDrawer.loading = true
-    try {
-      pdfGridDrawer.gridUrl = await renderPdfGridImage(pdfGridDrawer.file)
-      await refreshGridComposite()
-    } catch (e) {
-      message.error('边框重绘失败：' + (e.message || '未知'))
-    } finally {
-      pdfGridDrawer.loading = false
-    }
+    await rebuildPdfGridBase('边框重绘失败')
   }, 300)
+}
+
+async function onPdfGridTemplateChange() {
+  await rebuildPdfGridBase('模版重绘失败')
+}
+
+async function rebuildPdfGridBase(errorPrefix = '拼图重绘失败') {
+  if (!pdfGridDrawer.file) return
+  pdfGridDrawer.loading = true
+  try {
+    pdfGridDrawer.gridUrl = await renderPdfGridImage(pdfGridDrawer.file)
+    await refreshGridComposite()
+  } catch (e) {
+    message.error(`${errorPrefix}：` + (e.message || '未知'))
+  } finally {
+    pdfGridDrawer.loading = false
+  }
 }
 
 /**
@@ -3648,90 +4281,447 @@ async function renderPdfGridImage(file) {
     pageDataUrls.push(c.toDataURL('image/png'))
   }
 
-  return buildPdfGridComposite(pageDataUrls, pdfGridDrawer.gridBorderColor)
+  return buildPdfGridComposite(pageDataUrls, pdfGridDrawer.gridBorderColor, pdfGridDrawer.gridTemplate)
 }
 
 /** 把最多 4 页 PDF 的 dataURL 拼成 1242×1656 的小红书笔记图 */
-async function buildPdfGridComposite(dataUrls, borderColor = '#FF2D55') {
+async function buildPdfGridComposite(dataUrls, borderColor = '#FF2D55', template = 'classic') {
   const CANVAS_W = 1242
   const CANVAS_H = 1656
-  const BORDER = 10           // 外围边框宽度（固定 10px）
-  const OUTER_PAD = 32        // 外边距（含边框）
-  const GAP = 20              // 两格之间的间距
-  const RADIUS = 20           // 每格圆角
-  const SHADOW_BLUR = 8       // 阴影模糊半径（4~8px）
-  const SHADOW_COLOR = 'rgba(0,0,0,0.22)'
-
-  const cellW = Math.floor((CANVAS_W - OUTER_PAD * 2 - GAP) / 2)
-  const cellH = Math.floor((CANVAS_H - OUTER_PAD * 2 - GAP) / 2)
-
-  // 四格坐标：左上 / 右上 / 左下 / 右下
-  const cells = [
-    { x: OUTER_PAD,              y: OUTER_PAD },
-    { x: OUTER_PAD + cellW + GAP, y: OUTER_PAD },
-    { x: OUTER_PAD,              y: OUTER_PAD + cellH + GAP },
-    { x: OUTER_PAD + cellW + GAP, y: OUTER_PAD + cellH + GAP },
-  ]
-
   const canvas = document.createElement('canvas')
   canvas.width = CANVAS_W
   canvas.height = CANVAS_H
   const ctx = canvas.getContext('2d')
+  const imgs = []
+  for (const url of dataUrls.slice(0, 4)) imgs.push(url ? await loadImage(url) : null)
 
-  // 整体浅灰背景
-  ctx.fillStyle = '#f2f2f2'
-  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H)
-
-  // 外围边框（10px，紧贴画布四边）
-  ctx.strokeStyle = borderColor
-  ctx.lineWidth = BORDER
-  ctx.strokeRect(BORDER / 2, BORDER / 2, CANVAS_W - BORDER, CANVAS_H - BORDER)
-
-  for (let i = 0; i < 4; i++) {
-    const { x, y } = cells[i]
-    const dataUrl = dataUrls[i]
-
-    if (!dataUrl) {
-      // 不足 4 页：灰色占位格
-      ctx.save()
-      ctx.fillStyle = '#e0e0e0'
-      ctx.beginPath()
-      ctx.roundRect(x, y, cellW, cellH, RADIUS)
-      ctx.fill()
-      ctx.restore()
-      continue
+  const drawBg = (fill = '#f2f2f2', lineWidth = 10) => {
+    ctx.fillStyle = fill
+    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H)
+    if (lineWidth > 0) {
+      ctx.strokeStyle = borderColor
+      ctx.lineWidth = lineWidth
+      ctx.strokeRect(lineWidth / 2, lineWidth / 2, CANVAS_W - lineWidth, CANVAS_H - lineWidth)
     }
+  }
 
-    const img = await loadImage(dataUrl)  // 复用 Detail.vue 内已有的 loadImage()
-
-    // ① 先画阴影（在 clip 外，用白底圆角矩形承载阴影）
+  const drawGrid = (color, alpha = 0.2, size = 52) => {
     ctx.save()
-    ctx.shadowColor = SHADOW_COLOR
-    ctx.shadowBlur = SHADOW_BLUR
-    ctx.shadowOffsetX = 0
-    ctx.shadowOffsetY = 4
-    ctx.fillStyle = '#ffffff'
+    ctx.globalAlpha = alpha
+    ctx.strokeStyle = color
+    ctx.lineWidth = 1
+    for (let x = 0; x < CANVAS_W; x += size) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, CANVAS_H); ctx.stroke()
+    }
+    for (let y = 0; y < CANVAS_H; y += size) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(CANVAS_W, y); ctx.stroke()
+    }
+    ctx.restore()
+  }
+
+  const drawPage = (img, rect, opts = {}) => {
+    const { x, y, w, h, r = 20, rotate = 0, shadow = true, fit = 'contain', bg = '#fff', opacity = 1 } = rect
+    const cx = x + w / 2
+    const cy = y + h / 2
+    ctx.save()
+    ctx.translate(cx, cy)
+    ctx.rotate(rotate * Math.PI / 180)
+    ctx.globalAlpha = opacity
+    if (shadow) {
+      ctx.shadowColor = opts.shadowColor || 'rgba(0,0,0,0.22)'
+      ctx.shadowBlur = opts.shadowBlur ?? 10
+      ctx.shadowOffsetY = opts.shadowOffsetY ?? 5
+    }
+    ctx.fillStyle = bg
     ctx.beginPath()
-    ctx.roundRect(x, y, cellW, cellH, RADIUS)
+    ctx.roundRect(-w / 2, -h / 2, w, h, r)
     ctx.fill()
-    ctx.restore()
-
-    // ② clip 圆角后绘制 PDF 页面（contain 等比缩放居中）
-    ctx.save()
+    ctx.shadowColor = 'transparent'
+    ctx.shadowBlur = 0
+    ctx.shadowOffsetY = 0
     ctx.beginPath()
-    ctx.roundRect(x, y, cellW, cellH, RADIUS)
+    ctx.roundRect(-w / 2, -h / 2, w, h, r)
     ctx.clip()
-    // 白色底（防透明 PDF）
-    ctx.fillStyle = '#ffffff'
-    ctx.fillRect(x, y, cellW, cellH)
-    // contain 缩放
-    const scale = Math.min(cellW / img.width, cellH / img.height)
-    const dw = img.width * scale
-    const dh = img.height * scale
-    const dx = x + (cellW - dw) / 2
-    const dy = y + (cellH - dh) / 2
-    ctx.drawImage(img, dx, dy, dw, dh)
+    ctx.fillStyle = bg
+    ctx.fillRect(-w / 2, -h / 2, w, h)
+    if (img) {
+      const scale = fit === 'cover' ? Math.max(w / img.width, h / img.height) : Math.min(w / img.width, h / img.height)
+      const dw = img.width * scale
+      const dh = img.height * scale
+      ctx.drawImage(img, -dw / 2, -dh / 2, dw, dh)
+    } else {
+      ctx.fillStyle = '#e5e7eb'
+      ctx.fillRect(-w / 2, -h / 2, w, h)
+      ctx.fillStyle = '#9ca3af'
+      ctx.font = 'bold 36px "PingFang SC", sans-serif'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText('暂无页面', 0, 0)
+    }
     ctx.restore()
+  }
+
+  const drawRibbon = (text, x, y, fill, color = '#fff') => {
+    ctx.save()
+    ctx.fillStyle = fill
+    ctx.beginPath()
+    ctx.roundRect(x, y, 330, 54, 27)
+    ctx.fill()
+    ctx.fillStyle = color
+    ctx.font = 'bold 28px "PingFang SC", sans-serif'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(text, x + 165, y + 27)
+    ctx.restore()
+  }
+
+  const drawFourGrid = (cells, opts = {}) => {
+    cells.forEach((rect, i) => drawPage(imgs[i], { r: opts.r ?? 16, ...rect }, opts))
+  }
+
+  const drawHeader = (text, x, y, color = '#111827', size = 40) => {
+    ctx.save()
+    ctx.fillStyle = color
+    ctx.font = `bold ${size}px "PingFang SC", sans-serif`
+    ctx.textBaseline = 'alphabetic'
+    ctx.fillText(text, x, y)
+    ctx.restore()
+  }
+
+  const active = PDF_GRID_TEMPLATES.some(t => t.value === template) ? template : 'classic'
+
+  if (active === 'classic') {
+    drawBg('#f2f2f2', 10)
+    const pad = 32, gap = 20
+    const w = Math.floor((CANVAS_W - pad * 2 - gap) / 2)
+    const h = Math.floor((CANVAS_H - pad * 2 - gap) / 2)
+    const cells = [
+      { x: pad, y: pad, w, h },
+      { x: pad + w + gap, y: pad, w, h },
+      { x: pad, y: pad + h + gap, w, h },
+      { x: pad + w + gap, y: pad + h + gap, w, h },
+    ]
+    cells.forEach((rect, i) => drawPage(imgs[i], { ...rect, r: 20 }, { shadowBlur: 8 }))
+  } else if (active === 'desk') {
+    const grad = ctx.createLinearGradient(0, 0, CANVAS_W, CANVAS_H)
+    grad.addColorStop(0, '#f7efe2'); grad.addColorStop(1, '#e8f4ec')
+    drawBg(grad, 0)
+    ctx.fillStyle = 'rgba(194,117,64,0.16)'
+    ctx.save(); ctx.translate(-120, CANVAS_H - 260); ctx.rotate(-0.14); ctx.fillRect(0, 0, 760, 230); ctx.restore()
+    drawPage(imgs[0], { x: 92, y: 120, w: 520, h: 650, r: 18, rotate: -3 })
+    drawPage(imgs[1], { x: 620, y: 160, w: 500, h: 620, r: 18, rotate: 2.5 })
+    drawPage(imgs[2], { x: 120, y: 815, w: 500, h: 620, r: 18, rotate: 2 })
+    drawPage(imgs[3], { x: 640, y: 790, w: 500, h: 650, r: 18, rotate: -2.5 })
+    drawRibbon('真题先刷，少走弯路', 78, 1460, 'rgba(255,244,196,0.92)', '#814c1d')
+  } else if (active === 'folder') {
+    drawBg('#f1c46b', 0)
+    ctx.fillStyle = '#ffe0a3'
+    ctx.beginPath(); ctx.roundRect(88, 58, 410, 92, [20, 20, 0, 0]); ctx.fill()
+    ctx.fillStyle = '#fff2cf'
+    ctx.beginPath(); ctx.roundRect(56, 126, CANVAS_W - 112, CANVAS_H - 176, 30); ctx.fill()
+    ctx.fillStyle = '#7a4306'
+    ctx.font = 'bold 42px "PingFang SC", sans-serif'
+    ctx.fillText('真题资料已整理', 102, 112)
+    const cells = [
+      { x: 98, y: 200, w: 490, h: 570 },
+      { x: 654, y: 200, w: 490, h: 570 },
+      { x: 98, y: 848, w: 490, h: 570 },
+      { x: 654, y: 848, w: 490, h: 570 },
+    ]
+    cells.forEach((rect, i) => drawPage(imgs[i], { ...rect, r: 16 }, { shadowBlur: 7 }))
+  } else if (active === 'phone') {
+    drawBg('#101827', 0)
+    ctx.fillStyle = '#f8fafc'
+    ctx.beginPath(); ctx.roundRect(162, 62, 918, 1532, 70); ctx.fill()
+    ctx.strokeStyle = '#1f2937'; ctx.lineWidth = 18
+    ctx.beginPath(); ctx.roundRect(162, 62, 918, 1532, 70); ctx.stroke()
+    ctx.fillStyle = '#111827'
+    ctx.beginPath(); ctx.roundRect(484, 92, 274, 26, 13); ctx.fill()
+    ctx.font = 'bold 36px "PingFang SC", sans-serif'
+    ctx.fillText('回忆版真题预览', 248, 182)
+    const cells = [
+      { x: 238, y: 260, w: 352, h: 470 },
+      { x: 652, y: 260, w: 352, h: 470 },
+      { x: 238, y: 806, w: 352, h: 470 },
+      { x: 652, y: 806, w: 352, h: 470 },
+    ]
+    cells.forEach((rect, i) => drawPage(imgs[i], { ...rect, r: 14 }, { shadowBlur: 6 }))
+  } else if (active === 'mask') {
+    const grad = ctx.createLinearGradient(0, 0, CANVAS_W, CANVAS_H)
+    grad.addColorStop(0, '#ecfeff'); grad.addColorStop(1, '#fff1f2')
+    drawBg(grad, 0)
+    const pad = 58, gap = 26
+    const w = Math.floor((CANVAS_W - pad * 2 - gap) / 2)
+    const h = Math.floor((CANVAS_H - pad * 2 - gap) / 2)
+    ;[
+      { x: pad, y: pad, w, h },
+      { x: pad + w + gap, y: pad, w, h },
+      { x: pad, y: pad + h + gap, w, h },
+      { x: pad + w + gap, y: pad + h + gap, w, h },
+    ].forEach((rect, i) => drawPage(imgs[i], { ...rect, r: 20 }, { shadowBlur: 10 }))
+    ctx.fillStyle = 'rgba(17,24,39,0.16)'
+    ctx.fillRect(0, CANVAS_H * 0.43, CANVAS_W, 210)
+  } else if (active === 'waterfall') {
+    drawBg('#f8fbff', 0)
+    drawGrid('#93c5fd', 0.18, 48)
+    ctx.fillStyle = '#1d4ed8'
+    ctx.font = 'bold 44px "PingFang SC", sans-serif'
+    ctx.fillText('先看题型，再定复习重点', 80, 120)
+    drawPage(imgs[0], { x: 86, y: 190, w: 500, h: 430, r: 18 })
+    drawPage(imgs[1], { x: 654, y: 360, w: 500, h: 430, r: 18 })
+    drawPage(imgs[2], { x: 86, y: 810, w: 500, h: 430, r: 18 })
+    drawPage(imgs[3], { x: 654, y: 1010, w: 500, h: 430, r: 18 })
+  } else if (active === 'stamp') {
+    drawBg('#fff8f1', 14)
+    ctx.strokeStyle = '#d92727'; ctx.lineWidth = 6
+    ctx.strokeRect(42, 42, CANVAS_W - 84, CANVAS_H - 84)
+    const cells = [
+      { x: 88, y: 132, w: 500, h: 620 },
+      { x: 654, y: 132, w: 500, h: 620 },
+      { x: 88, y: 884, w: 500, h: 620 },
+      { x: 654, y: 884, w: 500, h: 620 },
+    ]
+    cells.forEach((rect, i) => drawPage(imgs[i], { ...rect, r: 14 }, { shadowBlur: 8 }))
+    ctx.save()
+    ctx.translate(958, 810); ctx.rotate(-0.22)
+    ctx.strokeStyle = '#d92727'; ctx.lineWidth = 8
+    ctx.beginPath(); ctx.arc(0, 0, 128, 0, Math.PI * 2); ctx.stroke()
+    ctx.font = 'bold 44px "PingFang SC", sans-serif'
+    ctx.fillStyle = '#d92727'
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+    ctx.fillText('回忆版', 0, -24)
+    ctx.fillText('真题', 0, 34)
+    ctx.restore()
+  } else if (active === 'checklist') {
+    drawBg('#eaf4ff', 0)
+    drawPage(imgs[0], { x: 70, y: 130, w: 430, h: 560, r: 18, rotate: -1.5 })
+    drawPage(imgs[1], { x: 70, y: 860, w: 430, h: 560, r: 18, rotate: 1.2 })
+    drawPage(imgs[2], { x: 690, y: 140, w: 450, h: 560, r: 18, rotate: 1.5 })
+    drawPage(imgs[3], { x: 690, y: 862, w: 450, h: 560, r: 18, rotate: -1.2 })
+    ctx.fillStyle = 'rgba(255,255,255,0.86)'
+    ctx.beginPath(); ctx.roundRect(520, 392, 210, 450, 26); ctx.fill()
+    ;['题型清晰', '公基高频', '企业文化要看', '写作提前准备'].forEach((t, i) => {
+      const y = 452 + i * 82
+      ctx.fillStyle = borderColor
+      ctx.beginPath(); ctx.arc(558, y, 13, 0, Math.PI * 2); ctx.fill()
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 4
+      ctx.beginPath(); ctx.moveTo(551, y); ctx.lineTo(557, y + 7); ctx.lineTo(568, y - 7); ctx.stroke()
+      ctx.fillStyle = '#102033'
+      ctx.font = 'bold 26px "PingFang SC", sans-serif'
+      ctx.fillText(t, 584, y + 9)
+    })
+  } else if (active === 'blueprint') {
+    drawBg('#123b66', 0)
+    drawGrid('#ffffff', 0.12, 42)
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)'
+    ctx.lineWidth = 3
+    ctx.strokeRect(56, 56, CANVAS_W - 112, CANVAS_H - 112)
+    ctx.fillStyle = '#ffffff'
+    ctx.font = 'bold 42px "PingFang SC", sans-serif'
+    ctx.fillText('真题结构分析板', 86, 132)
+    const cells = [
+      { x: 86, y: 205, w: 500, h: 570 },
+      { x: 656, y: 205, w: 500, h: 570 },
+      { x: 86, y: 850, w: 500, h: 570 },
+      { x: 656, y: 850, w: 500, h: 570 },
+    ]
+    cells.forEach((rect, i) => drawPage(imgs[i], { ...rect, r: 10 }, { shadowColor: 'rgba(0,0,0,0.3)', shadowBlur: 6 }))
+  } else if (active === 'album') {
+    drawBg('#111827', 0)
+    ctx.fillStyle = '#f9fafb'
+    ctx.beginPath(); ctx.roundRect(58, 70, CANVAS_W - 116, CANVAS_H - 140, 34); ctx.fill()
+    ctx.fillStyle = '#111827'
+    ctx.font = 'bold 38px "PingFang SC", sans-serif'
+    ctx.fillText('PDF 4页试卷预览', 96, 145)
+    const cells = [
+      { x: 96, y: 218, w: 500, h: 560 },
+      { x: 646, y: 218, w: 500, h: 560 },
+      { x: 96, y: 848, w: 500, h: 560 },
+      { x: 646, y: 848, w: 500, h: 560 },
+    ]
+    cells.forEach((rect, i) => {
+      ctx.fillStyle = '#111827'
+      ctx.fillRect(rect.x - 18, rect.y - 18, rect.w + 36, rect.h + 36)
+      drawPage(imgs[i], { ...rect, r: 6 }, { shadowBlur: 0 })
+      ctx.fillStyle = '#f9fafb'
+      for (let y = rect.y - 6; y < rect.y + rect.h; y += 60) {
+        ctx.fillRect(rect.x - 13, y, 8, 24)
+        ctx.fillRect(rect.x + rect.w + 5, y, 8, 24)
+      }
+    })
+  } else if (active === 'indexTabs') {
+    drawBg('#f8fafc', 0)
+    ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.roundRect(56, 72, CANVAS_W - 112, CANVAS_H - 144, 30); ctx.fill()
+    ;['#bfdbfe', '#fde68a', '#fecaca', '#bbf7d0'].forEach((c, i) => {
+      ctx.fillStyle = c; ctx.beginPath(); ctx.roundRect(92 + i * 155, 76, 130, 70, [16, 16, 0, 0]); ctx.fill()
+    })
+    drawHeader('真题索引册', 112, 136, '#1d4ed8')
+    drawFourGrid([
+      { x: 96, y: 210, w: 486, h: 560 },
+      { x: 660, y: 210, w: 486, h: 560 },
+      { x: 96, y: 860, w: 486, h: 560 },
+      { x: 660, y: 860, w: 486, h: 560 },
+    ])
+  } else if (active === 'newspaper') {
+    drawBg('#f4efe6', 0)
+    ctx.fillStyle = '#fffdf7'; ctx.fillRect(62, 62, CANVAS_W - 124, CANVAS_H - 124)
+    ctx.strokeStyle = '#d6cbb8'; ctx.lineWidth = 3; ctx.strokeRect(78, 78, CANVAS_W - 156, CANVAS_H - 156)
+    drawHeader('笔试真题专栏', 112, 145, '#1f2937', 46)
+    drawFourGrid([
+      { x: 100, y: 225, w: 480, h: 530, r: 4 },
+      { x: 660, y: 225, w: 480, h: 530, r: 4 },
+      { x: 100, y: 865, w: 480, h: 530, r: 4 },
+      { x: 660, y: 865, w: 480, h: 530, r: 4 },
+    ], { shadow: false, r: 4 })
+  } else if (active === 'spiral') {
+    drawBg('#fffdf5', 0)
+    ctx.strokeStyle = 'rgba(100,116,139,0.65)'; ctx.lineWidth = 3
+    for (let y = 38; y < CANVAS_H; y += 58) {
+      ctx.beginPath(); ctx.arc(78, y, 16, 0, Math.PI * 2); ctx.stroke()
+    }
+    drawFourGrid([
+      { x: 160, y: 120, w: 430, h: 590, rotate: -1.5 },
+      { x: 676, y: 160, w: 430, h: 590, rotate: 1.5 },
+      { x: 160, y: 890, w: 430, h: 590, rotate: 1.2 },
+      { x: 676, y: 850, w: 430, h: 590, rotate: -1.2 },
+    ])
+    drawRibbon('考前翻一遍', 438, 780, '#fde68a', '#713f12')
+  } else if (active === 'chalkboard') {
+    drawBg('#12372f', 0)
+    ctx.strokeStyle = 'rgba(255,255,255,0.46)'; ctx.lineWidth = 6
+    ctx.strokeRect(58, 58, CANVAS_W - 116, CANVAS_H - 116)
+    drawHeader('真题讲透，答题不慌', 98, 148, '#fef3c7', 44)
+    drawFourGrid([
+      { x: 98, y: 250, w: 480, h: 530, rotate: -2 },
+      { x: 662, y: 250, w: 480, h: 530, rotate: 2 },
+      { x: 98, y: 880, w: 480, h: 530, rotate: 2 },
+      { x: 662, y: 880, w: 480, h: 530, rotate: -2 },
+    ], { shadowColor: 'rgba(0,0,0,0.34)' })
+  } else if (active === 'binder') {
+    drawBg('#dbeafe', 0)
+    ctx.fillStyle = '#f8fafc'; ctx.beginPath(); ctx.roundRect(86, 86, CANVAS_W - 172, CANVAS_H - 172, 32); ctx.fill()
+    drawHeader('资料夹预览', 154, 165, '#1e3a8a', 42)
+    ctx.strokeStyle = '#64748b'; ctx.lineWidth = 8
+    ;[520, 720, 920].forEach(y => { ctx.beginPath(); ctx.arc(CANVAS_W / 2, y, 26, 0, Math.PI * 2); ctx.stroke() })
+    drawFourGrid([
+      { x: 156, y: 235, w: 420, h: 510 },
+      { x: 668, y: 235, w: 420, h: 510 },
+      { x: 156, y: 880, w: 420, h: 510 },
+      { x: 668, y: 880, w: 420, h: 510 },
+    ])
+  } else if (active === 'polaroid') {
+    const grad = ctx.createLinearGradient(0, 0, CANVAS_W, CANVAS_H)
+    grad.addColorStop(0, '#ffe4e6'); grad.addColorStop(1, '#e0f2fe')
+    drawBg(grad, 0)
+    const cells = [
+      { x: 125, y: 185, w: 440, h: 520, rotate: -5 },
+      { x: 700, y: 210, w: 440, h: 520, rotate: 4 },
+      { x: 135, y: 900, w: 440, h: 520, rotate: 3 },
+      { x: 680, y: 910, w: 440, h: 520, rotate: -4 },
+    ]
+    cells.forEach((r, i) => {
+      ctx.save(); ctx.translate(r.x + r.w / 2, r.y + r.h / 2); ctx.rotate(r.rotate * Math.PI / 180)
+      ctx.fillStyle = '#fff'; ctx.shadowColor = 'rgba(15,23,42,.22)'; ctx.shadowBlur = 16; ctx.shadowOffsetY = 8
+      ctx.fillRect(-r.w / 2 - 26, -r.h / 2 - 26, r.w + 52, r.h + 92); ctx.restore()
+      drawPage(imgs[i], { ...r, r: 4 }, { shadowBlur: 0 })
+    })
+    drawRibbon('真题预览', 430, 780, '#ffffff', '#be123c')
+  } else if (active === 'blueCard') {
+    drawBg('#e0f2fe', 0)
+    drawHeader('题型结构一眼看', 86, 142, '#075985', 46)
+    drawFourGrid([
+      { x: 90, y: 230, w: 486, h: 510 },
+      { x: 666, y: 230, w: 486, h: 510 },
+      { x: 90, y: 885, w: 486, h: 510 },
+      { x: 666, y: 885, w: 486, h: 510 },
+    ], { shadowColor: 'rgba(14,116,144,.2)' })
+  } else if (active === 'sideNote') {
+    drawBg('#fff7ed', 0)
+    drawPage(imgs[0], { x: 78, y: 120, w: 500, h: 640 })
+    drawPage(imgs[1], { x: 78, y: 895, w: 500, h: 640 })
+    drawPage(imgs[2], { x: 704, y: 210, w: 450, h: 500 })
+    drawPage(imgs[3], { x: 704, y: 940, w: 450, h: 500 })
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.roundRect(690, 735, 466, 165, 18); ctx.fill()
+    ctx.fillStyle = '#fb923c'; ctx.fillRect(690, 735, 8, 165)
+    ctx.fillStyle = '#7c2d12'; ctx.font = 'bold 34px "PingFang SC", sans-serif'
+    ;['先看题型', '再刷真题', '最后复盘错题'].forEach((t, i) => ctx.fillText(t, 728, 790 + i * 42))
+  } else if (active === 'diagonal') {
+    drawBg('#f8fafc', 0)
+    ctx.save(); ctx.translate(-180, 610); ctx.rotate(-0.17); ctx.fillStyle = '#ef4444'; ctx.fillRect(0, 0, 1600, 220); ctx.restore()
+    drawFourGrid([
+      { x: 90, y: 130, w: 470, h: 560, rotate: -2 },
+      { x: 680, y: 130, w: 470, h: 560, rotate: 2 },
+      { x: 90, y: 940, w: 470, h: 560, rotate: 2 },
+      { x: 680, y: 940, w: 470, h: 560, rotate: -2 },
+    ])
+    ctx.save(); ctx.translate(460, 755); ctx.rotate(-0.17); drawHeader('刷透真题', 0, 0, '#fff', 72); ctx.restore()
+  } else if (active === 'pinboard') {
+    drawBg('#fefce8', 0)
+    ;[
+      [90, 82, '#f43f5e'], [1090, 82, '#22c55e'], [90, 1480, '#3b82f6'], [1090, 1480, '#f59e0b'],
+    ].forEach(([x, y, c]) => { ctx.fillStyle = c; ctx.beginPath(); ctx.arc(x, y, 32, 0, Math.PI * 2); ctx.fill() })
+    drawFourGrid([
+      { x: 96, y: 165, w: 486, h: 565, rotate: -1 },
+      { x: 660, y: 165, w: 486, h: 565, rotate: 1 },
+      { x: 96, y: 885, w: 486, h: 565, rotate: 1 },
+      { x: 660, y: 885, w: 486, h: 565, rotate: -1 },
+    ])
+    drawRibbon('回忆版真题', 456, 770, '#111827', '#fff')
+  } else if (active === 'darkReport') {
+    drawBg('#0f172a', 0)
+    drawHeader('真题复盘报告', 96, 140, '#f8fafc', 44)
+    ctx.fillStyle = '#67e8f9'; ctx.font = 'bold 24px ui-monospace, monospace'; ctx.fillText('PDF / 4 PAGES', 920, 138)
+    drawFourGrid([
+      { x: 96, y: 235, w: 486, h: 520 },
+      { x: 660, y: 235, w: 486, h: 520 },
+      { x: 96, y: 875, w: 486, h: 520 },
+      { x: 660, y: 875, w: 486, h: 520 },
+    ], { shadowColor: 'rgba(0,0,0,0.45)' })
+  } else if (active === 'cornerStamp') {
+    drawBg('#ffffff', 12)
+    drawFourGrid([
+      { x: 96, y: 205, w: 486, h: 540 },
+      { x: 660, y: 205, w: 486, h: 540 },
+      { x: 96, y: 875, w: 486, h: 540 },
+      { x: 660, y: 875, w: 486, h: 540 },
+    ])
+    ctx.save(); ctx.translate(1010, 170); ctx.rotate(0.2)
+    ctx.strokeStyle = '#dc2626'; ctx.lineWidth = 8; ctx.beginPath(); ctx.arc(0, 0, 115, 0, Math.PI * 2); ctx.stroke()
+    ctx.fillStyle = '#dc2626'; ctx.font = 'bold 42px "PingFang SC", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+    ctx.fillText('资料', 0, -24); ctx.fillText('已整理', 0, 34); ctx.restore()
+  } else if (active === 'tornPaper') {
+    drawBg('#e7e5e4', 0)
+    ctx.fillStyle = '#fffaf0'
+    ctx.beginPath()
+    ctx.moveTo(82, 110); ctx.lineTo(210, 82); ctx.lineTo(350, 108); ctx.lineTo(520, 82); ctx.lineTo(690, 112); ctx.lineTo(840, 86); ctx.lineTo(1010, 108); ctx.lineTo(1160, 86); ctx.lineTo(1134, 1530); ctx.lineTo(980, 1504); ctx.lineTo(800, 1530); ctx.lineTo(640, 1500); ctx.lineTo(470, 1528); ctx.lineTo(300, 1500); ctx.lineTo(120, 1530); ctx.closePath(); ctx.fill()
+    drawHeader('考前资料包', 170, 165, '#78350f', 42)
+    drawFourGrid([
+      { x: 130, y: 235, w: 460, h: 540, rotate: -2 },
+      { x: 650, y: 235, w: 460, h: 540, rotate: 2 },
+      { x: 130, y: 865, w: 460, h: 540, rotate: 2 },
+      { x: 650, y: 865, w: 460, h: 540, rotate: -2 },
+    ])
+  } else if (active === 'softGradient') {
+    const grad = ctx.createLinearGradient(0, 0, CANVAS_W, CANVAS_H)
+    grad.addColorStop(0, '#fef3c7'); grad.addColorStop(0.55, '#dbeafe'); grad.addColorStop(1, '#fce7f3')
+    drawBg(grad, 0)
+    drawFourGrid([
+      { x: 96, y: 270, w: 486, h: 500 },
+      { x: 660, y: 170, w: 486, h: 500 },
+      { x: 96, y: 885, w: 486, h: 500 },
+      { x: 660, y: 995, w: 486, h: 500 },
+    ])
+    drawRibbon('题型先过一遍', 430, 790, '#ffffff', '#1d4ed8')
+  } else if (active === 'minimalLine') {
+    drawBg('#ffffff', 0)
+    ctx.fillStyle = '#111827'; ctx.fillRect(74, 0, 24, CANVAS_H)
+    drawHeader('PDF 真题预览', 150, 145, '#111827', 44)
+    drawFourGrid([
+      { x: 150, y: 215, w: 450, h: 540, r: 2 },
+      { x: 680, y: 215, w: 450, h: 540, r: 2 },
+      { x: 150, y: 875, w: 450, h: 540, r: 2 },
+      { x: 680, y: 875, w: 450, h: 540, r: 2 },
+    ], { shadow: false, r: 2 })
   }
 
   return canvas.toDataURL('image/png')
@@ -3999,6 +4989,8 @@ async function openCustomDir(item, idx) {
         dirDrawer.customIndex = idx
         dirDrawer.dirMode = 'dir'
         dirDrawer.title = item.name || '自定义'
+        dirDrawer.dirStyle = 'classic'
+        dirDrawer.pdfSingleStyle = 'classic'
         dirDrawer.borderColor = '#F9863B'
         dirDrawer.bgOpacity = 0.35
         dirDrawer.dirOnly = false
@@ -4035,7 +5027,8 @@ async function openCustomDir(item, idx) {
         dirDrawer.pdfPageDataUrl, sortedFiles,
         dirDrawer.borderColor, dirDrawer.title,
         dirDrawer.bgColor, dirDrawer.bgOpacity,
-        getActiveBgImageUrl(), dirDrawer.titleY
+        getActiveBgImageUrl(), dirDrawer.titleY,
+        dirDrawer.pdfSingleStyle
       )
       lastErr = null
       break  // 成功，退出重试循环

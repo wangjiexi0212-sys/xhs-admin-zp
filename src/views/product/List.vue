@@ -56,9 +56,11 @@
     >
       <div style="margin-bottom: 16px">
         <div style="font-size: 13px; font-weight: 500; color: #555; margin-bottom: 8px">生成方式</div>
-        <a-radio-group v-model:value="dirBatchOnlyDir" style="display: flex; flex-direction: column; gap: 6px">
-          <a-radio :value="false">完整生成（目录图 + 笔记内容 + 卡片图）</a-radio>
-          <a-radio :value="true">只生成目录图（仅真题 / 模拟题目录图）</a-radio>
+        <a-radio-group v-model:value="dirBatchMode" style="display: flex; flex-direction: column; gap: 6px">
+          <a-radio value="complete">完整生成（目录图 + 笔记内容 + 卡片图）</a-radio>
+          <a-radio value="examGrid">资料目录 + 试题拼图 + 笔记内容 + 卡片图</a-radio>
+          <a-radio value="examSingle">资料目录 + 试题单图 + 笔记内容 + 卡片图</a-radio>
+          <a-radio value="dirOnly">只生成目录图（仅真题 / 模拟题目录图）</a-radio>
         </a-radio-group>
       </div>
       <a-divider style="margin: 12px 0" />
@@ -1325,7 +1327,7 @@ function renderCardBasicImage(text, scheme) {
 
 // --- 批量生成目录图状态 ---
 const dirBatchSettingsVisible = ref(false)  // 设置弹窗
-const dirBatchOnlyDir = ref(false)          // 只生成目录图模式
+const dirBatchMode = ref('complete')        // complete | dirOnly | examGrid | examSingle
 const dirBatchUseBgImage = ref(false)       // 是否使用背景图（默认关闭 = 边框+颜色模式）
 const dirBatchBorderColor = ref('#F9863B')  // 边框颜色（背景图关闭时生效）
 const dirBatchGenBody = ref(true)           // 是否生成正文（默认开启）
@@ -1359,10 +1361,10 @@ async function onBatchGenerateDirImages() {
 
 function onConfirmBatchDirSettings() {
   dirBatchSettingsVisible.value = false
-  runBatchDirImages(dirBatchOnlyDir.value, dirBatchUseBgImage.value, dirBatchBorderColor.value, dirBatchGenBody.value)
+  runBatchDirImages(dirBatchMode.value, dirBatchUseBgImage.value, dirBatchBorderColor.value, dirBatchGenBody.value)
 }
 
-async function runBatchDirImages(onlyDirImages, useBgImage = false, borderColor = '#F9863B', genBody = true) {
+async function runBatchDirImages(generationMode = 'complete', useBgImage = false, borderColor = '#F9863B', genBody = true) {
   if (!selectedRowKeys.value.length) {
     message.warning('请先勾选商品')
     return
@@ -1455,7 +1457,8 @@ async function runBatchDirImages(onlyDirImages, useBgImage = false, borderColor 
       bgPool: useBgImage ? _bgImagePool : [],
       borderColor,
       productDetails,
-      onlyDirImages,
+      generationMode,
+      onlyDirImages: generationMode === 'dirOnly',
       titlePool: TITLE_POOL,
       historyTitlePool: HISTORY_TITLE_POOL,
       mockTitlePool: MOCK_TITLE_POOL,
