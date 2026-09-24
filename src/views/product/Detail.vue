@@ -2205,6 +2205,22 @@ function pickRandom(arr) {
   return arr[Math.floor(Math.random() * arr.length)]
 }
 
+function buildWrittenExamConstraint() {
+  const content = String(data.value.written_exam_content || '').trim()
+  if (!content) {
+    return [
+      '【笔试内容约束】',
+      '商品详情未填写明确的笔试内容，可按商品类型和参考文本的现有逻辑生成，但不要无依据写得过于具体。',
+    ].join('\n')
+  }
+  return [
+    '【笔试内容约束】',
+    `商品详情里的笔试内容：${content}`,
+    '正文必须严格围绕上述笔试内容展开；如果只写了某一科或某一类内容，就只写该范围。',
+    '不要主动扩展到未出现的考试科目或模块。例如只写“公共基础/公共基础知识”时，不要写行测、申论、面试、专业知识等无关内容。',
+  ].join('\n')
+}
+
 async function generateBody() {
   const active = llmStore.active
   if (!active) {
@@ -2263,6 +2279,7 @@ async function generateBody() {
     const userContent = [
       `单位名称：${data.value.company_name || ''}`,
       `商品类型：${data.value.job_type_name || ''}`,
+      buildWrittenExamConstraint(),
       `笔记标题：${generatedTitle.value || '（未生成，请围绕单位与商品类型自行展开）'}`,
       `参考来源：${sourceFrom}`,
       '',
@@ -2330,7 +2347,8 @@ async function generateBodyFromTemplate(tpl) {
       '',
       '【商品信息】',
       `企业名称：${data.value.company_name || ''}`,
-      `笔试内容：${data.value.job_type_name || ''}`,
+      `商品类型：${data.value.job_type_name || ''}`,
+      buildWrittenExamConstraint(),
       `笔记标题：${generatedTitle.value || '（未生成，请围绕企业名称与笔试内容自行展开）'}`,
       '',
       '要求：只输出正文，不重复标题，不含任何引流内容（关注我、加微信、私信等），数字和表情符号的使用风格与模版保持一致。',
