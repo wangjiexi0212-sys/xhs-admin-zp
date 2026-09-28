@@ -908,6 +908,7 @@ async function applyOcrSensitiveMosaicFallback(canvas) {
       image_url: uploaded.url,
       sensitive_words: SENSITIVE_WORD_LIST,
     })
+    if (res?.warning) console.warn(res.warning)
     return applyNormalizedMosaicBoxes(canvas, res?.boxes || [], 20)
   } catch (e) {
     console.warn('OCR 敏感词打码失败', e)
