@@ -153,6 +153,7 @@
                   @change="rerenderCurrentPdfPage"
                 />
                 <span class="auto-mosaic-label">自动遮盖敏感词</span>
+                <span v-if="ocrMosaicLoading" class="ocr-mosaic-status">OCR识别中...</span>
                 <a-tooltip v-if="autoMosaicEnabled" title="切换后会重新渲染当前页，下载和添加到列表都会使用打码后的图片">
                   <span class="auto-mosaic-help">(?)</span>
                 </a-tooltip>
@@ -393,7 +394,7 @@ import {
 } from '@ant-design/icons-vue'
 import { getCounselorProductDetail } from '@/api/counselorProducts'
 import { request, getToken } from '@/api/request'
-import { rewriteImage, proxyImageForDownload } from '@/api/xhsRewrite'
+import { rewriteImage, proxyImageForDownload, getSensitiveOcrBoxes } from '@/api/xhsRewrite'
 import { processImageForDownload, triggerBlobDownload } from '@/utils/imageProcess'
 import AiContentCenter from './components/AiContentCenter.vue'
 
@@ -705,6 +706,7 @@ const SENSITIVE_WORD_LIST = [
   '社会主义', '全会', '国家', '法律', '法规', '政治',
 ]
 const autoMosaicEnabled = ref(true)
+const ocrMosaicLoading = ref(false)
 const manualMosaicEnabled = ref(false)
 const manualMosaicBlockSize = ref(10)
 const manualMosaicHasPaint = ref(false)
@@ -860,6 +862,61 @@ async function applyPdfSensitiveMosaic(canvas, page, viewport) {
   return hitCount
 }
 
+function applyNormalizedMosaicBoxes(canvas, boxes, blockSize = 20) {
+  if (!Array.isArray(boxes) || !boxes.length) return 0
+  const ctx = canvas.getContext('2d')
+  const CW = canvas.width
+  const CH = canvas.height
+  let count = 0
+  for (const box of boxes) {
+    const rx = Math.floor(Number(box.x || 0) * CW) - 4
+    const ry = Math.floor(Number(box.y || 0) * CH) - 4
+    const rw = Math.ceil(Number(box.w || 0) * CW) + 8
+    const rh = Math.ceil(Number(box.h || 0) * CH) + 8
+    const x0 = Math.max(0, rx)
+    const y0 = Math.max(0, ry)
+    const x1 = Math.min(CW, rx + rw)
+    const y1 = Math.min(CH, ry + rh)
+    if (x1 <= x0 || y1 <= y0) continue
+    for (let by = y0; by < y1; by += blockSize) {
+      for (let bx = x0; bx < x1; bx += blockSize) {
+        const bw = Math.min(blockSize, x1 - bx)
+        const bh = Math.min(blockSize, y1 - by)
+        if (bw <= 0 || bh <= 0) continue
+        const px = ctx.getImageData(
+          Math.min(bx + (bw >> 1), CW - 1),
+          Math.min(by + (bh >> 1), CH - 1),
+          1,
+          1
+        ).data
+        ctx.fillStyle = `rgb(${px[0]},${px[1]},${px[2]})`
+        ctx.fillRect(bx, by, bw, bh)
+      }
+    }
+    count += 1
+  }
+  return count
+}
+
+async function applyOcrSensitiveMosaicFallback(canvas) {
+  if (!autoMosaicEnabled.value || ocrMosaicLoading.value) return 0
+  ocrMosaicLoading.value = true
+  try {
+    const dataUrl = canvas.toDataURL('image/png')
+    const uploaded = await _uploadDataUrlToR2(dataUrl)
+    const res = await getSensitiveOcrBoxes({
+      image_url: uploaded.url,
+      sensitive_words: SENSITIVE_WORD_LIST,
+    })
+    return applyNormalizedMosaicBoxes(canvas, res?.boxes || [], 20)
+  } catch (e) {
+    console.warn('OCR 敏感词打码失败', e)
+    return 0
+  } finally {
+    ocrMosaicLoading.value = false
+  }
+}
+
 async function loadPdfJs() {
   if (pdfjsLib) return pdfjsLib
   return new Promise((resolve, reject) => {
@@ -935,7 +992,10 @@ async function renderPage(pageNum) {
     canvas.width = viewport.width
     canvas.height = viewport.height
     await page.render({ canvasContext: ctx, viewport }).promise
-    await applyPdfSensitiveMosaic(canvas, page, viewport)
+    const pdfTextHitCount = await applyPdfSensitiveMosaic(canvas, page, viewport)
+    if (autoMosaicEnabled.value && pdfTextHitCount === 0) {
+      await applyOcrSensitiveMosaicFallback(canvas)
+    }
     manualMosaicBaseDataUrl = canvas.toDataURL('image/png')
     pdfState.currentPage = pageNum
   } catch (e) {
@@ -1699,6 +1759,12 @@ onBeforeUnmount(() => {
   color: #1677ff;
   cursor: default;
   user-select: none;
+}
+
+.ocr-mosaic-status {
+  font-size: 12px;
+  color: #1677ff;
+  white-space: nowrap;
 }
 
 .manual-mosaic-label,
