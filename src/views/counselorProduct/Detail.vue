@@ -295,7 +295,7 @@
         </div>
         <a-textarea
           v-model:value="pdfAiCustomPrompt"
-          placeholder="自定义提示词（留空则使用默认风格：小红书清新自然重绘）"
+          placeholder="自定义提示词（留空则使用「小红书AI - 改写提示词」里的图片提示词）"
           :rows="3"
           :maxlength="500"
           show-count
@@ -395,6 +395,7 @@ import {
 import { getCounselorProductDetail } from '@/api/counselorProducts'
 import { request, getToken } from '@/api/request'
 import { rewriteImage, proxyImageForDownload } from '@/api/xhsRewrite'
+import { getRewritePromptList } from '@/api/rewritePrompts'
 import { processImageForDownload, triggerBlobDownload } from '@/utils/imageProcess'
 import AiContentCenter from './components/AiContentCenter.vue'
 
@@ -1458,6 +1459,7 @@ const pdfAiGenerating = ref(false)
 const pdfAiBatchDownloading = ref(false)
 const pdfAiTextRewrite = ref(false)
 const pdfAiCustomPrompt = ref('')
+const pdfAiDefaultImagePrompt = ref('')
 
 // 大图预览（抽屉内）
 const drawerPreviewImg = reactive({ visible: false, url: '' })
@@ -1489,6 +1491,33 @@ async function _uploadDataUrlToR2(dataUrl) {
 }
 
 const PDF_AI_TEXT_REWRITE_PROMPT = '保持图片整体构图和主体内容不变，对图片中出现的所有覆盖文字进行改写，更换措辞和表达方式，文字风格与原图保持一致，其余内容轻度重绘，风格清新自然，适合小红书发布。'
+const DEFAULT_IMAGE_PROMPT = `基于输入图片进行轻度重绘，生成一张风格自然、适合小红书发布的新图。
+
+要求：
+1. 保持主体、产品、人物和核心构图基本不变
+2. 可以调整色调、背景细节、光线感和氛围，让画面更清新、更有质感
+3. 风格贴近小红书流行审美：明亮、干净、真实生活感
+4. 不添加文字水印或 logo
+5. 输出比例与原图一致`
+
+async function loadPdfAiDefaultImagePrompt() {
+  try {
+    const list = await getRewritePromptList()
+    const imagePrompt = (Array.isArray(list) ? list : [])
+      .map(item => String(item?.image_prompt || '').trim())
+      .find(Boolean)
+    pdfAiDefaultImagePrompt.value = imagePrompt || DEFAULT_IMAGE_PROMPT
+  } catch {
+    pdfAiDefaultImagePrompt.value = DEFAULT_IMAGE_PROMPT
+  }
+}
+
+function getPdfAiImagePrompt() {
+  return pdfAiCustomPrompt.value.trim()
+    || (pdfAiTextRewrite.value ? PDF_AI_TEXT_REWRITE_PROMPT : '')
+    || pdfAiDefaultImagePrompt.value
+    || DEFAULT_IMAGE_PROMPT
+}
 
 /** 并发受限执行器（复用 Rewrite.vue 相同实现） */
 function runConcurrent(items, fn, limit = 3) {
@@ -1522,8 +1551,7 @@ async function _doPdfAiOne(imgObj) {
       publicSrc = res.url
       imgObj.publicSrc = publicSrc
     }
-    const imagePrompt = pdfAiCustomPrompt.value.trim()
-      || (pdfAiTextRewrite.value ? PDF_AI_TEXT_REWRITE_PROMPT : '')
+    const imagePrompt = getPdfAiImagePrompt()
     const res = await rewriteImage({ src: publicSrc, prompt: '', image_prompt: imagePrompt })
     imgObj.url = res.url
     imgObj.status = 'done'
@@ -1613,7 +1641,10 @@ async function downloadAllPdfAiImages() {
   message.success(`已下载 ${ok} / ${doneImgs.length} 张（已处理去重指纹）`)
 }
 
-onMounted(loadDetail)
+onMounted(() => {
+  loadDetail()
+  loadPdfAiDefaultImagePrompt()
+})
 
 onBeforeUnmount(() => {
   if (_pdfDoc) {
