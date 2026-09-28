@@ -394,7 +394,7 @@ import {
 } from '@ant-design/icons-vue'
 import { getCounselorProductDetail } from '@/api/counselorProducts'
 import { request, getToken } from '@/api/request'
-import { rewriteImage, proxyImageForDownload, getSensitiveOcrBoxes } from '@/api/xhsRewrite'
+import { rewriteImage, proxyImageForDownload } from '@/api/xhsRewrite'
 import { processImageForDownload, triggerBlobDownload } from '@/utils/imageProcess'
 import AiContentCenter from './components/AiContentCenter.vue'
 
@@ -694,6 +694,7 @@ const pdfState = reactive({
 })
 
 let pdfjsLib = null
+let tesseractWorkerPromise = null
 
 // ── PDF 敏感词自动打码 ─────────────────────────────────────
 const SENSITIVE_WORD_LIST = [
@@ -898,20 +899,78 @@ function applyNormalizedMosaicBoxes(canvas, boxes, blockSize = 20) {
   return count
 }
 
+function normalizeOcrSensitiveText(text) {
+  return String(text || '').replace(/[\s.,，。:：;；、'"“”‘’()[\]{}<>《》【】\-_/\\|!！?？]/g, '').toLowerCase()
+}
+
+function getSensitiveHit(text) {
+  const normalized = normalizeOcrSensitiveText(text)
+  if (!normalized) return null
+  return SENSITIVE_WORD_LIST.find(word => normalized.includes(normalizeOcrSensitiveText(word))) || null
+}
+
+async function getTesseractWorker() {
+  if (!tesseractWorkerPromise) {
+    tesseractWorkerPromise = import('tesseract.js').then(async ({ createWorker, PSM }) => {
+      const worker = await createWorker(['chi_sim', 'eng'], 1, {
+        logger: (m) => {
+          if (m?.status && typeof m.progress === 'number') {
+            console.debug(`Tesseract OCR ${m.status}: ${Math.round(m.progress * 100)}%`)
+          }
+        },
+      })
+      await worker.setParameters({
+        tessedit_pageseg_mode: PSM.AUTO,
+        preserve_interword_spaces: '1',
+      })
+      return worker
+    })
+  }
+  return tesseractWorkerPromise
+}
+
+function collectTesseractBoxes(page, canvas) {
+  const boxes = []
+  const pushBox = (item) => {
+    if (!item?.bbox || !getSensitiveHit(item.text)) return
+    const { x0, y0, x1, y1 } = item.bbox
+    const w = x1 - x0
+    const h = y1 - y0
+    if (w <= 0 || h <= 0) return
+    boxes.push({
+      word: getSensitiveHit(item.text),
+      x: x0 / canvas.width,
+      y: y0 / canvas.height,
+      w: w / canvas.width,
+      h: h / canvas.height,
+    })
+  }
+
+  const blocks = Array.isArray(page?.blocks) ? page.blocks : []
+  for (const block of blocks) {
+    if (!block) continue
+    pushBox(block)
+    for (const paragraph of block.paragraphs || []) {
+      pushBox(paragraph)
+      for (const line of paragraph.lines || []) {
+        pushBox(line)
+        for (const word of line.words || []) pushBox(word)
+      }
+    }
+  }
+  return boxes
+}
+
 async function applyOcrSensitiveMosaicFallback(canvas) {
   if (!autoMosaicEnabled.value || ocrMosaicLoading.value) return 0
   ocrMosaicLoading.value = true
   try {
-    const dataUrl = canvas.toDataURL('image/png')
-    const uploaded = await _uploadDataUrlToR2(dataUrl)
-    const res = await getSensitiveOcrBoxes({
-      image_url: uploaded.url,
-      sensitive_words: SENSITIVE_WORD_LIST,
-    })
-    if (res?.warning) console.warn(res.warning)
-    return applyNormalizedMosaicBoxes(canvas, res?.boxes || [], 20)
+    const worker = await getTesseractWorker()
+    const { data } = await worker.recognize(canvas, {}, { blocks: true, text: true })
+    const boxes = collectTesseractBoxes(data, canvas)
+    return applyNormalizedMosaicBoxes(canvas, boxes, 20)
   } catch (e) {
-    console.warn('OCR 敏感词打码失败', e)
+    console.warn('Tesseract OCR 敏感词打码失败', e)
     return 0
   } finally {
     ocrMosaicLoading.value = false
@@ -1528,6 +1587,10 @@ onBeforeUnmount(() => {
   if (_pdfDoc) {
     _pdfDoc.destroy().catch(() => {})
     _pdfDoc = null
+  }
+  if (tesseractWorkerPromise) {
+    tesseractWorkerPromise.then(worker => worker.terminate()).catch(() => {})
+    tesseractWorkerPromise = null
   }
 })
 </script>
