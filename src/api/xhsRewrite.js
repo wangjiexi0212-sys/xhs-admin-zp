@@ -135,4 +135,4 @@ export const ocrNote = (data) =>
 
 /** OCR 识别图片中的敏感词位置，返回归一化 boxes */
 export const getSensitiveOcrBoxes = (data) =>
-  request('/api/xhs-rewrite/sensitive-ocr-boxes', { method: 'POST', body: withLlm(data) })
+  request('/api/xhs-rewrite/sensitive-ocr-boxes', { method: 'POST', body: data })
