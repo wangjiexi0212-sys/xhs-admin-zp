@@ -310,6 +310,58 @@
         >
           <ThunderboltOutlined /> AI 二创全部图片（{{ pdfImageList.length }} 张）
         </a-button>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <a-button
+            block
+            :loading="pdfTextExtracting"
+            :disabled="pdfAiGenerating || pdfTextExtracting"
+            @click="startPdfTextExtract(false)"
+          >
+            提取文字
+          </a-button>
+          <a-button
+            type="primary"
+            ghost
+            block
+            :loading="pdfTextExtracting || pdfAiGenerating"
+            :disabled="pdfAiGenerating || pdfTextExtracting"
+            @click="startPdfTextExtract(true)"
+          >
+            提取文字并绘画
+          </a-button>
+        </div>
+      </template>
+
+      <!-- OCR 提取结果 -->
+      <template v-if="pdfExtractResults.length">
+        <a-divider style="margin: 4px 0" />
+        <div class="ai-drawer-section-title">
+          📝 提取文字（{{ pdfExtractResults.filter(i => i.status === 'done').length }} / {{ pdfExtractResults.length }} 张完成）
+        </div>
+        <div class="pdf-extract-list">
+          <div v-for="item in pdfExtractResults" :key="item.id" class="pdf-extract-item">
+            <div class="pdf-extract-head">
+              <span class="pdf-extract-name">{{ item.filename }}</span>
+              <a-spin v-if="item.status === 'running' || item.status === 'pending'" size="small" />
+              <span v-else-if="item.status === 'error'" class="pdf-extract-error">提取失败</span>
+            </div>
+            <a-textarea
+              v-model:value="item.text"
+              :rows="4"
+              :disabled="item.status === 'running' || item.status === 'pending'"
+              placeholder="提取出的题目/文字会显示在这里，可编辑后用于绘画"
+            />
+            <a-button
+              size="small"
+              type="primary"
+              ghost
+              :disabled="!item.text?.trim() || pdfAiGenerating"
+              @click="generatePdfAiFromExtracted(item)"
+            >
+              用这段文字绘画
+            </a-button>
+          </div>
+        </div>
       </template>
 
       <!-- AI 二创结果 -->
@@ -1460,6 +1512,8 @@ const pdfAiBatchDownloading = ref(false)
 const pdfAiTextRewrite = ref(false)
 const pdfAiCustomPrompt = ref('')
 const pdfAiDefaultImagePrompt = ref('')
+const pdfTextExtracting = ref(false)
+const pdfExtractResults = ref([])
 
 // 大图预览（抽屉内）
 const drawerPreviewImg = reactive({ visible: false, url: '' })
@@ -1472,6 +1526,7 @@ function addCurrentPageToList() {
   const filename = `${pdfState.filename.replace(/\.pdf$/i, '')}_第${pdfState.currentPage}页.png`
   pdfImageList.value.push({ id: ++_listImgId, dataUrl, filename })
   pdfAiImages.value = []   // 列表变化时清空旧二创结果
+  pdfExtractResults.value = []
   message.success(`已添加第 ${pdfState.currentPage} 页（共 ${pdfImageList.value.length} 张）`)
   imageListDrawerOpen.value = true
 }
@@ -1480,6 +1535,7 @@ function addCurrentPageToList() {
 function removeFromImageList(id) {
   pdfImageList.value = pdfImageList.value.filter(i => i.id !== id)
   pdfAiImages.value = []
+  pdfExtractResults.value = pdfExtractResults.value.filter(i => i.id !== id)
 }
 
 /** 上传 canvas dataUrl 到 R2，返回 { url } */
@@ -1519,6 +1575,24 @@ function getPdfAiImagePrompt() {
     || DEFAULT_IMAGE_PROMPT
 }
 
+function buildExtractedDrawPrompt(text, filename = '') {
+  const cleanText = String(text || '').trim()
+  return [
+    '请根据以下试题/资料文字内容，生成一张适合小红书发布的学习资料配图。',
+    '画面要求：清晰、干净、有学习氛围，可包含纸张、笔记本、标注、高亮、桌面学习场景等元素。',
+    '不要逐字复刻原图，不要生成完整试卷截图，不要添加水印或无关 logo。',
+    filename ? `来源图片：${filename}` : '',
+    '文字内容：',
+    cleanText,
+  ].filter(Boolean).join('\n')
+}
+
+async function extractTextFromImage(dataUrl) {
+  const worker = await getTesseractWorker()
+  const { data } = await worker.recognize(dataUrl, {}, { text: true })
+  return String(data?.text || '').trim()
+}
+
 /** 并发受限执行器（复用 Rewrite.vue 相同实现） */
 function runConcurrent(items, fn, limit = 3) {
   const queue = [...items]
@@ -1545,6 +1619,13 @@ async function _doPdfAiOne(imgObj) {
   imgObj.status = 'running'
   imgObj.url = ''
   try {
+    if (imgObj.imagePrompt) {
+      const res = await rewriteImage({ image_prompt: imgObj.imagePrompt })
+      imgObj.url = res.url
+      imgObj.status = 'done'
+      return
+    }
+
     let publicSrc = imgObj.publicSrc
     if (!publicSrc) {
       const res = await _uploadDataUrlToR2(imgObj.src)
@@ -1582,6 +1663,69 @@ async function startPdfAiRewrite() {
   pdfAiGenerating.value = false
   const done = pdfAiImages.value.filter(i => i.status === 'done').length
   message.success(`AI 二创完成：${done} / ${pdfAiImages.value.length} 张`)
+}
+
+async function startPdfTextExtract(drawAfter = false) {
+  if (!pdfImageList.value.length) { message.warning('请先添加图片'); return }
+  pdfTextExtracting.value = true
+  pdfExtractResults.value = pdfImageList.value.map(item => reactive({
+    id: item.id,
+    src: item.dataUrl,
+    filename: item.filename,
+    text: '',
+    status: 'pending',
+    errMsg: '',
+  }))
+
+  await runConcurrent(pdfExtractResults.value, async (item) => {
+    item.status = 'running'
+    try {
+      item.text = await extractTextFromImage(item.src)
+      item.status = 'done'
+    } catch (e) {
+      item.errMsg = e?.message || '提取失败'
+      item.status = 'error'
+    }
+  }, 2)
+
+  pdfTextExtracting.value = false
+  const done = pdfExtractResults.value.filter(i => i.status === 'done' && i.text.trim()).length
+  if (!drawAfter) {
+    message.success(`文字提取完成：${done} / ${pdfExtractResults.value.length} 张`)
+    return
+  }
+
+  const drawable = pdfExtractResults.value.filter(i => i.status === 'done' && i.text.trim())
+  if (!drawable.length) {
+    message.warning('没有提取到可用于绘画的文字')
+    return
+  }
+  await startPdfAiDrawFromExtracted(drawable)
+}
+
+async function startPdfAiDrawFromExtracted(items) {
+  pdfAiGenerating.value = true
+  pdfAiImages.value = items.map(item => reactive({
+    id: item.id,
+    src: item.src,
+    filename: item.filename,
+    url: '',
+    status: 'pending',
+    downloading: false,
+    errMsg: '',
+    publicSrc: '',
+    imagePrompt: buildExtractedDrawPrompt(item.text, item.filename),
+  }))
+
+  await runConcurrent(pdfAiImages.value, _doPdfAiOne, 3)
+  pdfAiGenerating.value = false
+  const done = pdfAiImages.value.filter(i => i.status === 'done').length
+  message.success(`提取文字绘画完成：${done} / ${pdfAiImages.value.length} 张`)
+}
+
+async function generatePdfAiFromExtracted(item) {
+  if (!item?.text?.trim()) return
+  await startPdfAiDrawFromExtracted([item])
 }
 
 /** 重试单张失败的 AI 二创 */
@@ -2045,5 +2189,40 @@ onBeforeUnmount(() => {
 }
 .pdf-ai-error {
   color: #e63946;
+}
+
+.pdf-extract-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pdf-extract-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+  background: #fafafa;
+}
+
+.pdf-extract-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pdf-extract-name {
+  font-size: 12px;
+  color: #666;
+  word-break: break-all;
+}
+
+.pdf-extract-error {
+  font-size: 12px;
+  color: #e63946;
+  white-space: nowrap;
 }
 </style>
