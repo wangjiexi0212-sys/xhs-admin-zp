@@ -1653,6 +1653,7 @@ async function generateExamCard(useEditedPrompt = false) {
       d.recruit_count       ? `招聘人数：${d.recruit_count}` : '',
       d.written_exam_time   ? `笔试时间：${d.written_exam_time}` : '',
       d.written_exam_content ? `笔试内容：${d.written_exam_content}` : '',
+      buildWrittenExamConstraint(),
       '',
       '请根据以下信息输出笔试备考建议，只输出纯文字，不带任何Markdown符号，不要出现"第X天"等按天拆分的内容：',
       '',
@@ -1661,6 +1662,7 @@ async function generateExamCard(useEditedPrompt = false) {
       '',
       '注意：',
       '1. 内容必须结合实际笔试内容（如燃气行业则聚焦燃气专业，IT行业聚焦技术知识等），不得生成与笔试无关的通用内容',
+      '1.1 如果商品详情已写明具体笔试内容，必须只围绕该内容生成；未写明的科目不要自行扩展',
       '2. 严禁出现任何涉及政治人物、领导人姓名、中央政府政策文件名称、党政纪律等政治敏感内容',
       '3. 若笔试含"时事政治"，只写"关注近期社会热点、民生经济动态"等通用表述，不得提及具体政治人物或文件',
       '4. 输出纯文字，总字数严格不超过200字，超出200字即视为不合格，宁可删减也不超字数',
@@ -1720,6 +1722,9 @@ async function generateExamCard(useEditedPrompt = false) {
       ``,
       `Color palette: dark red #8B0000, orange #FF6600, gold #FFD700, white #FFFFFF, light gray #F5F5F5.`,
       `Style: flat design, no gradients except header, information-dense, Chinese typography, clean section dividers, no border decorations, structured data visualization card.`,
+      ``,
+      buildWrittenExamConstraint(),
+      `All text and visual content must follow the above written exam scope. Do not mention exam modules not present in the product details.`,
     ].join('\n')
 
     // 直接跳到提示词审核步骤，不再调用 prompt_only
@@ -1737,7 +1742,7 @@ async function generateExamCard(useEditedPrompt = false) {
   await drawCoverStream({
     product_id:            id.value,
     card_text:             `${d.company_name || ''}笔试备考海报`,
-    prompt:                examCardState.promptText,
+    prompt:                appendWrittenExamConstraintToPrompt(examCardState.promptText),
     reference_image_url:   refImageUrl,
     llm_provider:          active.provider,
     llm_api_format:        active.api_format,
@@ -1807,7 +1812,7 @@ async function generateCoverImage(useEditedPrompt = false) {
   const params = { product_id: id.value, card_text: text }
 
   if (useEditedPrompt && coverPromptUsed.value) {
-    params.prompt = coverPromptUsed.value
+    params.prompt = appendWrittenExamConstraintToPrompt(coverPromptUsed.value)
   }
 
   if (activeProvider === 'md2card') {
@@ -1848,7 +1853,7 @@ async function generateCoverImage(useEditedPrompt = false) {
     onDone(data) {
       if (data?.prompt_only) {
         // 仅返回提示词：展示供审核，不清除旧图
-        coverPromptUsed.value = data.prompt || ''
+        coverPromptUsed.value = appendWrittenExamConstraintToPrompt(data.prompt || '')
       } else {
         const urls = Array.isArray(data?.urls) ? data.urls.filter(Boolean) : []
         const rawUrls = urls.length ? urls : (data?.url ? [data.url] : [])
@@ -2216,9 +2221,18 @@ function buildWrittenExamConstraint() {
   return [
     '【笔试内容约束】',
     `商品详情里的笔试内容：${content}`,
-    '正文必须严格围绕上述笔试内容展开；如果只写了某一科或某一类内容，就只写该范围。',
+    '生成内容必须严格围绕上述笔试内容展开；如果只写了某一科或某一类内容，就只写该范围。',
     '不要主动扩展到未出现的考试科目或模块。例如只写“公共基础/公共基础知识”时，不要写行测、申论、面试、专业知识等无关内容。',
   ].join('\n')
+}
+
+function appendWrittenExamConstraintToPrompt(prompt) {
+  return [
+    String(prompt || '').trim(),
+    '',
+    buildWrittenExamConstraint(),
+    '【生图内容约束】图片里的文案、学习建议、科目名称、关键词和视觉元素都必须遵守上面的笔试内容约束；不要出现未标注的考试科目或模块。',
+  ].filter(Boolean).join('\n')
 }
 
 async function generateBody() {

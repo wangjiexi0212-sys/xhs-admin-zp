@@ -291,6 +291,22 @@ async function generateContent() {
 }
 
 // ─── Prompt 构建 ───────────────────────────────────────────
+function buildWrittenExamConstraint(d) {
+  const content = String(d?.written_exam_content || '').trim()
+  if (!content) {
+    return [
+      '【笔试内容约束】',
+      '商品详情未填写明确的笔试内容，可按现有招聘信息和商品类型生成，但不要无依据写得过于具体。',
+    ].join('\n')
+  }
+  return [
+    '【笔试内容约束】',
+    `商品详情里的笔试内容：${content}`,
+    '生成内容必须严格围绕上述笔试内容展开；如果只写了某一科或某一类内容，就只写该范围。',
+    '不要主动扩展到未出现的考试科目或模块。例如只写“公共基础/公共基础知识”时，不要写行测、申论、面试、专业知识等无关内容。',
+  ].join('\n')
+}
+
 function buildPrompt(type, d) {
   const base = [
     d.company_name         ? `单位名称：${d.company_name}` : '',
@@ -298,12 +314,15 @@ function buildPrompt(type, d) {
     d.written_exam_content ? `笔试内容：${d.written_exam_content}` : '',
     d.recruit_count        ? `招聘人数：${d.recruit_count}` : '',
   ].filter(Boolean).join('\n')
+  const examConstraint = buildWrittenExamConstraint(d)
 
   if (type === 'exam_info') {
     return [
       '根据以下招聘信息，整理笔试考情卡片内容。',
       '',
       base,
+      '',
+      examConstraint,
       '',
       '输出格式（sections必须恰好3项）：',
       '{"sections":[{"title":"笔试相关","bullets":["时间/形式/地点等，1-2条"]},{"title":"笔试内容","bullets":["主要考察科目/内容，2-4条"]},{"title":"笔试题型","bullets":["题目类型和数量分布，2-3条"]}],"note":"每年笔试内容略有变化，仅供参考"}',
@@ -318,6 +337,8 @@ function buildPrompt(type, d) {
       '',
       base,
       '',
+      examConstraint,
+      '',
       '输出格式（sections必须恰好3项）：',
       '{"intro":"激励短句，不超过30字","sections":[{"label":"重点科目","content":"..."},{"label":"答题技巧","content":"..."},{"label":"备考提醒","content":"..."}]}',
       '',
@@ -331,8 +352,10 @@ function buildPrompt(type, d) {
       '',
       base,
       '',
+      examConstraint,
+      '',
       '输出格式（**词**标记的内容将渲染为红色高亮）：',
-      '{"intro":"考生交流情况开场，50字以内，模拟上岸考生讲自己的备考经历","advice":"备考建议正文，150-200字，包含具体科目建议和刷题方向，至少用**词**标记3-5个关键词（如**行测**、**专业知识**等）"}',
+      '{"intro":"考生交流情况开场，50字以内，模拟上岸考生讲自己的备考经历","advice":"备考建议正文，150-200字，包含具体科目建议和刷题方向，至少用**词**标记3-5个关键词，关键词必须来自笔试内容或招聘信息"}',
       '',
       '要求：语言亲切自然，严禁引流内容（加微信/关注等）。',
     ].filter(Boolean).join('\n')
@@ -343,6 +366,8 @@ function buildPrompt(type, d) {
     '根据以下招聘信息，描述备考该单位笔试的学习强度和备考建议。',
     '',
     base,
+    '',
+    examConstraint,
     '',
     '输出格式（**词**标记的内容将渲染为红色高亮）：',
     '{"intro":"80字以内，讲述一位考生的备考经历和强度感受","content":"150-200字，描述考试特点和备考建议，至少用**词**标记3-5个关键词"}',
