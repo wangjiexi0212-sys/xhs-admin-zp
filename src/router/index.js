@@ -61,6 +61,26 @@ const router = createRouter({
           component: () => import('../views/regularProduct/Detail.vue'),
         },
         {
+          path: 'counselor-product/list',
+          name: 'counselor-product-list',
+          component: () => import('../views/counselorProduct/List.vue'),
+        },
+        {
+          path: 'counselor-product/create',
+          name: 'counselor-product-create',
+          component: () => import('../views/counselorProduct/Edit.vue'),
+        },
+        {
+          path: 'counselor-product/edit/:id',
+          name: 'counselor-product-edit',
+          component: () => import('../views/counselorProduct/Edit.vue'),
+        },
+        {
+          path: 'counselor-product/detail/:id',
+          name: 'counselor-product-detail',
+          component: () => import('../views/counselorProduct/Detail.vue'),
+        },
+        {
           path: 'user/list',
           name: 'user-list',
           component: () => import('../views/user/List.vue'),
