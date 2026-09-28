@@ -909,6 +909,56 @@ function getSensitiveHit(text) {
   return SENSITIVE_WORD_LIST.find(word => normalized.includes(normalizeOcrSensitiveText(word))) || null
 }
 
+function pushTesseractBBox(boxes, bbox, canvas, word = '') {
+  if (!bbox) return
+  const { x0, y0, x1, y1 } = bbox
+  const w = x1 - x0
+  const h = y1 - y0
+  if (w <= 0 || h <= 0) return
+  boxes.push({
+    word,
+    x: x0 / canvas.width,
+    y: y0 / canvas.height,
+    w: w / canvas.width,
+    h: h / canvas.height,
+  })
+}
+
+function collectTesseractLineBoxes(line, canvas, boxes) {
+  const chars = []
+  for (const word of line?.words || []) {
+    if (!Array.isArray(word?.symbols) || !word.symbols.length) continue
+    for (const symbol of word.symbols) {
+      const text = normalizeOcrSensitiveText(symbol?.text)
+      if (!text || !symbol?.bbox) continue
+      chars.push({ text, bbox: symbol.bbox })
+    }
+  }
+
+  if (chars.length) {
+    const normalizedLine = chars.map(item => item.text).join('')
+    const matchedIndexes = new Set()
+    for (const sensitiveWord of SENSITIVE_WORD_LIST) {
+      const normalizedWord = normalizeOcrSensitiveText(sensitiveWord)
+      if (!normalizedWord) continue
+      let from = 0
+      while (true) {
+        const start = normalizedLine.indexOf(normalizedWord, from)
+        if (start < 0) break
+        for (let i = start; i < start + normalizedWord.length; i += 1) matchedIndexes.add(i)
+        from = start + 1
+      }
+    }
+    for (const index of matchedIndexes) pushTesseractBBox(boxes, chars[index]?.bbox, canvas)
+    return
+  }
+
+  for (const word of line?.words || []) {
+    const hit = getSensitiveHit(word?.text)
+    if (hit) pushTesseractBBox(boxes, word.bbox, canvas, hit)
+  }
+}
+
 async function getTesseractWorker() {
   if (!tesseractWorkerPromise) {
     tesseractWorkerPromise = import('tesseract.js').then(async ({ createWorker, PSM }) => {
@@ -931,30 +981,12 @@ async function getTesseractWorker() {
 
 function collectTesseractBoxes(page, canvas) {
   const boxes = []
-  const pushBox = (item) => {
-    if (!item?.bbox || !getSensitiveHit(item.text)) return
-    const { x0, y0, x1, y1 } = item.bbox
-    const w = x1 - x0
-    const h = y1 - y0
-    if (w <= 0 || h <= 0) return
-    boxes.push({
-      word: getSensitiveHit(item.text),
-      x: x0 / canvas.width,
-      y: y0 / canvas.height,
-      w: w / canvas.width,
-      h: h / canvas.height,
-    })
-  }
-
   const blocks = Array.isArray(page?.blocks) ? page.blocks : []
   for (const block of blocks) {
     if (!block) continue
-    pushBox(block)
     for (const paragraph of block.paragraphs || []) {
-      pushBox(paragraph)
       for (const line of paragraph.lines || []) {
-        pushBox(line)
-        for (const word of line.words || []) pushBox(word)
+        collectTesseractLineBoxes(line, canvas, boxes)
       }
     }
   }
