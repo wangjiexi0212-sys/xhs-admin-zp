@@ -1383,6 +1383,14 @@ function createFeishuScheduleTimeGenerator() {
   }
 }
 
+function isCardImageLabel(label) {
+  return String(label || '').includes('卡片图')
+}
+
+function sortImagesForFeishu(images) {
+  return [...images].sort((a, b) => Number(isCardImageLabel(b.label)) - Number(isCardImageLabel(a.label)))
+}
+
 async function runBatchDirImages(generationMode = 'complete', useBgImage = false, borderColor = '#F9863B', genBody = true) {
   if (!selectedRowKeys.value.length) {
     message.warning('请先勾选商品')
@@ -1524,7 +1532,7 @@ async function runBatchDirImages(generationMode = 'complete', useBgImage = false
     if (feishuEnabled.value && noteResult) {
       const nowTs = Date.now()
       const fileTokens = []
-      for (const { label, base64 } of images) {
+      for (const { label, base64 } of sortImagesForFeishu(images)) {
         try {
           const res = await uploadFeishuBitableImage({ base64, filename: `${label}.png` })
           if (res?.file_token) fileTokens.push(res.file_token)
