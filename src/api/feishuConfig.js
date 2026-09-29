@@ -10,7 +10,7 @@ export const testFeishuConfig = (data) =>
 
 /**
  * 批量写入记录到飞书多维表格
- * records: Array<{ title, body, tags, status, error_info, created_at, updated_at, file_tokens? }>
+ * records: Array<{ title, body, tags, status, error_info, created_at, updated_at, scheduled_publish_time?, file_tokens? }>
  */
 export const writeFeishuBitableRecords = (records) =>
   request('/api/feishu/bitable/records', { method: 'POST', body: { records } })

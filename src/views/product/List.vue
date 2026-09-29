@@ -1364,6 +1364,25 @@ function onConfirmBatchDirSettings() {
   runBatchDirImages(dirBatchMode.value, dirBatchUseBgImage.value, dirBatchBorderColor.value, dirBatchGenBody.value)
 }
 
+function padDatePart(n) {
+  return String(n).padStart(2, '0')
+}
+
+function formatScheduleTime(ts) {
+  const d = new Date(ts)
+  return `${d.getFullYear()}-${padDatePart(d.getMonth() + 1)}-${padDatePart(d.getDate())} ${padDatePart(d.getHours())}:${padDatePart(d.getMinutes())}`
+}
+
+function createFeishuScheduleTimeGenerator() {
+  let nextTs = Date.now() + 70 * 60 * 1000
+  return () => {
+    const current = formatScheduleTime(nextTs)
+    const randomMinutes = 30 + Math.floor(Math.random() * 26)
+    nextTs += randomMinutes * 60 * 1000
+    return current
+  }
+}
+
 async function runBatchDirImages(generationMode = 'complete', useBgImage = false, borderColor = '#F9863B', genBody = true) {
   if (!selectedRowKeys.value.length) {
     message.warning('请先勾选商品')
@@ -1413,6 +1432,7 @@ async function runBatchDirImages(generationMode = 'complete', useBgImage = false
   const zip = new JSZip()
   let totalImages = 0, totalNotes = 0
   const feishuRecords = []
+  const nextFeishuScheduleTime = createFeishuScheduleTimeGenerator()
   // 收集 worker 发回的每个商品图片，用于后续 note 生成 + feishu
   const productImageMap = {}  // company → { detail, folder, images: [{label, base64}] }
 
@@ -1518,6 +1538,7 @@ async function runBatchDirImages(generationMode = 'complete', useBgImage = false
         tags: Array.isArray(detail.xhs_tags) ? detail.xhs_tags.join('，') : (detail.xhs_tags || ''),
         status: '待制作',
         error_info: '',
+        scheduled_publish_time: nextFeishuScheduleTime(),
         created_at: nowTs,
         updated_at: nowTs,
         file_tokens: fileTokens,
