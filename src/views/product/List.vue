@@ -94,8 +94,17 @@
         <span style="font-size: 12px; color: #999">{{ feishuEnabled ? '开启，生成完成后同步到飞书多维表格' : '关闭' }}</span>
       </div>
       <template v-if="feishuEnabled">
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px">
+          <span style="font-size: 13px; color: #555; flex-shrink: 0">第一篇定时发布时间</span>
+          <input
+            v-model="feishuFirstScheduleTime"
+            type="datetime-local"
+            style="height: 32px; padding: 4px 11px; border: 1px solid #d9d9d9; border-radius: 6px; font-size: 14px; color: #333; outline: none"
+          />
+        </div>
         <div style="padding: 10px 12px; background: #f0f9ff; border: 1px solid #bae0ff; border-radius: 6px; font-size: 12px; color: #555; line-height: 1.8; margin-bottom: 12px">
           生成完成后将自动把每条笔记的<b>标题、正文、话题、状态</b>写入飞书多维表格。<br />
+          第一篇使用上方选择的时间，后续每篇自动随机间隔 30～55 分钟。<br />
           请确保已在「系统设置 → 飞书配置」中填写了多维表格 App Token 和 Table ID。
         </div>
       </template>
@@ -1332,6 +1341,7 @@ const dirBatchUseBgImage = ref(false)       // 是否使用背景图（默认关
 const dirBatchBorderColor = ref('#F9863B')  // 边框颜色（背景图关闭时生效）
 const dirBatchGenBody = ref(true)           // 是否生成正文（默认开启）
 const feishuEnabled = ref(false)            // 飞书文档开关
+const feishuFirstScheduleTime = ref('')     // 飞书第一篇定时发布时间
 const dirBatchVisible = ref(false)
 const dirBatchGenerating = ref(false)
 const dirBatchLogs = ref([])
@@ -1350,18 +1360,28 @@ function randomizeDirBatchBorderColor() {
   dirBatchBorderColor.value = colors[Math.floor(Math.random() * colors.length)]
 }
 
+function formatDateTimeInputValue(ts) {
+  const d = new Date(ts)
+  return `${d.getFullYear()}-${padDatePart(d.getMonth() + 1)}-${padDatePart(d.getDate())}T${padDatePart(d.getHours())}:${padDatePart(d.getMinutes())}`
+}
+
+function resetFeishuFirstScheduleTime() {
+  feishuFirstScheduleTime.value = formatDateTimeInputValue(Date.now() + 70 * 60 * 1000)
+}
+
 async function onBatchGenerateDirImages() {
   if (!selectedRowKeys.value.length) {
     message.warning('请先勾选商品')
     return
   }
   randomizeDirBatchBorderColor()
+  resetFeishuFirstScheduleTime()
   dirBatchSettingsVisible.value = true
 }
 
 function onConfirmBatchDirSettings() {
   dirBatchSettingsVisible.value = false
-  runBatchDirImages(dirBatchMode.value, dirBatchUseBgImage.value, dirBatchBorderColor.value, dirBatchGenBody.value)
+  runBatchDirImages(dirBatchMode.value, dirBatchUseBgImage.value, dirBatchBorderColor.value, dirBatchGenBody.value, feishuFirstScheduleTime.value)
 }
 
 function padDatePart(n) {
@@ -1373,8 +1393,9 @@ function formatScheduleTime(ts) {
   return `${d.getFullYear()}-${padDatePart(d.getMonth() + 1)}-${padDatePart(d.getDate())} ${padDatePart(d.getHours())}:${padDatePart(d.getMinutes())}`
 }
 
-function createFeishuScheduleTimeGenerator() {
-  let nextTs = Date.now() + 70 * 60 * 1000
+function createFeishuScheduleTimeGenerator(startTime) {
+  const parsedTs = new Date(startTime).getTime()
+  let nextTs = Number.isFinite(parsedTs) ? parsedTs : Date.now() + 70 * 60 * 1000
   return () => {
     const current = formatScheduleTime(nextTs)
     const randomMinutes = 30 + Math.floor(Math.random() * 26)
@@ -1401,7 +1422,7 @@ function shuffleTags(tags) {
   return shuffled
 }
 
-async function runBatchDirImages(generationMode = 'complete', useBgImage = false, borderColor = '#F9863B', genBody = true) {
+async function runBatchDirImages(generationMode = 'complete', useBgImage = false, borderColor = '#F9863B', genBody = true, firstScheduleTime = '') {
   if (!selectedRowKeys.value.length) {
     message.warning('请先勾选商品')
     return
@@ -1450,7 +1471,7 @@ async function runBatchDirImages(generationMode = 'complete', useBgImage = false
   const zip = new JSZip()
   let totalImages = 0, totalNotes = 0
   const feishuRecords = []
-  const nextFeishuScheduleTime = createFeishuScheduleTimeGenerator()
+  const nextFeishuScheduleTime = createFeishuScheduleTimeGenerator(firstScheduleTime)
   // 收集 worker 发回的每个商品图片，用于后续 note 生成 + feishu
   const productImageMap = {}  // company → { detail, folder, images: [{label, base64}] }
 
