@@ -1479,7 +1479,6 @@ async function runBatch({ productDetails, onlyDirImages, generationMode = 'compl
     } else {
       if (detail.baidu_path_exam) {
         tasks.push({ path: detail.baidu_path_exam, type: 'exam', label: '笔试资料目录', title: '笔试资料完整目录' })
-        tasks.push({ path: detail.baidu_path_exam, type: 'culture', label: '企业文化', title: '企业文化重点速览' })
       }
       if (detail.baidu_path_history) {
         tasks.push({ path: detail.baidu_path_history, type: 'history', label: '真题目录', title: rndPick(_HISTORY_TITLE_POOL) || '真题目录' })
