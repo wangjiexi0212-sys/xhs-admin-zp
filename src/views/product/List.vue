@@ -1391,6 +1391,16 @@ function sortImagesForFeishu(images) {
   return [...images].sort((a, b) => Number(isCardImageLabel(b.label)) - Number(isCardImageLabel(a.label)))
 }
 
+function shuffleTags(tags) {
+  if (!Array.isArray(tags)) return tags
+  const shuffled = [...tags]
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+  }
+  return shuffled
+}
+
 async function runBatchDirImages(generationMode = 'complete', useBgImage = false, borderColor = '#F9863B', genBody = true) {
   if (!selectedRowKeys.value.length) {
     message.warning('请先勾选商品')
@@ -1500,6 +1510,7 @@ async function runBatchDirImages(generationMode = 'complete', useBgImage = false
   for (const company of Object.keys(productImageMap)) {
     const { detail, folder, images, cardText } = productImageMap[company]
     if (!detail) continue
+    const shuffledTags = shuffleTags(detail.xhs_tags)
 
     dirBatchLogs.value.push({ text: `${company} - 生成笔记内容中...`, type: 'info' })
     let noteResult = null
@@ -1519,7 +1530,7 @@ async function runBatchDirImages(generationMode = 'complete', useBgImage = false
         body = null
       }
       noteResult = { title, body }
-      const doc = buildNoteDocx(title, body, detail.xhs_tags)
+      const doc = buildNoteDocx(title, body, shuffledTags)
       const docBlob = await Packer.toBlob(doc)
       folder.file('笔记内容.docx', docBlob)
       totalNotes++
@@ -1543,7 +1554,7 @@ async function runBatchDirImages(generationMode = 'complete', useBgImage = false
       feishuRecords.push({
         title: noteResult.title,
         body: noteResult.body,
-        tags: Array.isArray(detail.xhs_tags) ? detail.xhs_tags.join('，') : (detail.xhs_tags || ''),
+        tags: Array.isArray(shuffledTags) ? shuffledTags.join('，') : (shuffledTags || ''),
         status: '待制作',
         error_info: '',
         scheduled_publish_time: nextFeishuScheduleTime(),
