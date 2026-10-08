@@ -51,6 +51,16 @@ async function offscreenToDataUrl(canvas) {
   return new FileReaderSync().readAsDataURL(blob)
 }
 
+function filterDirFilesByType(files, type) {
+  if (type === 'history') {
+    return (files || []).filter(file => !/模拟题|模拟试卷/.test(String(file?.name || '')))
+  }
+  if (type === 'mock') {
+    return (files || []).filter(file => !String(file?.name || '').includes('真题'))
+  }
+  return files || []
+}
+
 // ── API 工具 ─────────────────────────────────────────────────────────
 async function apiFetch(path, opts = {}) {
   const res = await fetch(_apiBase + path, {
@@ -977,7 +987,7 @@ async function buildPdfGridComposite(pageCanvases, borderColor, style = 'classic
 // ── buildDirImageForBatch（Worker 版）──────────────────────────────
 async function buildDirImageForBatch(path, type, title, onlyDir, bgUrl, dirStyle, pdfSingleStyle = 'classic') {
   const res = await getBaiduFilesWithRetry(path)
-  const files = (res.files || []).sort((a, b) => b.isdir - a.isdir)
+  const files = filterDirFilesByType(res.files, type).sort((a, b) => b.isdir - a.isdir)
   if (!files.length) throw new Error('目录为空')
   if (type === 'history' || type === 'mock') {
     if (!onlyDir) {
@@ -1008,7 +1018,7 @@ async function buildDirImageForBatch(path, type, title, onlyDir, bgUrl, dirStyle
 
 async function buildPaperImageForBatch(path, type, mode, pdfGridStyle, pdfSingleStyle, title, pdfGridTitleStyle) {
   const res = await getBaiduFilesWithRetry(path)
-  const files = (res.files || []).sort((a, b) => b.isdir - a.isdir)
+  const files = filterDirFilesByType(res.files, type).sort((a, b) => b.isdir - a.isdir)
   if (!files.length) throw new Error('目录为空')
   const keyword = type === 'mock' ? '2026' : '2025'
   const pdf = files.find(f => f.isdir === 0 && f.name.includes(keyword)) || files.find(f => f.isdir === 0 && /\.pdf$/i.test(f.name))

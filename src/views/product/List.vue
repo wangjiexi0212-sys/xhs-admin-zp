@@ -758,9 +758,19 @@ async function getBaiduFilesWithRetry(path, MAX_RETRY = 5) {
   throw lastErr
 }
 
+function filterDirFilesByType(files, type) {
+  if (type === 'history') {
+    return (files || []).filter(file => !/模拟题|模拟试卷/.test(String(file?.name || '')))
+  }
+  if (type === 'mock') {
+    return (files || []).filter(file => !String(file?.name || '').includes('真题'))
+  }
+  return files || []
+}
+
 async function buildDirImageForBatch(path, type, title, onlyDir = false, bgImageUrl = null) {
   const res = await getBaiduFilesWithRetry(path)
-  const files = res.files || []
+  const files = filterDirFilesByType(res.files, type)
   if (!files.length) throw new Error('目录为空')
   files.sort((a, b) => b.isdir - a.isdir)
   if (type === 'history' || type === 'mock') {
