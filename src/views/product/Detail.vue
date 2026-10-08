@@ -3581,6 +3581,10 @@ async function renderStyledPdfSingleComposite(ctx, canvas, pdfImg, files, border
   return canvas.toDataURL('image/png')
 }
 
+function filterHistoryDirFiles(files) {
+  return (files || []).filter(file => !String(file?.name || '').includes('模拟题'))
+}
+
 async function generateDirImage(type) {
   const path = type === 'exam' ? data.value.baidu_path_exam
     : type === 'history' ? data.value.baidu_path_history
@@ -3617,7 +3621,7 @@ async function generateDirImage(type) {
   for (let attempt = 1; attempt <= MAX_RETRY; attempt++) {
     try {
       const res = await getBaiduFiles(path)
-      const files = res.files || []
+      const files = type === 'history' ? filterHistoryDirFiles(res.files) : (res.files || [])
       if (!files.length) {
         message.warning('该目录下暂无文件')
         dirDrawer.loading = false
@@ -4870,7 +4874,7 @@ async function getBaiduFilesWithRetry(path, MAX_RETRY = 5) {
  */
 async function buildDirImageForBatch(path, type, title) {
   const res = await getBaiduFilesWithRetry(path)
-  const files = res.files || []
+  const files = type === 'history' ? filterHistoryDirFiles(res.files) : (res.files || [])
   if (!files.length) throw new Error('目录为空')
   files.sort((a, b) => b.isdir - a.isdir)
 
