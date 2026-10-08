@@ -1038,6 +1038,63 @@ const CARD_TEMPLATE_STYLES = [
   'orangeburst','blueprint_card','receipt_card','neon','vertical','filetab','calendar_card','folderwall_card','outline_card','cream_card','stamp2','marker',
 ]
 
+const CARD_BOTTOM_HINTS = [
+  '👈 左滑查看更多笔试备考资料',
+  '📚 更多笔试复习资料，左滑查看',
+  '✨ 往左翻，还有整理好的笔试资料',
+  '📖 左滑解锁更多笔试学习资料',
+  '📝 后面几页还有笔试备考干货',
+  '👉 想看更多笔试资料？往左滑',
+  '📌 左滑查看后续笔试资料内容',
+  '💡 笔试复习资料还没完，继续左滑',
+  '🎯 更多笔试重点资料藏在后面',
+  '📚 下一页继续分享笔试备考资料',
+  '👀 往左滑，看看还有哪些笔试资料',
+  '📑 左边还有更多笔试复习内容',
+  '🌟 左滑继续查看笔试学习笔记',
+  '📖 笔试资料已整理，往左翻阅',
+  '✍️ 左滑查看更多笔试知识整理',
+  '📚 继续往左翻，笔试资料还有不少',
+  '💫 更多笔试备考内容，左滑就能看',
+  '📌 别急着划走，左滑还有笔试资料',
+  '🗂️ 后续图片还有更多笔试复习资料',
+  '👈 左滑进入下一组笔试备考内容',
+  '📒 笔试高频考点资料，左滑接着看',
+  '🎯 往左翻，更多笔试核心资料等你看',
+  '📚 左滑还有笔试真题与复习笔记',
+  '📝 笔试知识点整理，下一页继续',
+  '✨ 左滑查看更多笔试题型资料',
+  '📖 备考笔试的小伙伴，继续左滑看资料',
+  '💡 笔试重点内容还有，往左滑查看',
+  '📑 左滑翻阅更多笔试资料整理',
+  '👈 更多笔试知识清单，请向左翻',
+  '🌷 往左翻翻，笔试复习资料还在后面',
+  '📚 后面准备了更多笔试学习内容',
+  '🔖 左滑查看笔试资料的其他部分',
+  '📌 笔试备考资料持续分享，左滑继续',
+  '🎓 左滑了解更多笔试复习知识',
+  '📝 更多笔试考点笔记，下一张接着看',
+  '📖 想系统复习笔试？左滑看更多资料',
+  '✨ 这还不是全部，左滑还有笔试资料',
+  '📚 笔试复习内容比较多，左滑慢慢看',
+  '🎯 往左翻页，继续查看笔试备考重点',
+  '👀 后面还有笔试资料，记得左滑哦',
+  '📒 左滑查看更多笔试专项复习内容',
+  '🗂️ 更多笔试备考整理，向左翻页查看',
+  '💡 左滑还有笔试常见题型学习资料',
+  '📚 笔试资料分享继续，左滑看下一页',
+  '📝 更多笔试复习笔记，往左翻就有',
+  '📖 左滑看看后面整理的笔试知识点',
+  '🌟 下一张还有笔试备考资料，继续翻',
+  '👈 向左滑动，查看剩余笔试资料',
+  '📌 更多笔试复习参考资料，左滑浏览',
+  '🎯 左滑继续，后面还有笔试备考内容',
+]
+
+function pickCardBottomHint() {
+  return rndPick(CARD_BOTTOM_HINTS) || '👈 左滑查看更多笔试备考资料'
+}
+
 function splitCardText(text) {
   const raw = String(text || '').trim()
   const m = raw.match(/^(.+?笔试)[，,、\s]*(.*)$/)
@@ -1067,18 +1124,30 @@ function drawCardLines(ctx, lines, x, y, lineHeight, maxLines = 5) {
   lines.slice(0, maxLines).forEach((line, i) => ctx.fillText(line, x, y + i * lineHeight))
 }
 
-function drawRightHint(ctx, W, H, scale, color = '#1a1a1a', highlight = '#ffea7a') {
-  const text = '左滑查看更多备考资料'
-  const fontSize = 22 * scale
+function setCardHintFont(ctx, text, maxWidth, baseSize, minSize) {
+  let fontSize = baseSize
+  do {
+    ctx.font = `bold ${fontSize}px "PingFang SC", "Helvetica Neue", sans-serif`
+    if (ctx.measureText(text).width <= maxWidth || fontSize <= minSize) return fontSize
+    fontSize -= 1 * (baseSize / 22 / 3)
+  } while (fontSize > minSize)
+  return fontSize
+}
+
+function drawRightHint(ctx, W, H, scale, text, color = '#1a1a1a', highlight = '#ffea7a') {
+  const hintText = text || pickCardBottomHint()
+  const baseFontSize = 22 * scale
+  const minFontSize = 16 * scale
   const right = 40 * scale
+  const maxWidth = W - right * 2
   const y = H - 128 * scale
-  ctx.font = `bold ${fontSize}px "PingFang SC", "Helvetica Neue", sans-serif`
   ctx.textBaseline = 'top'
-  const w = ctx.measureText(text).width
+  const fontSize = setCardHintFont(ctx, hintText, maxWidth, baseFontSize, minFontSize)
+  const w = ctx.measureText(hintText).width
   ctx.fillStyle = highlight
   ctx.fillRect(W - right - w, y + fontSize * 0.55, w, fontSize * 0.48)
   ctx.fillStyle = color
-  ctx.fillText(text, W - right - w, y)
+  ctx.fillText(hintText, W - right - w, y)
 }
 
 function drawTemplateCardBackground(ctx, W, H, style, scale) {
@@ -1286,7 +1355,7 @@ function drawTemplateCardDecor(ctx, W, H, style, palette, scale) {
   ctx.restore()
 }
 
-async function renderTemplateCardImage(text, templateStyle) {
+async function renderTemplateCardImage(text, templateStyle, bottomHint) {
   const SCALE = 3
   const W = 360 * SCALE, H = 480 * SCALE
   const canvas = new OffscreenCanvas(W, H)
@@ -1312,14 +1381,15 @@ async function renderTemplateCardImage(text, templateStyle) {
 
   ctx.fillStyle = palette.accent
   ctx.beginPath(); ctx.roundRect(x, H - 78 * SCALE, 40 * SCALE, 5 * SCALE, 3 * SCALE); ctx.fill()
-  drawRightHint(ctx, W, H, SCALE, palette.hint, palette.hintHighlight)
+  drawRightHint(ctx, W, H, SCALE, bottomHint, palette.hint, palette.hintHighlight)
   return offscreenToDataUrl(canvas)
 }
 
 // ── 卡片图（与生成笔记抽屉风格池保持一致，OffscreenCanvas 版）────────────
 async function renderCardImage(text, styleInput) {
+  const bottomHint = pickCardBottomHint()
   if (Math.random() < 0.85) {
-    return renderTemplateCardImage(text, rndPick(CARD_TEMPLATE_STYLES))
+    return renderTemplateCardImage(text, rndPick(CARD_TEMPLATE_STYLES), bottomHint)
   }
   const picked = normalizeCardStyle(styleInput)
   const style = picked.id
@@ -1396,16 +1466,18 @@ async function renderCardImage(text, styleInput) {
   const BAR_W = 40 * SCALE
   ctx.fillStyle = accent
   ctx.beginPath(); ctx.roundRect(PAD_L, H - PAD_B - BAR_H, BAR_W, BAR_H, 2 * SCALE); ctx.fill()
-  // ─── 底部固定文字：左滑查看更多备考资料（重点样式，同 xxx笔试 高亮）──
+  // ─── 底部随机提示文案（重点样式，同 xxx笔试 高亮）──
   const BTM_FONT_SIZE = 22 * SCALE
-  const BTM_TEXT = '左滑查看更多备考资料'
+  const BTM_TEXT = bottomHint
   ctx.font = `bold ${BTM_FONT_SIZE}px "PingFang SC", "Helvetica Neue", sans-serif`
   ctx.textBaseline = 'top'
+  const maxBtmTextW = W - PAD_L - PAD_R
+  const fittedBtmFontSize = setCardHintFont(ctx, BTM_TEXT, maxBtmTextW, BTM_FONT_SIZE, 16 * SCALE)
   const btmTextW = ctx.measureText(BTM_TEXT).width
   const btmX = W - PAD_R - btmTextW
-  const btmY = H - 160 - BTM_FONT_SIZE
+  const btmY = H - 160 - fittedBtmFontSize
   if (!['geometric', 'border'].includes(style)) {
-    ctx.fillStyle = HL_COLOR; ctx.fillRect(btmX, btmY + BTM_FONT_SIZE * 0.55, btmTextW, BTM_FONT_SIZE * 0.47)
+    ctx.fillStyle = HL_COLOR; ctx.fillRect(btmX, btmY + fittedBtmFontSize * 0.55, btmTextW, fittedBtmFontSize * 0.47)
   }
   ctx.fillStyle = textColor; ctx.fillText(BTM_TEXT, btmX, btmY)
   return offscreenToDataUrl(canvas)

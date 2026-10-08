@@ -1185,6 +1185,76 @@ const CARD_STYLE_SCHEMES = [
   },
 ]
 
+const CARD_BOTTOM_HINTS = [
+  '👈 左滑查看更多笔试备考资料',
+  '📚 更多笔试复习资料，左滑查看',
+  '✨ 往左翻，还有整理好的笔试资料',
+  '📖 左滑解锁更多笔试学习资料',
+  '📝 后面几页还有笔试备考干货',
+  '👉 想看更多笔试资料？往左滑',
+  '📌 左滑查看后续笔试资料内容',
+  '💡 笔试复习资料还没完，继续左滑',
+  '🎯 更多笔试重点资料藏在后面',
+  '📚 下一页继续分享笔试备考资料',
+  '👀 往左滑，看看还有哪些笔试资料',
+  '📑 左边还有更多笔试复习内容',
+  '🌟 左滑继续查看笔试学习笔记',
+  '📖 笔试资料已整理，往左翻阅',
+  '✍️ 左滑查看更多笔试知识整理',
+  '📚 继续往左翻，笔试资料还有不少',
+  '💫 更多笔试备考内容，左滑就能看',
+  '📌 别急着划走，左滑还有笔试资料',
+  '🗂️ 后续图片还有更多笔试复习资料',
+  '👈 左滑进入下一组笔试备考内容',
+  '📒 笔试高频考点资料，左滑接着看',
+  '🎯 往左翻，更多笔试核心资料等你看',
+  '📚 左滑还有笔试真题与复习笔记',
+  '📝 笔试知识点整理，下一页继续',
+  '✨ 左滑查看更多笔试题型资料',
+  '📖 备考笔试的小伙伴，继续左滑看资料',
+  '💡 笔试重点内容还有，往左滑查看',
+  '📑 左滑翻阅更多笔试资料整理',
+  '👈 更多笔试知识清单，请向左翻',
+  '🌷 往左翻翻，笔试复习资料还在后面',
+  '📚 后面准备了更多笔试学习内容',
+  '🔖 左滑查看笔试资料的其他部分',
+  '📌 笔试备考资料持续分享，左滑继续',
+  '🎓 左滑了解更多笔试复习知识',
+  '📝 更多笔试考点笔记，下一张接着看',
+  '📖 想系统复习笔试？左滑看更多资料',
+  '✨ 这还不是全部，左滑还有笔试资料',
+  '📚 笔试复习内容比较多，左滑慢慢看',
+  '🎯 往左翻页，继续查看笔试备考重点',
+  '👀 后面还有笔试资料，记得左滑哦',
+  '📒 左滑查看更多笔试专项复习内容',
+  '🗂️ 更多笔试备考整理，向左翻页查看',
+  '💡 左滑还有笔试常见题型学习资料',
+  '📚 笔试资料分享继续，左滑看下一页',
+  '📝 更多笔试复习笔记，往左翻就有',
+  '📖 左滑看看后面整理的笔试知识点',
+  '🌟 下一张还有笔试备考资料，继续翻',
+  '👈 向左滑动，查看剩余笔试资料',
+  '📌 更多笔试复习参考资料，左滑浏览',
+  '🎯 左滑继续，后面还有笔试备考内容',
+]
+
+function pickCardBottomHint() {
+  const buf = new Uint32Array(1)
+  crypto.getRandomValues(buf)
+  return CARD_BOTTOM_HINTS[buf[0] % CARD_BOTTOM_HINTS.length]
+}
+
+function setCardHintFont(ctx, text, maxWidth, baseSize, minSize) {
+  let fontSize = baseSize
+  while (fontSize > minSize) {
+    ctx.font = `bold ${fontSize}px "PingFang SC", "Helvetica Neue", sans-serif`
+    if (ctx.measureText(text).width <= maxWidth) return fontSize
+    fontSize -= 1
+  }
+  ctx.font = `bold ${minSize}px "PingFang SC", "Helvetica Neue", sans-serif`
+  return minSize
+}
+
 function wrapTextLines(ctx, text, maxWidth) {
   const result = []
   const paragraphs = String(text || '').split('\n')
@@ -1313,18 +1383,19 @@ function renderCardBasicImage(text, scheme) {
   ctx.roundRect(PAD_L, H - PAD_B - BAR_H, BAR_W, BAR_H, 2 * SCALE)
   ctx.fill()
 
-  // ─── 底部固定文字：左滑查看更多备考资料（重点样式，同 xxx笔试 高亮）──
+  // ─── 底部随机提示文案（重点样式，同 xxx笔试 高亮）──
   const BTM_FONT_SIZE = 22 * SCALE  // 66px，略小于正文保持层次
-  const BTM_TEXT = '左滑查看更多备考资料'
+  const BTM_TEXT = pickCardBottomHint()
   ctx.font = `bold ${BTM_FONT_SIZE}px "PingFang SC", "Helvetica Neue", sans-serif`
   ctx.textBaseline = 'top'
   ctx.textAlign = 'left'
+  const fittedBtmFontSize = setCardHintFont(ctx, BTM_TEXT, W - PAD_L - PAD_R, BTM_FONT_SIZE, 16 * SCALE)
   const btmTextW = ctx.measureText(BTM_TEXT).width
   const btmX = W - PAD_R - btmTextW                    // 右对齐
-  const btmY = H - 160 - BTM_FONT_SIZE                  // 文字底边距画布底部 160px
+  const btmY = H - 160 - fittedBtmFontSize              // 文字底边距画布底部 160px
   // 黄色荧光高亮底色（与正文高亮一致：底部 45% 区域）
   ctx.fillStyle = HL_COLOR
-  ctx.fillRect(btmX, btmY + BTM_FONT_SIZE * 0.55, btmTextW, BTM_FONT_SIZE * 0.47)
+  ctx.fillRect(btmX, btmY + fittedBtmFontSize * 0.55, btmTextW, fittedBtmFontSize * 0.47)
   // 文字本体
   ctx.fillStyle = scheme.text
   ctx.fillText(BTM_TEXT, btmX, btmY)
