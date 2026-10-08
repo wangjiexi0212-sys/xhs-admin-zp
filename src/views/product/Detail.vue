@@ -3581,8 +3581,14 @@ async function renderStyledPdfSingleComposite(ctx, canvas, pdfImg, files, border
   return canvas.toDataURL('image/png')
 }
 
-function filterHistoryDirFiles(files) {
-  return (files || []).filter(file => !String(file?.name || '').includes('模拟题'))
+function filterDirFilesByType(files, type) {
+  if (type === 'history') {
+    return (files || []).filter(file => !String(file?.name || '').includes('模拟题'))
+  }
+  if (type === 'mock') {
+    return (files || []).filter(file => !String(file?.name || '').includes('真题'))
+  }
+  return files || []
 }
 
 async function generateDirImage(type) {
@@ -3621,7 +3627,7 @@ async function generateDirImage(type) {
   for (let attempt = 1; attempt <= MAX_RETRY; attempt++) {
     try {
       const res = await getBaiduFiles(path)
-      const files = type === 'history' ? filterHistoryDirFiles(res.files) : (res.files || [])
+      const files = filterDirFilesByType(res.files, type)
       if (!files.length) {
         message.warning('该目录下暂无文件')
         dirDrawer.loading = false
@@ -4874,7 +4880,7 @@ async function getBaiduFilesWithRetry(path, MAX_RETRY = 5) {
  */
 async function buildDirImageForBatch(path, type, title) {
   const res = await getBaiduFilesWithRetry(path)
-  const files = type === 'history' ? filterHistoryDirFiles(res.files) : (res.files || [])
+  const files = filterDirFilesByType(res.files, type)
   if (!files.length) throw new Error('目录为空')
   files.sort((a, b) => b.isdir - a.isdir)
 
