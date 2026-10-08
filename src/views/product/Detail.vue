@@ -3583,7 +3583,7 @@ async function renderStyledPdfSingleComposite(ctx, canvas, pdfImg, files, border
 
 function filterDirFilesByType(files, type) {
   if (type === 'history') {
-    return (files || []).filter(file => !String(file?.name || '').includes('模拟题'))
+    return (files || []).filter(file => !/模拟题|模拟试卷/.test(String(file?.name || '')))
   }
   if (type === 'mock') {
     return (files || []).filter(file => !String(file?.name || '').includes('真题'))
