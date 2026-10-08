@@ -22,8 +22,7 @@
                 @change="onProviderChange" />
             </a-form-item>
           </a-col>
-          <!-- 自定义时显示 API 格式选项 -->
-          <a-col v-if="form.provider === 'custom'" :span="12">
+          <a-col v-if="showApiFormat" :span="12">
             <a-form-item label="API 格式" extra="选 Anthropic 格式可直接对接 Claude 原生接口">
               <a-radio-group v-model:value="form.api_format" button-style="solid">
                 <a-radio-button value="openai">OpenAI 兼容</a-radio-button>
@@ -98,21 +97,21 @@ const PROVIDER_MODELS = {
 const modelOptions = computed(() =>
   (PROVIDER_MODELS[form.provider] || []).map(m => ({ value: m }))
 )
+const showApiFormat = computed(() => ['openai', 'anthropic', 'custom'].includes(form.provider))
 
 const form = reactive({
   name: '',
   provider: undefined,
-  api_format: 'openai',     // 仅 provider=custom 时生效，可选 openai | anthropic
+  api_format: 'openai',     // 可选 openai | anthropic，用于控制请求协议格式
   api_key: '',
   default_model: '',
   base_url: '',
 })
 
 function onProviderChange(value) {
-  if (value === 'custom') {
-    // 默认 OpenAI 兼容，用户可自行切换为 Anthropic 格式
-    if (!form.api_format) form.api_format = 'openai'
-  }
+  if (value === 'openai') form.api_format = 'openai'
+  if (value === 'anthropic') form.api_format = 'anthropic'
+  else if (['openai', 'custom'].includes(value) && !form.api_format) form.api_format = 'openai'
 }
 
 const rules = {
@@ -150,7 +149,7 @@ async function onSubmit() {
     const payload = {
       name: form.name.trim(),
       provider: form.provider,
-      api_format: form.provider === 'custom' ? form.api_format : undefined,
+      api_format: showApiFormat.value ? form.api_format : undefined,
       api_key: form.api_key.trim(),
       default_model: form.default_model.trim(),
       base_url: form.base_url?.trim() || '',
@@ -184,7 +183,7 @@ async function onTest() {
       method: 'POST',
       body: {
         provider: form.provider,
-        api_format: form.provider === 'custom' ? form.api_format : undefined,
+        api_format: showApiFormat.value ? form.api_format : undefined,
         api_key: form.api_key.trim(),
         default_model: form.default_model.trim(),
         base_url: form.base_url?.trim() || '',
