@@ -451,6 +451,19 @@
             </div>
             <!-- 垂直位置滑道 -->
             <div v-if="pdfGridDrawer.titleEnabled" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <template v-if="pdfGridDrawer.editMode === 'custom'">
+                <span style="font-size:12px;color:#888;white-space:nowrap">水平位置：</span>
+                <input
+                  type="range"
+                  v-model.number="pdfGridDrawer.titleX"
+                  min="5"
+                  max="95"
+                  step="1"
+                  style="width:120px;accent-color:#1677ff;cursor:pointer"
+                  @input="debouncedRefreshGridComposite"
+                />
+                <span style="font-size:12px;color:#1677ff;min-width:34px;font-variant-numeric:tabular-nums">{{ pdfGridDrawer.titleX }}%</span>
+              </template>
               <span style="font-size:12px;color:#888;white-space:nowrap">垂直位置：</span>
               <input
                 type="range"
@@ -480,11 +493,18 @@
 
           <!-- ② 模糊 + 下载控制行 -->
           <div style="display:flex;align-items:center;gap:12px;flex-shrink:0;background:#fff;padding:10px 20px;border-radius:8px;box-shadow:0 1px 6px rgba(0,0,0,0.08);flex-wrap:wrap">
+            <span style="font-size:13px;color:#555;white-space:nowrap">编辑模式：</span>
+            <a-radio-group v-model:value="pdfGridDrawer.editMode" size="small" @change="onPdfGridEditModeChange">
+              <a-radio-button value="template">模板</a-radio-button>
+              <a-radio-button value="custom">自定义</a-radio-button>
+            </a-radio-group>
+            <a-divider type="vertical" style="height:20px" />
             <span style="font-size:13px;color:#555;white-space:nowrap">拼图模版：</span>
             <a-select
               v-model:value="pdfGridDrawer.gridTemplate"
               style="width:180px"
               size="small"
+              :disabled="pdfGridDrawer.editMode === 'custom'"
               @change="onPdfGridTemplateChange"
             >
               <a-select-option v-for="tpl in PDF_GRID_TEMPLATES" :key="tpl.value" :value="tpl.value">
@@ -513,13 +533,56 @@
               @input="onGridBorderColorChange"
               style="width:36px;height:32px;border:1px solid #d9d9d9;border-radius:4px;cursor:pointer;padding:2px"
             />
+            <template v-if="pdfGridDrawer.editMode === 'custom'">
+              <a-divider type="vertical" style="height:20px" />
+              <span style="font-size:13px;color:#555;white-space:nowrap">当前页缩放：</span>
+              <input
+                type="range"
+                :value="selectedPdfGridItemScale"
+                min="0.35"
+                max="2.4"
+                step="0.02"
+                style="width:130px;accent-color:#ff6b35;cursor:pointer"
+                :disabled="pdfGridDrawer.selectedItemIndex < 0"
+                @input="onSelectedPdfGridScaleInput"
+              />
+              <span style="font-size:13px;color:#ff6b35;min-width:42px;font-variant-numeric:tabular-nums">
+                {{ Math.round(selectedPdfGridItemScale * 100) }}%
+              </span>
+              <a-divider type="vertical" style="height:20px" />
+              <span style="font-size:13px;color:#555;white-space:nowrap">层级：</span>
+              <a-button size="small" :disabled="pdfGridDrawer.selectedItemIndex < 0" @click="moveCustomPdfGridLayer('bottom')">置底</a-button>
+              <a-button size="small" :disabled="pdfGridDrawer.selectedItemIndex <= 0" @click="moveCustomPdfGridLayer('down')">下移</a-button>
+              <a-button size="small" :disabled="pdfGridDrawer.selectedItemIndex < 0 || pdfGridDrawer.selectedItemIndex >= pdfGridDrawer.customItems.length - 1" @click="moveCustomPdfGridLayer('up')">上移</a-button>
+              <a-button size="small" :disabled="pdfGridDrawer.selectedItemIndex < 0 || pdfGridDrawer.selectedItemIndex >= pdfGridDrawer.customItems.length - 1" @click="moveCustomPdfGridLayer('top')">置顶</a-button>
+              <a-button size="small" @click="resetCustomPdfGridLayout">重置布局</a-button>
+            </template>
             <a-button type="primary" size="large" @click="downloadPdfGrid">
               ⬇ 下载拼图（PNG）
             </a-button>
           </div>
 
           <!-- ③ 预览图 -->
+          <canvas
+            v-if="pdfGridDrawer.editMode === 'custom'"
+            ref="pdfGridCanvasRef"
+            :style="{
+              maxWidth: 'min(100%, 560px)',
+              boxShadow: '0 6px 28px rgba(0,0,0,0.18)',
+              borderRadius: '12px',
+              display: 'block',
+              flexShrink: 0,
+              cursor: pdfGridDrawer.draggingType ? 'grabbing' : 'grab',
+              touchAction: 'none',
+            }"
+            @mousedown="onCustomPdfGridMouseDown"
+            @mousemove="onCustomPdfGridMouseMove"
+            @mouseup="onCustomPdfGridMouseUp"
+            @mouseleave="onCustomPdfGridMouseUp"
+            @wheel.prevent="onCustomPdfGridWheel"
+          />
           <img
+            v-else
             :src="pdfGridDrawer.displayUrl || pdfGridDrawer.gridUrl"
             :style="{
               maxWidth: 'min(100%, 560px)',
@@ -2642,16 +2705,30 @@ const pdfGridDrawer = reactive({
   loading: false,
   gridUrl: '',         // 原始合成拼图 dataURL（无标题）
   displayUrl: '',      // 标题叠加后的预览 dataURL
+  pageDataUrls: [],    // PDF 前 4 页截图，供自定义模式复排
+  editMode: 'template', // 'template' | 'custom'
   blurAmount: 0,       // 模糊程度（px），0 = 不模糊
   // 标题覆层
   titleEnabled: true,  // 是否显示标题
   titleText: '',       // 标题文案（默认继承 dirDrawer.title）
   titleStyle: 'solidRed', // 文字样式预设
+  titleX: 50,          // 自定义模式标题水平位置（百分比）
   titleY: 50,          // 垂直位置（百分比，0~100，50=居中）
   titleSize: 82,       // 字体大小（px，基于 1242px 画布）
   gridBorderColor: '#FF2D55', // 拼图外围边框颜色
   gridTemplate: 'classic', // PDF 拼图底图模版
+  customItems: [],     // [{ src, x, y, w, h, baseW, baseH }]
+  selectedItemIndex: 0,
+  draggingType: '',
+  dragOffsetX: 0,
+  dragOffsetY: 0,
 })
+const pdfGridCanvasRef = ref(null)
+const selectedPdfGridItemScale = computed(() => {
+  const item = pdfGridDrawer.customItems[pdfGridDrawer.selectedItemIndex]
+  return item?.baseW ? item.w / item.baseW : 1
+})
+const pdfGridImageCache = new Map()
 
 // PDF 拼图底图模版列表（标题文案仍沿用 titleText/titleStyle/titleY/titleSize 逻辑）
 const PDF_GRID_TEMPLATES = [
@@ -2679,6 +2756,7 @@ const PDF_GRID_TEMPLATES = [
   { value: 'cornerStamp', label: '角落红章' },
   { value: 'tornPaper', label: '撕纸资料页' },
   { value: 'softGradient', label: '柔和渐变卡' },
+  { value: 'stackedFocus', label: '层叠重点页' },
   { value: 'minimalLine', label: '极简黑线版' },
 ]
 
@@ -4088,7 +4166,13 @@ async function openPdfGridDrawer(file) {
   pdfGridDrawer.file = file
   pdfGridDrawer.gridUrl = ''
   pdfGridDrawer.displayUrl = ''
+  pdfGridDrawer.pageDataUrls = []
+  pdfGridDrawer.customItems = []
+  pdfGridImageCache.clear()
+  pdfGridDrawer.selectedItemIndex = 0
+  pdfGridDrawer.draggingType = ''
   pdfGridDrawer.titleText = dirDrawer.title  // 继承外层标题文案
+  pdfGridDrawer.titleX = 50
   pdfGridDrawer.visible = true
   pdfGridDrawer.loading = true
   try {
@@ -4098,12 +4182,20 @@ async function openPdfGridDrawer(file) {
     message.error('PDF拼图生成失败：' + (e.message || '未知错误'))
   } finally {
     pdfGridDrawer.loading = false
+    if (pdfGridDrawer.editMode === 'custom') {
+      await nextTick()
+      await renderCustomPdfGridComposite()
+    }
   }
 }
 
 /** 重新合成带标题覆层的预览图（gridUrl + blur(仅底图) + title → displayUrl） */
 async function refreshGridComposite() {
   if (!pdfGridDrawer.gridUrl) return
+  if (pdfGridDrawer.editMode === 'custom') {
+    await renderCustomPdfGridComposite()
+    return
+  }
   const hasBlur  = pdfGridDrawer.blurAmount > 0
   const hasTitle = pdfGridDrawer.titleEnabled && pdfGridDrawer.titleText.trim()
 
@@ -4128,7 +4220,7 @@ async function refreshGridComposite() {
 
   // ② 叠加标题（清晰，不受模糊影响）
   if (hasTitle) {
-    _drawTitleOnCanvas(ctx, c.width, c.height, pdfGridDrawer.titleText, pdfGridDrawer.titleStyle, pdfGridDrawer.titleY, pdfGridDrawer.titleSize)
+    _drawTitleOnCanvas(ctx, c.width, c.height, pdfGridDrawer.titleText, pdfGridDrawer.titleStyle, pdfGridDrawer.titleY, pdfGridDrawer.titleSize, pdfGridDrawer.titleX)
   }
 
   pdfGridDrawer.displayUrl = c.toDataURL('image/png')
@@ -4145,11 +4237,21 @@ let _gridBorderTimer = null
 async function onGridBorderColorChange() {
   clearTimeout(_gridBorderTimer)
   _gridBorderTimer = setTimeout(async () => {
+    if (pdfGridDrawer.editMode === 'custom') {
+      await renderCustomPdfGridComposite()
+      return
+    }
     await rebuildPdfGridBase('边框重绘失败')
   }, 300)
 }
 
 async function onPdfGridTemplateChange() {
+  if (pdfGridDrawer.gridTemplate === 'stackedFocus') {
+    pdfGridDrawer.titleEnabled = true
+    pdfGridDrawer.titleStyle = 'solidRed'
+    pdfGridDrawer.titleY = 8
+    pdfGridDrawer.titleSize = 76
+  }
   await rebuildPdfGridBase('模版重绘失败')
 }
 
@@ -4163,7 +4265,245 @@ async function rebuildPdfGridBase(errorPrefix = '拼图重绘失败') {
     message.error(`${errorPrefix}：` + (e.message || '未知'))
   } finally {
     pdfGridDrawer.loading = false
+    if (pdfGridDrawer.editMode === 'custom') {
+      await nextTick()
+      await renderCustomPdfGridComposite()
+    }
   }
+}
+
+async function onPdfGridEditModeChange() {
+  if (pdfGridDrawer.editMode === 'custom' && !pdfGridDrawer.customItems.length) {
+    await initCustomPdfGridLayout()
+  }
+  await nextTick()
+  await refreshGridComposite()
+}
+
+async function initCustomPdfGridLayout() {
+  const urls = pdfGridDrawer.pageDataUrls.length ? pdfGridDrawer.pageDataUrls : []
+  if (!urls.length) return
+  const CANVAS_W = 1242
+  const CANVAS_H = 1656
+  const slots = [
+    { x: 92, y: 170, w: 500, h: 610 },
+    { x: 650, y: 250, w: 500, h: 610 },
+    { x: 92, y: 870, w: 500, h: 610 },
+    { x: 650, y: 950, w: 500, h: 610 },
+  ]
+  const items = []
+  for (let i = 0; i < urls.length; i++) {
+    const img = await loadPdfGridPageImage(urls[i])
+    const slot = slots[i] || slots[slots.length - 1]
+    const scale = Math.min(slot.w / img.width, slot.h / img.height)
+    const w = img.width * scale
+    const h = img.height * scale
+    items.push({
+      src: urls[i],
+      x: Math.max(0, Math.min(CANVAS_W - w, slot.x + (slot.w - w) / 2)),
+      y: Math.max(0, Math.min(CANVAS_H - h, slot.y + (slot.h - h) / 2)),
+      w,
+      h,
+      baseW: w,
+      baseH: h,
+    })
+  }
+  pdfGridDrawer.customItems = items
+  pdfGridDrawer.selectedItemIndex = items.length ? 0 : -1
+}
+
+async function loadPdfGridPageImage(src) {
+  if (!pdfGridImageCache.has(src)) {
+    pdfGridImageCache.set(src, loadImage(src))
+  }
+  return pdfGridImageCache.get(src)
+}
+
+async function resetCustomPdfGridLayout() {
+  await initCustomPdfGridLayout()
+  await renderCustomPdfGridComposite()
+}
+
+function getPdfGridCanvasPoint(event) {
+  const canvas = pdfGridCanvasRef.value
+  if (!canvas) return null
+  const rect = canvas.getBoundingClientRect()
+  return {
+    x: (event.clientX - rect.left) * canvas.width / rect.width,
+    y: (event.clientY - rect.top) * canvas.height / rect.height,
+  }
+}
+
+function getPdfGridTitleBounds(ctx, w, h) {
+  const text = String(pdfGridDrawer.titleText || '').trim()
+  if (!pdfGridDrawer.titleEnabled || !text) return null
+  const fontSize = pdfGridDrawer.titleSize
+  const cx = w * (pdfGridDrawer.titleX / 100)
+  const cy = h * (pdfGridDrawer.titleY / 100)
+  ctx.save()
+  ctx.font = `bold ${fontSize}px "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif`
+  const tw = ctx.measureText(text).width
+  ctx.restore()
+  const padX = fontSize * 0.9
+  const padY = fontSize * 0.7
+  return {
+    left: cx - tw / 2 - padX,
+    right: cx + tw / 2 + padX,
+    top: cy - fontSize / 2 - padY,
+    bottom: cy + fontSize / 2 + padY,
+  }
+}
+
+function hitTestCustomPdfGrid(point) {
+  if (!point) return { type: '', index: -1 }
+  const canvas = pdfGridCanvasRef.value
+  const ctx = canvas?.getContext('2d')
+  const titleBounds = ctx ? getPdfGridTitleBounds(ctx, canvas.width, canvas.height) : null
+  if (titleBounds && point.x >= titleBounds.left && point.x <= titleBounds.right && point.y >= titleBounds.top && point.y <= titleBounds.bottom) {
+    return { type: 'title', index: -1 }
+  }
+  for (let i = pdfGridDrawer.customItems.length - 1; i >= 0; i--) {
+    const item = pdfGridDrawer.customItems[i]
+    if (point.x >= item.x && point.x <= item.x + item.w && point.y >= item.y && point.y <= item.y + item.h) {
+      return { type: 'item', index: i }
+    }
+  }
+  return { type: '', index: -1 }
+}
+
+async function renderCustomPdfGridComposite() {
+  if (!pdfGridDrawer.customItems.length) await initCustomPdfGridLayout()
+  const canvas = pdfGridCanvasRef.value || document.createElement('canvas')
+  const CANVAS_W = 1242
+  const CANVAS_H = 1656
+  canvas.width = CANVAS_W
+  canvas.height = CANVAS_H
+  const ctx = canvas.getContext('2d')
+  ctx.fillStyle = '#f7f8fb'
+  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H)
+  ctx.strokeStyle = pdfGridDrawer.gridBorderColor
+  ctx.lineWidth = 14
+  ctx.strokeRect(7, 7, CANVAS_W - 14, CANVAS_H - 14)
+
+  if (pdfGridDrawer.blurAmount > 0) ctx.filter = `blur(${pdfGridDrawer.blurAmount}px)`
+  for (let i = 0; i < pdfGridDrawer.customItems.length; i++) {
+    const item = pdfGridDrawer.customItems[i]
+    const img = await loadPdfGridPageImage(item.src)
+    ctx.save()
+    ctx.shadowColor = 'rgba(15,23,42,0.24)'
+    ctx.shadowBlur = 22
+    ctx.shadowOffsetY = 10
+    ctx.fillStyle = '#fff'
+    ctx.fillRect(item.x - 8, item.y - 8, item.w + 16, item.h + 16)
+    ctx.drawImage(img, item.x, item.y, item.w, item.h)
+    ctx.restore()
+    if (i === pdfGridDrawer.selectedItemIndex) {
+      ctx.save()
+      ctx.filter = 'none'
+      ctx.strokeStyle = '#1677ff'
+      ctx.lineWidth = 5
+      ctx.setLineDash([16, 10])
+      ctx.strokeRect(item.x - 12, item.y - 12, item.w + 24, item.h + 24)
+      ctx.restore()
+    }
+  }
+  ctx.filter = 'none'
+  if (pdfGridDrawer.titleEnabled && pdfGridDrawer.titleText.trim()) {
+    _drawTitleOnCanvas(ctx, CANVAS_W, CANVAS_H, pdfGridDrawer.titleText, pdfGridDrawer.titleStyle, pdfGridDrawer.titleY, pdfGridDrawer.titleSize, pdfGridDrawer.titleX)
+  }
+  pdfGridDrawer.displayUrl = canvas.toDataURL('image/png')
+}
+
+async function onCustomPdfGridMouseDown(event) {
+  if (pdfGridDrawer.editMode !== 'custom') return
+  const point = getPdfGridCanvasPoint(event)
+  const hit = hitTestCustomPdfGrid(point)
+  if (!hit.type) return
+  event.preventDefault()
+  pdfGridDrawer.draggingType = hit.type
+  if (hit.type === 'item') {
+    const item = pdfGridDrawer.customItems[hit.index]
+    pdfGridDrawer.selectedItemIndex = hit.index
+    pdfGridDrawer.dragOffsetX = point.x - item.x
+    pdfGridDrawer.dragOffsetY = point.y - item.y
+  } else {
+    pdfGridDrawer.dragOffsetX = point.x - 1242 * (pdfGridDrawer.titleX / 100)
+    pdfGridDrawer.dragOffsetY = point.y - 1656 * (pdfGridDrawer.titleY / 100)
+  }
+  await renderCustomPdfGridComposite()
+}
+
+async function onCustomPdfGridMouseMove(event) {
+  if (pdfGridDrawer.editMode !== 'custom' || !pdfGridDrawer.draggingType) return
+  const point = getPdfGridCanvasPoint(event)
+  if (!point) return
+  event.preventDefault()
+  if (pdfGridDrawer.draggingType === 'item') {
+    const item = pdfGridDrawer.customItems[pdfGridDrawer.selectedItemIndex]
+    if (!item) return
+    item.x = Math.max(-item.w * 0.8, Math.min(1242 - item.w * 0.2, point.x - pdfGridDrawer.dragOffsetX))
+    item.y = Math.max(-item.h * 0.8, Math.min(1656 - item.h * 0.2, point.y - pdfGridDrawer.dragOffsetY))
+  } else if (pdfGridDrawer.draggingType === 'title') {
+    pdfGridDrawer.titleX = Math.max(0, Math.min(100, ((point.x - pdfGridDrawer.dragOffsetX) / 1242) * 100))
+    pdfGridDrawer.titleY = Math.max(0, Math.min(100, ((point.y - pdfGridDrawer.dragOffsetY) / 1656) * 100))
+  }
+  await renderCustomPdfGridComposite()
+}
+
+function onCustomPdfGridMouseUp() {
+  pdfGridDrawer.draggingType = ''
+}
+
+async function scaleCustomPdfGridItem(index, scale, anchor = null) {
+  const item = pdfGridDrawer.customItems[index]
+  if (!item) return
+  const nextScale = Math.max(0.35, Math.min(2.4, Number(scale) || 1))
+  const oldW = item.w
+  const oldH = item.h
+  const nextW = item.baseW * nextScale
+  const nextH = item.baseH * nextScale
+  const ax = anchor?.x ?? (item.x + oldW / 2)
+  const ay = anchor?.y ?? (item.y + oldH / 2)
+  const relX = (ax - item.x) / oldW
+  const relY = (ay - item.y) / oldH
+  item.w = nextW
+  item.h = nextH
+  item.x = ax - nextW * relX
+  item.y = ay - nextH * relY
+  await renderCustomPdfGridComposite()
+}
+
+async function onCustomPdfGridWheel(event) {
+  if (pdfGridDrawer.editMode !== 'custom') return
+  const point = getPdfGridCanvasPoint(event)
+  const hit = hitTestCustomPdfGrid(point)
+  const index = hit.type === 'item' ? hit.index : pdfGridDrawer.selectedItemIndex
+  if (index < 0) return
+  pdfGridDrawer.selectedItemIndex = index
+  const direction = event.deltaY > 0 ? -1 : 1
+  await scaleCustomPdfGridItem(index, selectedPdfGridItemScale.value + direction * 0.06, point)
+}
+
+async function onSelectedPdfGridScaleInput(event) {
+  if (pdfGridDrawer.selectedItemIndex < 0) return
+  await scaleCustomPdfGridItem(pdfGridDrawer.selectedItemIndex, Number(event.target.value))
+}
+
+async function moveCustomPdfGridLayer(action) {
+  const index = pdfGridDrawer.selectedItemIndex
+  const items = pdfGridDrawer.customItems
+  if (index < 0 || index >= items.length) return
+
+  const [item] = items.splice(index, 1)
+  let nextIndex = index
+  if (action === 'top') nextIndex = items.length
+  else if (action === 'bottom') nextIndex = 0
+  else if (action === 'up') nextIndex = Math.min(items.length, index + 1)
+  else if (action === 'down') nextIndex = Math.max(0, index - 1)
+
+  items.splice(nextIndex, 0, item)
+  pdfGridDrawer.selectedItemIndex = nextIndex
+  await renderCustomPdfGridComposite()
 }
 
 /**
@@ -4174,9 +4514,10 @@ async function rebuildPdfGridBase(errorPrefix = '拼图重绘失败') {
  * @param {string} text 标题文案
  * @param {string} style  样式预设 key
  * @param {number} yPct  垂直位置百分比（0~100）
+ * @param {number} xPct  水平位置百分比（0~100）
  */
-function _drawTitleOnCanvas(ctx, w, h, text, style, yPct = 50, fontSize = 82) {
-  const cx = w / 2
+function _drawTitleOnCanvas(ctx, w, h, text, style, yPct = 50, fontSize = 82, xPct = 50) {
+  const cx = w * (xPct / 100)
   const cy = h * (yPct / 100)
 
   ctx.save()
@@ -4381,6 +4722,11 @@ async function renderPdfGridImage(file) {
     pageDataUrls.push(c.toDataURL('image/png'))
   }
 
+  pdfGridDrawer.pageDataUrls = pageDataUrls
+  if (pdfGridDrawer.editMode === 'custom') {
+    pdfGridDrawer.customItems = []
+    await initCustomPdfGridLayout()
+  }
   return buildPdfGridComposite(pageDataUrls, pdfGridDrawer.gridBorderColor, pdfGridDrawer.gridTemplate)
 }
 
@@ -4458,6 +4804,15 @@ async function buildPdfGridComposite(dataUrls, borderColor = '#FF2D55', template
       ctx.textBaseline = 'middle'
       ctx.fillText('暂无页面', 0, 0)
     }
+    ctx.restore()
+  }
+
+  const drawDashedFocus = (x, y, w, h, color = '#1e80ff') => {
+    ctx.save()
+    ctx.strokeStyle = color
+    ctx.lineWidth = 5
+    ctx.setLineDash([14, 10])
+    ctx.strokeRect(x - 8, y - 8, w + 16, h + 16)
     ctx.restore()
   }
 
@@ -4812,6 +5167,20 @@ async function buildPdfGridComposite(dataUrls, borderColor = '#FF2D55', template
       { x: 660, y: 995, w: 486, h: 500 },
     ])
     drawRibbon('题型先过一遍', 430, 790, '#ffffff', '#1d4ed8')
+  } else if (active === 'stackedFocus') {
+    drawBg('#f4f5f8', 0)
+    ctx.strokeStyle = borderColor
+    ctx.lineWidth = 10
+    ctx.beginPath()
+    ctx.roundRect(82, 34, CANVAS_W - 164, CANVAS_H - 78, 18)
+    ctx.stroke()
+
+    drawPage(imgs[3] || imgs[2] || imgs[1] || imgs[0], { x: 148, y: 242, w: 640, h: 990, r: 4, rotate: -0.8 }, { shadowColor: 'rgba(15,23,42,0.18)', shadowBlur: 18, shadowOffsetY: 9 })
+    drawPage(imgs[2] || imgs[1] || imgs[0], { x: 255, y: 342, w: 640, h: 990, r: 4, rotate: 0.4 }, { shadowColor: 'rgba(15,23,42,0.18)', shadowBlur: 18, shadowOffsetY: 9 })
+    drawPage(imgs[1] || imgs[0], { x: 360, y: 470, w: 640, h: 990, r: 4, rotate: -0.2 }, { shadowColor: 'rgba(15,23,42,0.18)', shadowBlur: 18, shadowOffsetY: 9 })
+    const front = { x: 460, y: 600, w: 670, h: 940, r: 2 }
+    drawPage(imgs[0], front, { shadowColor: 'rgba(15,23,42,0.22)', shadowBlur: 20, shadowOffsetY: 10 })
+    drawDashedFocus(front.x, front.y, front.w, front.h)
   } else if (active === 'minimalLine') {
     drawBg('#ffffff', 0)
     ctx.fillStyle = '#111827'; ctx.fillRect(74, 0, 24, CANVAS_H)
