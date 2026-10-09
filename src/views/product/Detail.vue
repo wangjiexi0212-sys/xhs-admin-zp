@@ -1186,6 +1186,7 @@ import HtmlCardImages from './components/HtmlCardImages.vue'
 import { getProductDetail } from '@/api/products'
 import { getContentTemplateList } from '@/api/contentTemplates'
 import { getPromptList } from '@/api/prompts'
+import { getCardPromptList } from '@/api/cardPrompts'
 import { chatLlm } from '@/api/llm'
 import { drawCoverStream } from '@/api/draw'
 import { useLlmStore } from '@/stores/llm'
@@ -1854,11 +1855,8 @@ async function downloadExamCard() {
 }
 
 async function generateCoverImage(useEditedPrompt = false) {
-  const text = (cardText.value || '').trim()
-  if (!text) {
-    message.warning('请先填写卡片文字（可点击「生成标题」自动填充）')
-    return
-  }
+  const companyName = String(data.value.company_name || '').trim()
+  const text = (cardText.value || generatedTitle.value || (companyName ? `${companyName}笔试` : data.value.title || '笔试封面图')).trim()
 
   await aiImageStore.ensureLoaded()
   const activeProvider = aiImageStore.activeProvider
@@ -1874,8 +1872,27 @@ async function generateCoverImage(useEditedPrompt = false) {
 
   const params = { product_id: id.value, card_text: text }
 
+  coverGenerating.value = true
+  coverStatusMsg.value = '正在生成封面图...'
+
   if (useEditedPrompt && coverPromptUsed.value) {
     params.prompt = appendWrittenExamConstraintToPrompt(coverPromptUsed.value)
+  } else {
+    try {
+      coverStatusMsg.value = '正在随机抽取卡片提示词...'
+      const cardPrompt = await pickRandomCardPrompt()
+      if (!cardPrompt) {
+        message.error(data.value.job_type_name ? `未找到「${data.value.job_type_name}」可用的卡片提示词` : '未找到可用的卡片提示词')
+        coverGenerating.value = false
+        return
+      }
+      params.prompt = buildCoverPromptFromCardPrompt(cardPrompt)
+      coverPromptUsed.value = params.prompt
+    } catch (e) {
+      message.error(e.message || '获取卡片提示词失败')
+      coverGenerating.value = false
+      return
+    }
   }
 
   if (activeProvider === 'md2card') {
@@ -1885,6 +1902,7 @@ async function generateCoverImage(useEditedPrompt = false) {
   } else {
     const active = llmStore.active
     if (!active) {
+      coverGenerating.value = false
       Modal.warning({
         title: '提示',
         content: '请先在「系统设置 → 大模型」中设置使用中的模型',
@@ -1899,13 +1917,6 @@ async function generateCoverImage(useEditedPrompt = false) {
     params.llm_base_url = active.base_url || ''
     params.llm_model = active.default_model
   }
-
-  coverGenerating.value = true
-  coverStatusMsg.value = '正在生成封面图...'
-
-  // quanneng 且非「用此提示词」点击：先只取提示词供审核
-  const promptOnly = activeProvider !== 'md2card' && !useEditedPrompt
-  if (promptOnly) params.prompt_only = true
 
   await drawCoverStream(params, {
     onProgress(event) {
@@ -2295,6 +2306,42 @@ function appendWrittenExamConstraintToPrompt(prompt) {
     '',
     buildWrittenExamConstraint(),
     '【生图内容约束】图片里的文案、学习建议、科目名称、关键词和视觉元素都必须遵守上面的笔试内容约束；不要出现未标注的考试科目或模块。',
+  ].filter(Boolean).join('\n')
+}
+
+async function pickRandomCardPrompt() {
+  const pageSize = 100
+  const fetchByJobType = async (jobTypeId) => {
+    if (!jobTypeId) return []
+    const res = await getCardPromptList({ job_type_id: jobTypeId, page: 1, pageSize })
+    return Array.isArray(res?.list) ? res.list : []
+  }
+
+  let list = await fetchByJobType(data.value.job_type_id)
+  if (!list.length) {
+    const res = await getCardPromptList({ page: 1, pageSize })
+    list = Array.isArray(res?.list) ? res.list : []
+  }
+
+  const activeList = list.filter(item => item && item.status !== 0 && String(item.content || '').trim())
+  return pickRandom(activeList)
+}
+
+function buildCoverPromptFromCardPrompt(cardPrompt) {
+  const companyName = String(data.value.company_name || '').trim()
+  const cardTextForCover = (cardText.value || generatedTitle.value || (companyName ? `${companyName}笔试` : data.value.title || '笔试资料')).trim()
+  const promptContent = String(cardPrompt?.content || '').trim()
+
+  return [
+    '请根据单位名称生成小红书封面图。',
+    '',
+    `封面核心主题：${cardTextForCover}`,
+    companyName ? `封面中必须突出单位名称：${companyName}` : '',
+    '',
+    '【随机抽取的卡片提示词】',
+    promptContent,
+    '',
+    '要求：直接按随机抽取的卡片提示词风格出图，画面适合作为小红书封面，文字清晰醒目，竖版比例。',
   ].filter(Boolean).join('\n')
 }
 

@@ -277,7 +277,7 @@ const DIR_IMAGE_STYLES = [
 ]
 
 const PDF_SINGLE_STYLES = ['classic', 'folder', 'desk', 'stamp', 'split', 'phone', 'blueprint', 'minimal']
-const PDF_GRID_STYLES = ['classic', 'desk', 'folder', 'phone', 'stamp', 'checklist', 'blueprint', 'album', 'pinboard', 'minimalLine']
+const PDF_GRID_STYLES = ['classic', 'desk', 'folder', 'phone', 'stamp', 'checklist', 'blueprint', 'album', 'pinboard', 'stackedFocus', 'minimalLine']
 const PDF_GRID_TITLE_STYLES = ['solidRed', 'pill', 'stroke', 'card', 'shadow']
 
 function wrapCanvasText(ctx, text, maxWidth) {
@@ -862,6 +862,7 @@ async function buildPdfGridComposite(pageCanvases, borderColor, style = 'classic
   }
   const page = (img, rect, opts = {}) => {
     const { x, y, w, h, r = 18, rotate = 0 } = rect
+    if (!img) return
     ctx.save(); ctx.translate(x + w / 2, y + h / 2); ctx.rotate(rotate * Math.PI / 180)
     ctx.shadowColor = opts.shadow === false ? 'transparent' : (opts.shadowColor || 'rgba(0,0,0,.22)')
     ctx.shadowBlur = opts.shadow === false ? 0 : 12
@@ -881,8 +882,8 @@ async function buildPdfGridComposite(pageCanvases, borderColor, style = 'classic
   const drawTitleOverlay = (text, titleStyleName) => {
     if (!text) return
     const cx = CANVAS_W / 2
-    const cy = CANVAS_H * 0.50
-    const fontSize = 82
+    const cy = active === 'stackedFocus' ? CANVAS_H * 0.08 : CANVAS_H * 0.50
+    const fontSize = active === 'stackedFocus' ? 76 : 82
     ctx.save()
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
@@ -946,6 +947,15 @@ async function buildPdfGridComposite(pageCanvases, borderColor, style = 'classic
     ctx.restore()
   }
   const four = (cells, opts = {}) => cells.forEach((r, i) => page(imgs[i], r, opts))
+  const dashedFocus = (x, y, w, h, color = '#1e80ff') => {
+    ctx.save()
+    ctx.strokeStyle = color
+    ctx.lineWidth = 5
+    ctx.setLineDash([14, 10])
+    ctx.strokeRect(x - 8, y - 8, w + 16, h + 16)
+    ctx.restore()
+  }
+  const imgAt = (index) => imgs[index] || imgs[index - 1] || imgs[index - 2] || imgs[0]
 
   if (active === 'desk') {
     bg('#f7efe2'); ctx.fillStyle = '#e8f4ec'; ctx.fillRect(0, 1030, CANVAS_W, 626)
@@ -972,6 +982,19 @@ async function buildPdfGridComposite(pageCanvases, borderColor, style = 'classic
   } else if (active === 'pinboard') {
     bg('#fefce8'); four([{ x: 96, y: 165, w: 486, h: 565, rotate: -1 }, { x: 660, y: 165, w: 486, h: 565, rotate: 1 }, { x: 96, y: 885, w: 486, h: 565, rotate: 1 }, { x: 660, y: 885, w: 486, h: 565, rotate: -1 }])
     title('回忆版真题', 456, 770, '#111827')
+  } else if (active === 'stackedFocus') {
+    bg('#f4f5f8')
+    ctx.strokeStyle = borderColor
+    ctx.lineWidth = 10
+    ctx.beginPath()
+    ctx.roundRect(82, 34, CANVAS_W - 164, CANVAS_H - 78, 18)
+    ctx.stroke()
+    page(imgAt(3), { x: 148, y: 242, w: 640, h: 990, r: 4, rotate: -0.8 }, { shadowColor: 'rgba(15,23,42,.18)' })
+    page(imgAt(2), { x: 255, y: 342, w: 640, h: 990, r: 4, rotate: 0.4 }, { shadowColor: 'rgba(15,23,42,.18)' })
+    page(imgAt(1), { x: 360, y: 470, w: 640, h: 990, r: 4, rotate: -0.2 }, { shadowColor: 'rgba(15,23,42,.18)' })
+    const front = { x: 460, y: 600, w: 670, h: 940, r: 2 }
+    page(imgAt(0), front, { shadowColor: 'rgba(15,23,42,.22)' })
+    dashedFocus(front.x, front.y, front.w, front.h)
   } else if (active === 'minimalLine') {
     bg('#ffffff'); ctx.fillStyle = '#111827'; ctx.fillRect(74, 0, 24, CANVAS_H)
     four([{ x: 150, y: 215, w: 450, h: 540, r: 2 }, { x: 680, y: 215, w: 450, h: 540, r: 2 }, { x: 150, y: 875, w: 450, h: 540, r: 2 }, { x: 680, y: 875, w: 450, h: 540, r: 2 }], { shadow: false })
