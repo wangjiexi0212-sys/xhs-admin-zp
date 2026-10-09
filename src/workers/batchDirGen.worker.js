@@ -25,6 +25,8 @@ let _TITLE_POOL = []
 let _HISTORY_TITLE_POOL = []
 let _MOCK_TITLE_POOL = []
 let _CARD_SCHEMES = []
+let _CARD_TEMPLATE_STYLE_BAG = []
+let _CARD_SCHEME_BAG = []
 
 // ── 消息工具 ────────────────────────────────────────────────────────
 const post = (payload) => self.postMessage(payload)
@@ -39,6 +41,17 @@ function rndPick(arr) {
   const buf = new Uint32Array(1)
   crypto.getRandomValues(buf)
   return arr[buf[0] % arr.length]
+}
+
+function shuffledCopy(arr) {
+  const list = [...(arr || [])]
+  for (let i = list.length - 1; i > 0; i--) {
+    const buf = new Uint32Array(1)
+    crypto.getRandomValues(buf)
+    const j = buf[0] % (i + 1)
+    ;[list[i], list[j]] = [list[j], list[i]]
+  }
+  return list
 }
 
 function rndInt(min, max) {
@@ -1124,6 +1137,17 @@ const CARD_BOTTOM_HINTS = [
   '🎯 左滑继续，后面还有笔试备考内容',
 ]
 
+function pickCardTemplateStyle() {
+  if (!_CARD_TEMPLATE_STYLE_BAG.length) _CARD_TEMPLATE_STYLE_BAG = shuffledCopy(CARD_TEMPLATE_STYLES)
+  return _CARD_TEMPLATE_STYLE_BAG.pop() || rndPick(CARD_TEMPLATE_STYLES)
+}
+
+function pickCardScheme() {
+  if (!_CARD_SCHEMES.length) return null
+  if (!_CARD_SCHEME_BAG.length) _CARD_SCHEME_BAG = shuffledCopy(_CARD_SCHEMES)
+  return _CARD_SCHEME_BAG.pop() || rndPick(_CARD_SCHEMES)
+}
+
 function pickCardBottomHint() {
   return rndPick(CARD_BOTTOM_HINTS) || '👈 左滑查看更多笔试备考资料'
 }
@@ -1422,7 +1446,7 @@ async function renderTemplateCardImage(text, templateStyle, bottomHint) {
 async function renderCardImage(text, styleInput) {
   const bottomHint = pickCardBottomHint()
   if (Math.random() < 0.85) {
-    return renderTemplateCardImage(text, rndPick(CARD_TEMPLATE_STYLES), bottomHint)
+    return renderTemplateCardImage(text, pickCardTemplateStyle(), bottomHint)
   }
   const picked = normalizeCardStyle(styleInput)
   const style = picked.id
@@ -1554,6 +1578,8 @@ async function runBatch({ productDetails, onlyDirImages, generationMode = 'compl
   _HISTORY_TITLE_POOL = historyTitlePool || []
   _MOCK_TITLE_POOL    = mockTitlePool    || []
   _CARD_SCHEMES       = cardSchemes      || []
+  _CARD_TEMPLATE_STYLE_BAG = []
+  _CARD_SCHEME_BAG = []
   _borderColor        = borderColor      || '#F9863B'
   const bgImagePool   = bgPool           || []
 
@@ -1629,7 +1655,7 @@ async function runBatch({ productDetails, onlyDirImages, generationMode = 'compl
     let cardText = ''
     log(`  └ 生成卡片图中...`, 'info')
     try {
-      const scheme = rndPick(_CARD_SCHEMES) || { bg: '#d4f7d4', text: '#2d4a2d', accent: '#52c07a' }
+      const scheme = pickCardScheme() || { bg: '#d4f7d4', text: '#2d4a2d', accent: '#52c07a' }
       const cardTitle = rndPick(_TITLE_POOL) || ''
       cardText = `${detail.company_name || ''}笔试，${cardTitle}`
       const cardDataUrl = await renderCardImage(cardText, scheme)
