@@ -1856,7 +1856,8 @@ async function downloadExamCard() {
 
 async function generateCoverImage(useEditedPrompt = false) {
   const companyName = String(data.value.company_name || '').trim()
-  const text = (cardText.value || generatedTitle.value || (companyName ? `${companyName}笔试` : data.value.title || '笔试封面图')).trim()
+  const rawText = (cardText.value || generatedTitle.value || (companyName ? `${companyName}笔试` : data.value.title || '笔试封面图')).trim()
+  const text = sanitizeCoverPromptText(rawText)
 
   await aiImageStore.ensureLoaded()
   const activeProvider = aiImageStore.activeProvider
@@ -1876,7 +1877,7 @@ async function generateCoverImage(useEditedPrompt = false) {
   coverStatusMsg.value = '正在生成封面图...'
 
   if (useEditedPrompt && coverPromptUsed.value) {
-    params.prompt = appendWrittenExamConstraintToPrompt(coverPromptUsed.value)
+    params.prompt = sanitizeCoverPromptText(appendWrittenExamConstraintToPrompt(coverPromptUsed.value))
   } else {
     try {
       coverStatusMsg.value = '正在随机抽取卡片提示词...'
@@ -1886,7 +1887,7 @@ async function generateCoverImage(useEditedPrompt = false) {
         coverGenerating.value = false
         return
       }
-      params.prompt = buildCoverPromptFromCardPrompt(cardPrompt)
+      params.prompt = sanitizeCoverPromptText(buildCoverPromptFromCardPrompt(cardPrompt))
       coverPromptUsed.value = params.prompt
     } catch (e) {
       message.error(e.message || '获取卡片提示词失败')
@@ -1927,14 +1928,14 @@ async function generateCoverImage(useEditedPrompt = false) {
     onDone(data) {
       if (data?.prompt_only) {
         // 仅返回提示词：展示供审核，不清除旧图
-        coverPromptUsed.value = appendWrittenExamConstraintToPrompt(data.prompt || '')
+        coverPromptUsed.value = sanitizeCoverPromptText(appendWrittenExamConstraintToPrompt(data.prompt || ''))
       } else {
         const urls = Array.isArray(data?.urls) ? data.urls.filter(Boolean) : []
         const rawUrls = urls.length ? urls : (data?.url ? [data.url] : [])
         coverImageUrls.value.forEach(u => { if (u.startsWith('blob:')) URL.revokeObjectURL(u) })
         coverImageUrls.value = rawUrls
         coverImageUrl.value = rawUrls[0] || ''
-        coverPromptUsed.value = data?.prompt || ''
+        coverPromptUsed.value = sanitizeCoverPromptText(data?.prompt || '')
       }
       coverGenerating.value = false
     },
@@ -2307,6 +2308,20 @@ function appendWrittenExamConstraintToPrompt(prompt) {
     buildWrittenExamConstraint(),
     '【生图内容约束】图片里的文案、学习建议、科目名称、关键词和视觉元素都必须遵守上面的笔试内容约束；不要出现未标注的考试科目或模块。',
   ].filter(Boolean).join('\n')
+}
+
+function sanitizeCoverPromptText(text) {
+  let result = String(text || '')
+  const words = [...SENSITIVE_WORD_LIST].sort((a, b) => b.length - a.length)
+  for (const word of words) {
+    if (!word) continue
+    result = result.split(word).join('')
+  }
+  return result
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/【】/g, '')
+    .trim()
 }
 
 async function pickRandomCardPrompt() {
@@ -3889,6 +3904,7 @@ const SENSITIVE_WORD_LIST = [
   '国务院', '全国人大', '全国政协', '人民代表大会', '人民代表',
   '中华人民共和国', '共和国', '中国', '中华民族', '中华', '政府', '党', '宪法',
   '社会主义', '全会', '国家', '法律', '法规', '政治',
+  '党员', '党建', '时事政资', '时事政治', '时政',
 ]
 const autoMosaicEnabled = ref(true)  // 生图时自动遮盖敏感词开关
 

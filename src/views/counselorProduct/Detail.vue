@@ -758,6 +758,7 @@ const SENSITIVE_WORD_LIST = [
   '国务院', '全国人大', '全国政协', '人民代表大会', '人民代表',
   '中华人民共和国', '共和国', '中国', '中华民族', '中华', '政府', '党', '宪法',
   '社会主义', '全会', '国家', '法律', '法规', '政治',
+  '党员', '党建', '时事政资', '时事政治', '时政',
 ]
 const autoMosaicEnabled = ref(true)
 const ocrMosaicLoading = ref(false)
