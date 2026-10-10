@@ -14,6 +14,7 @@
         <a-radio-button value="sprint">🚀 冲刺</a-radio-button>
         <a-radio-button value="advice">💡 备考建议</a-radio-button>
         <a-radio-button value="intensity">💪 强度</a-radio-button>
+        <a-radio-button value="timeline_score">📊 时间轴/分值</a-radio-button>
       </a-radio-group>
 
       <span class="hci-label" style="margin-left:4px">主题：</span>
@@ -155,6 +156,49 @@
             <div class="tpl-int-footer">MAKE PEACE WITH YOURSELF</div>
           </div>
 
+          <!-- ⑤ 时间轴/分值模板 -->
+          <div v-else-if="activeType === 'timeline_score'" :class="`tpl-base tpl-timeline-score theme-${activeTheme}`">
+            <div class="tpl-ts-title">
+              <span>{{ content.yearLabel }}</span>{{ data.company_name || '招聘考试' }}
+            </div>
+            <div class="tpl-ts-highlight tpl-ts-subtitle">
+              一. {{ content.shortName }}招聘考试时间轴
+            </div>
+
+            <div class="tpl-ts-timeline-wrap">
+              <div class="tpl-ts-line"></div>
+              <div
+                v-for="(item, i) in content.timeline"
+                :key="i"
+                class="tpl-ts-node"
+                :style="{ left: `${item.left}%` }"
+              >
+                <div class="tpl-ts-date">{{ item.date }}</div>
+                <div class="tpl-ts-dot"></div>
+                <div class="tpl-ts-label">{{ item.label }}</div>
+              </div>
+            </div>
+
+            <div class="tpl-ts-content">
+              <div class="tpl-ts-highlight tpl-ts-section-title">二. 考试内容及分值分布</div>
+              <div class="tpl-ts-summary">
+                <span>考试内容：</span>{{ content.summary }}
+              </div>
+
+              <table class="tpl-ts-table">
+                <tbody>
+                  <tr v-for="(row, i) in content.rows" :key="i">
+                    <td class="tpl-ts-subject">{{ row.subject }}</td>
+                    <td class="tpl-ts-scope">{{ row.scope }}</td>
+                    <td class="tpl-ts-count">{{ row.count }}</td>
+                    <td class="tpl-ts-score">{{ row.score }}</td>
+                    <td class="tpl-ts-note">{{ row.note }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
         </div>
       </div>
 
@@ -220,6 +264,7 @@ const THEME_COLORS = {
   sprint:    ['#c8000f', '#1a1a1a', '#e65100', '#1a237e', '#1b5e20'],
   advice:    ['#1a3a5c', '#c2185b', '#f57f17', '#2e7d32', '#6a1b9a'],
   intensity: ['#111111', '#ff6d00', '#c62828', '#0d47a1', '#5d4037'],
+  timeline_score: ['#4a9be8', '#ff5a7a', '#22a06b', '#805ad5', '#f97316'],
 }
 const currentThemeColors = computed(() => THEME_COLORS[activeType.value] || [])
 
@@ -243,6 +288,21 @@ watch(() => props.visible, (v) => {
 
 // ─── LLM 生成 ──────────────────────────────────────────────
 async function generateContent() {
+  if (activeType.value === 'timeline_score') {
+    generating.value = true
+    statusMsg.value  = '正在查询并整理考试内容…'
+    try {
+      content.value = await buildTimelineScoreContentWithLlm(props.data)
+    } catch (e) {
+      message.warning(e.message || 'LLM 生成失败，已使用商品详情生成基础表格')
+      content.value = buildTimelineScoreContent(props.data)
+    } finally {
+      generating.value = false
+      statusMsg.value  = ''
+    }
+    return
+  }
+
   const active = llmStore.active
   if (!active) {
     Modal.warning({
@@ -397,6 +457,385 @@ function parseHighlights(text) {
   return parts
 }
 
+// ─── 时间轴/分值模板：从商品详情本地生成 ─────────────────────
+function buildTimelineScoreContent(d) {
+  const company = String(d?.company_name || d?.title || '招聘考试').trim()
+  const writtenContent = String(d?.written_exam_content || '').trim()
+  const subjects = splitExamSubjects(writtenContent)
+  const rows = buildScoreRows(subjects, writtenContent)
+  return {
+    yearLabel: extractYearLabel(d),
+    shortName: getShortCompanyName(company),
+    timeline: buildTimelineItems(d),
+    summary: writtenContent || '具体考试内容以公告及准考证通知为准',
+    rows,
+  }
+}
+
+async function buildTimelineScoreContentWithLlm(d) {
+  const base = buildTimelineScoreContent(d)
+  const active = llmStore.active
+  if (!active) return base
+
+  const res = await chatLlm({
+    provider:   active.provider,
+    api_format: active.api_format,
+    api_key:    active.api_key,
+    base_url:   active.base_url || '',
+    model:      active.default_model,
+    messages: [
+      {
+        role: 'system',
+        content: '你是招聘考试资料整理助手。只输出有效JSON对象，不要markdown，不要解释。内容必须克制、像考试资料表格，不要编造确定年份真题；不确定的信息写“以公告为准”或“常见考法”。严禁涉及政治人物、党政文件等敏感内容。',
+      },
+      { role: 'user', content: buildTimelineScorePrompt(d, base) },
+    ],
+    max_tokens:  1400,
+    temperature: 0.45,
+  })
+
+  const raw = String(res?.content || '').trim()
+  const match = raw.match(/\{[\s\S]*\}/)
+  if (!match) throw new Error('模型未返回有效JSON')
+  const parsed = JSON.parse(match[0])
+  return {
+    ...base,
+    summary: normalizeTimelineText(parsed.summary) || base.summary,
+    rows: normalizeTimelineRows(parsed.rows, base.rows),
+  }
+}
+
+function buildTimelineScorePrompt(d, base) {
+  return [
+    '请根据商品详情，结合该单位/行业常见招聘笔试考察方向，生成“考试内容及分值分布”表格。',
+    '要求优先使用商品详情里的笔试内容；如果单位信息不足，只能写常见考法，不要写成确定真题。',
+    '分析风格必须接近参考样例：把综合类考试拆成“行政职业能力测验 / 公共基础知识+本地或单位常识 / 岗位专业知识 / 主观写作”等可复习模块；每行都要有具体内容细分、题量、分值和备考判断。',
+    '',
+    '商品详情：',
+    d?.title ? `公告名称：${d.title}` : '',
+    d?.company_name ? `单位名称：${d.company_name}` : '',
+    d?.job_type_name ? `商品类型：${d.job_type_name}` : '',
+    d?.recruit_count ? `招聘人数：${d.recruit_count}` : '',
+    d?.apply_time ? `报名时间：${d.apply_time}` : '',
+    d?.written_exam_time ? `笔试时间：${d.written_exam_time}` : '',
+    d?.interview_time ? `面试时间：${d.interview_time}` : '',
+    d?.written_exam_content ? `笔试内容：${d.written_exam_content}` : '',
+    '',
+    '当前基础拆分：',
+    JSON.stringify({ summary: base.summary, rows: base.rows }, null, 2),
+    '',
+    '请输出JSON：',
+    '{"summary":"一句考试内容摘要，80字以内","rows":[{"subject":"模块名称","scope":"内容细分，尽量具体，40-70字","count":"题量，如约35-45题；写作类必须是1题","score":"占比，如40%","note":"复习建议或考法特点，30-55字"}]}',
+    '',
+    '参考样例结构（请仿照这种分析深度，不要照抄单位名）：',
+    JSON.stringify({
+      rows: [
+        {
+          subject: '行政职业能力测验',
+          scope: '言语理解、数量关系、资料分析、判断推理（不含图形推理）',
+          count: '约40题',
+          score: '40%',
+          note: '难度低于公务员行测；重点练言语与资料分析，性价比最高',
+        },
+        {
+          subject: '公共基础知识+本地/单位常识',
+          scope: '本地时政、国企基础、本地政策、单位发展历程、主营业务、重点项目、企业文化价值观',
+          count: '约20题',
+          score: '20%',
+          note: '属于拿分模块，直接背诵单位简介和本地相关常识，必考',
+        },
+        {
+          subject: '岗位专业知识',
+          scope: '财务岗、工程岗、运营岗、综合岗等按岗位拆分专业基础、法规、流程、案例和实务应用',
+          count: '约25题',
+          score: '30%',
+          note: '岗位差异大，根据报递岗位针对性复习基础专业课，不深挖难题',
+        },
+        {
+          subject: '主观写作（综合/宣传类岗位）',
+          scope: '材料简答、短材料作文、考察文字表达、公文思维和结构化表达',
+          count: '1题',
+          score: '10%',
+          note: '综合、宣传、党建类岗位大概率考察，其他岗位准备简短策论框架',
+        },
+      ],
+    }),
+    '',
+    '规则：',
+    '1. rows 建议 4 行优先，最多 5 行。若商品详情只有“综合基础知识及写作”，也要按参考样例拆出行测、公基/常识、岗位专业、写作。',
+    '2. 写作、申论、作文、材料写作类题量必须写“1题”；只要有写作类，写作类分值固定为20%。',
+    '3. score 合计必须为100%；有写作类时，其他客观/专业模块重新分配剩余80%。',
+    '4. scope 不要空泛，不要只写“相关基础知识”；必须写出具体科目、知识点或岗位方向。',
+    '5. note 要像备考判断：说明难度、拿分价值、复习优先级或岗位差异。',
+  ].filter(Boolean).join('\n')
+}
+
+function normalizeTimelineRows(rows, fallbackRows) {
+  if (!Array.isArray(rows) || !rows.length) return fallbackRows
+  const normalized = rows.slice(0, 5).map((row, index) => {
+    const subject = normalizeTimelineText(row?.subject) || fallbackRows[index]?.subject || '综合模块'
+    const isWriting = isWritingSubject(subject)
+    return {
+      subject,
+      scope: normalizeTimelineText(row?.scope) || fallbackRows[index]?.scope || buildSubjectScope(subject, ''),
+      count: isWriting ? '1 题' : (normalizeTimelineText(row?.count) || fallbackRows[index]?.count || '约 20-30 题'),
+      score: normalizeTimelineScore(row?.score) || fallbackRows[index]?.score || '',
+      note: normalizeTimelineText(row?.note) || fallbackRows[index]?.note || '结合公告要求和常见题型进行针对性复习。',
+    }
+  })
+  return normalizeTimelineScores(normalized)
+}
+
+function normalizeTimelineText(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim()
+}
+
+function normalizeTimelineScore(value) {
+  const raw = String(value || '').trim()
+  const match = raw.match(/\d{1,3}/)
+  if (!match) return ''
+  const n = Math.max(0, Math.min(100, Number(match[0]) || 0))
+  return n ? `${n}%` : ''
+}
+
+function normalizeTimelineScores(rows) {
+  const scores = rows.map(row => Number(String(row.score || '').match(/\d{1,3}/)?.[0] || 0))
+  const writingIndexes = rows
+    .map((row, index) => isWritingSubject(row.subject) ? index : -1)
+    .filter(index => index >= 0)
+  if (writingIndexes.length && writingIndexes.length < rows.length) {
+    const writingScore = Math.round(20 / writingIndexes.length)
+    const writingTotal = writingScore * writingIndexes.length
+    const objectiveIndexes = rows.map((_, index) => index).filter(index => !writingIndexes.includes(index))
+    const objectiveTotal = objectiveIndexes.reduce((sum, index) => sum + (scores[index] || 0), 0) || objectiveIndexes.length
+    let used = writingTotal
+    const nextRows = rows.map((row, index) => {
+      if (writingIndexes.includes(index)) return { ...row, score: `${writingScore}%`, count: '1 题' }
+      const score = Math.max(1, Math.round(80 * ((scores[index] || 1) / objectiveTotal)))
+      used += score
+      return { ...row, score: `${score}%` }
+    })
+    const lastObjective = objectiveIndexes[objectiveIndexes.length - 1]
+    if (lastObjective !== undefined) {
+      const current = Number(String(nextRows[lastObjective].score || '').match(/\d{1,3}/)?.[0] || 0)
+      nextRows[lastObjective] = { ...nextRows[lastObjective], score: `${Math.max(1, current + (100 - used))}%` }
+    }
+    return nextRows
+  }
+  const sum = scores.reduce((a, b) => a + b, 0)
+  if (!sum) return rows
+  if (sum === 100) return rows
+  const lastIndex = rows.length - 1
+  const fixedLast = Math.max(1, scores[lastIndex] + (100 - sum))
+  rows[lastIndex] = { ...rows[lastIndex], score: `${fixedLast}%` }
+  return rows
+}
+
+function isWritingSubject(subject) {
+  return /写作|申论|作文|材料/.test(String(subject || ''))
+}
+
+function extractYearLabel(d) {
+  const text = [d?.title, d?.apply_time, d?.written_exam_time, d?.interview_time].filter(Boolean).join(' ')
+  const match = String(text).match(/20\d{2}/)
+  return match ? `${match[0]}届` : ''
+}
+
+function getShortCompanyName(name) {
+  const raw = String(name || '').trim()
+  if (!raw) return '本单位'
+  const cleaned = raw
+    .replace(/^20\d{2}(年|届)?/, '')
+    .replace(/招聘.*$/, '')
+    .replace(/考试.*$/, '')
+    .replace(/有限责任公司|股份有限公司|有限公司|集团有限公司|集团/g, '集团')
+    .trim()
+  return cleaned.slice(0, 10) || raw.slice(0, 10)
+}
+
+function buildTimelineItems(d) {
+  const applyParts = splitApplyTime(d?.apply_time)
+  const items = [
+    { date: '以公告为准', label: '公告发布' },
+    { date: applyParts.start || formatTimelineDate(d?.apply_time) || '以公告为准', label: '报名开始' },
+    { date: applyParts.end || '以公告为准', label: '报名结束' },
+    { date: formatTimelineDate(d?.written_exam_time) || '另行通知', label: '笔试时间' },
+    { date: formatTimelineDate(d?.interview_time) || '另行通知', label: '面试时间' },
+  ]
+  const denom = Math.max(items.length - 1, 1)
+  return items.map((item, index) => ({
+    ...item,
+    left: 6 + (index / denom) * 88,
+  }))
+}
+
+function splitApplyTime(value) {
+  const raw = String(value || '').trim()
+  if (!raw) return { start: '', end: '' }
+  const parts = raw.split(/\s*(?:~|—|-|至|到)\s*/).filter(Boolean)
+  if (parts.length >= 2) {
+    return { start: formatTimelineDate(parts[0]), end: formatTimelineDate(parts[1]) }
+  }
+  return { start: formatTimelineDate(raw), end: '' }
+}
+
+function formatTimelineDate(value) {
+  const raw = String(value || '').trim()
+  if (!raw) return ''
+  if (/另行通知|待定|以.*为准/.test(raw)) return raw
+  const normalized = raw.replace(/[年月.\/]/g, '-').replace(/日/g, '')
+  const match = normalized.match(/(?:(20\d{2})-)?(\d{1,2})-(\d{1,2})/)
+  if (match) {
+    const year = match[1]
+    const mm = String(Number(match[2])).padStart(2, '0')
+    const dd = String(Number(match[3])).padStart(2, '0')
+    return year ? `${year} 年 ${mm} 月 ${dd} 日` : `${mm} 月 ${dd} 日`
+  }
+  return raw.length > 12 ? raw.slice(0, 12) : raw
+}
+
+function splitExamSubjects(content) {
+  const raw = String(content || '').trim()
+  if (!raw) return ['笔试综合内容']
+  if (shouldUseDetailedExamStructure(raw)) {
+    return buildDetailedExamSubjects(raw)
+  }
+  const normalized = raw
+    .replace(/[；;]/g, '、')
+    .replace(/[+＋]/g, '、')
+    .replace(/以及|及|和/g, '、')
+  return normalized
+    .split(/[、,，\n]/)
+    .map(item => item.replace(/考试内容[:：]?|笔试内容[:：]?/g, '').trim())
+    .filter(Boolean)
+    .slice(0, 5)
+}
+
+function shouldUseDetailedExamStructure(content) {
+  return /综合基础|公共基础|公基|综合知识|职业能力|行测|写作|申论|岗位|专业/.test(content)
+}
+
+function buildDetailedExamSubjects(content) {
+  const subjects = []
+  if (/行测|职测|职业能力|行政职业能力/.test(content) || /综合基础|公共基础|公基|综合知识/.test(content)) {
+    subjects.push('行政职业能力测验')
+  }
+  if (/公共基础|公基|综合基础|综合知识|省情|市情|区情|企业|集团|单位|常识/.test(content)) {
+    subjects.push('公共基础知识+本地/单位常识')
+  }
+  if (/岗位|专业|财务|工程|运营|综合岗|信息技术|人力|法务|文旅|市场/.test(content) || subjects.length < 3) {
+    subjects.push('岗位专业知识')
+  }
+  if (/写作|申论|作文|材料|公文/.test(content)) {
+    subjects.push('主观写作')
+  }
+  return [...new Set(subjects)].slice(0, 5)
+}
+
+function buildScoreRows(subjects, rawContent) {
+  const list = subjects.length ? subjects : ['笔试综合内容']
+  const metas = list.map(subject => buildSubjectMeta(subject))
+  const writingCount = metas.filter(item => item.type === 'writing').length
+  const writingTotal = writingCount ? (list.length === writingCount ? 100 : 20) : 0
+  const objectiveMetas = metas.filter(item => item.type !== 'writing')
+  const objectiveBaseTotal = objectiveMetas.reduce((sum, item) => sum + item.baseWeight, 0) || objectiveMetas.length || 1
+
+  const rows = metas.map((meta) => {
+    let score
+    if (meta.type === 'writing') {
+      score = list.length === writingCount ? Math.round(100 / writingCount) : Math.round(writingTotal / writingCount)
+    } else {
+      const remaining = 100 - writingTotal
+      score = Math.max(10, Math.round(remaining * meta.baseWeight / objectiveBaseTotal))
+    }
+    return {
+      subject: meta.label,
+      scope: buildSubjectScope(meta.label, rawContent),
+      count: meta.count || getObjectiveQuestionCount(score),
+      score: `${score}%`,
+      note: meta.note,
+    }
+  })
+  return normalizeTimelineScores(rows)
+}
+
+function buildSubjectMeta(subject) {
+  const s = String(subject || '').trim()
+  if (/写作|申论|作文|材料/.test(s)) {
+    return {
+      type: 'writing',
+      label: s,
+      baseWeight: 10,
+      count: '1 题',
+      note: '主观题重点看审题、结构、论点和材料提炼，建议提前准备常用框架。',
+    }
+  }
+  if (/行测|职测|职业能力/.test(s)) {
+    return {
+      type: 'aptitude',
+      label: s,
+      baseWeight: 40,
+      count: '约 35-45 题',
+      note: '客观题题量较大，适合用限时训练提升速度和正确率。',
+    }
+  }
+  if (/公基|公共基础/.test(s)) {
+    return {
+      type: 'public',
+      label: s,
+      baseWeight: 30,
+      count: '约 20-30 题',
+      note: '覆盖面广，建议按模块梳理高频知识点并配套刷题。',
+    }
+  }
+  if (/本地|单位|企业|集团|常识|省情|市情|区情/.test(s)) {
+    return {
+      type: 'local',
+      label: s,
+      baseWeight: 20,
+      count: '约 15-25 题',
+      note: '属于拿分模块，建议直接背诵本地概况、单位简介和近期重点信息。',
+    }
+  }
+  if (/专业|岗位/.test(s)) {
+    return {
+      type: 'major',
+      label: s,
+      baseWeight: 28,
+      count: '约 20-30 题',
+      note: '岗位差异较大，要结合岗位方向复习专业基础和实务应用。',
+    }
+  }
+  return {
+    type: 'common',
+    label: s,
+    baseWeight: 22,
+    count: '',
+    note: '细节以公告和准考证要求为准，考前集中回顾高频考点。',
+  }
+}
+
+function getObjectiveQuestionCount(score) {
+  if (score >= 35) return '约 35-45 题'
+  if (score >= 25) return '约 20-30 题'
+  if (score >= 15) return '约 10-20 题'
+  return '约 5-10 题'
+}
+
+function buildSubjectScope(subject, rawContent) {
+  const text = String(rawContent || '').trim()
+  if (!text) return '具体考察范围以公告及考试通知为准'
+  if (/行测|职测|职业能力/.test(subject)) return '言语理解、数量关系、判断推理、资料分析，重点练速度、准确率和易错题型'
+  if (/公共基础知识\+本地|公共基础知识\+单位|本地\/单位/.test(subject)) return '基础常识、法律经济、公文管理、本地概况、单位发展历程、主营业务、重点项目和文化价值观'
+  if (/公基|公共基础/.test(subject)) return '法律基础、经济管理、公文写作、科技人文、时事常识，重点背高频概念和常考判断'
+  if (/省情|区情|市情|本地/.test(subject)) return '本地概况、经济社会发展、历史文化、重点项目、文旅资源及近年热点'
+  if (/企业|集团|文化|价值观/.test(subject)) return '单位概况、发展历程、主营业务、企业文化、价值理念和岗位匹配认知'
+  if (/写作|申论|作文|材料/.test(subject)) return '材料阅读、综合分析、观点提炼、文字表达、公文或短文写作，注意结构完整'
+  if (/专业|岗位/.test(subject)) return '围绕岗位要求细分专业基础、业务流程、实务应用、常见案例和规范要求'
+  if (subject.length >= 18) return `${subject}；建议按关键词拆成知识点、题型和易错点复习`
+  return `${subject}相关基础概念、核心知识点、常见题型、易错点和真题高频考法`
+}
+
 // ─── 截图 ──────────────────────────────────────────────────
 async function captureImage() {
   const el = templateRef.value
@@ -425,6 +864,7 @@ const TYPE_LABEL_MAP = {
   sprint:    '冲刺',
   advice:    '备考建议',
   intensity: '强度',
+  timeline_score: '时间轴分值',
 }
 
 async function downloadImage() {
@@ -533,6 +973,194 @@ async function downloadImage() {
 .tpl-highlight {
   color: var(--highlight, #e8001a);
   font-weight: 700;
+}
+
+/* ══════════════════════════════════════════════════════════
+   ⑤ 时间轴/分值模板
+   ══════════════════════════════════════════════════════════ */
+.tpl-timeline-score {
+  --ts-blue: #4a9be8;
+  --ts-blue-soft: #d9ecff;
+  --ts-yellow: #ffe676;
+  --ts-red: #c91515;
+  --ts-grid: #4b6a7a;
+  --ts-text: #333333;
+  width: 720px;
+  min-height: 960px;
+  background: #ffffff;
+  color: var(--ts-text);
+  padding-top: 24px;
+}
+.tpl-timeline-score.theme-2 {
+  --ts-blue: #ff5a7a;
+  --ts-blue-soft: #ffe1e8;
+  --ts-yellow: #fff0a8;
+  --ts-red: #b5123c;
+  --ts-grid: #8f5060;
+}
+.tpl-timeline-score.theme-3 {
+  --ts-blue: #22a06b;
+  --ts-blue-soft: #dff7ec;
+  --ts-yellow: #f5e77e;
+  --ts-red: #0f7a4b;
+  --ts-grid: #3d755f;
+}
+.tpl-timeline-score.theme-4 {
+  --ts-blue: #805ad5;
+  --ts-blue-soft: #ece3ff;
+  --ts-yellow: #ffe98f;
+  --ts-red: #5a32b0;
+  --ts-grid: #62517d;
+}
+.tpl-timeline-score.theme-5 {
+  --ts-blue: #f97316;
+  --ts-blue-soft: #ffead7;
+  --ts-yellow: #ffe27a;
+  --ts-red: #c2410c;
+  --ts-grid: #8a5b35;
+}
+.tpl-ts-title {
+  width: fit-content;
+  max-width: 620px;
+  margin: 0 auto 26px;
+  color: var(--ts-blue);
+  font-size: 38px;
+  font-weight: 500;
+  line-height: 1.18;
+  text-align: center;
+  position: relative;
+  z-index: 0;
+}
+.tpl-ts-title::after,
+.tpl-ts-highlight::after {
+  content: '';
+  position: absolute;
+  left: -10px;
+  right: -10px;
+  bottom: 2px;
+  height: 22px;
+  background: var(--ts-yellow);
+  border-radius: 999px;
+  z-index: -1;
+}
+.tpl-ts-title span { margin-right: 4px; }
+.tpl-ts-highlight {
+  width: fit-content;
+  color: var(--ts-blue);
+  font-weight: 500;
+  line-height: 1.2;
+  position: relative;
+  z-index: 0;
+}
+.tpl-ts-subtitle {
+  margin: 0 0 18px 10px;
+  font-size: 28px;
+}
+.tpl-ts-timeline-wrap {
+  height: 150px;
+  background: var(--ts-blue-soft);
+  position: relative;
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+.tpl-ts-line {
+  position: absolute;
+  left: 28px;
+  right: 28px;
+  top: 70px;
+  height: 2px;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--ts-blue) 0,
+    var(--ts-blue) 16px,
+    transparent 16px,
+    transparent 22px
+  );
+}
+.tpl-ts-node {
+  position: absolute;
+  top: 38px;
+  width: 132px;
+  transform: translateX(-50%);
+  text-align: center;
+  color: var(--ts-blue);
+}
+.tpl-ts-date {
+  height: 25px;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: normal;
+}
+.tpl-ts-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ts-blue);
+  margin: 5px auto 8px;
+}
+.tpl-ts-label {
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+.tpl-ts-content {
+  position: relative;
+  padding: 0 4px 18px;
+}
+.tpl-ts-section-title {
+  margin-left: 6px;
+  margin-bottom: 12px;
+  font-size: 29px;
+}
+.tpl-ts-summary {
+  color: var(--ts-red);
+  font-size: 20px;
+  font-weight: 900;
+  line-height: 1.55;
+  padding: 0 8px 8px;
+}
+.tpl-ts-summary span {
+  font-weight: 900;
+}
+.tpl-ts-table {
+  width: calc(100% - 8px);
+  margin: 0 4px;
+  border-collapse: collapse;
+  table-layout: fixed;
+  background: #ffffff;
+}
+.tpl-ts-table td {
+  border: 1.5px solid var(--ts-grid);
+  padding: 7px 8px;
+  text-align: center;
+  vertical-align: middle;
+  color: #333;
+  line-height: 1.45;
+  word-break: break-word;
+}
+.tpl-ts-subject {
+  width: 15%;
+  font-size: 18px;
+  font-weight: 500;
+}
+.tpl-ts-scope {
+  width: 39%;
+  font-size: 17px;
+}
+.tpl-ts-count {
+  width: 12%;
+  font-size: 17px;
+  font-weight: 600;
+}
+.tpl-ts-score {
+  width: 9%;
+  font-size: 18px;
+  font-weight: 700;
+}
+.tpl-ts-note {
+  width: 25%;
+  font-size: 16px;
 }
 
 /* ══════════════════════════════════════════════════════════

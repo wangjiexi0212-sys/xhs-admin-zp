@@ -22,6 +22,9 @@
               <a-menu-item key="sprint">🚀 冲刺</a-menu-item>
               <a-menu-item key="advice">💡 备考建议</a-menu-item>
               <a-menu-item key="intensity">💪 强度</a-menu-item>
+              <a-menu-item key="timeline_score">📊 时间轴/分值</a-menu-item>
+              <a-menu-divider />
+              <a-menu-item key="note_image_set">📚 整组笔记配图</a-menu-item>
             </a-menu>
           </template>
         </a-dropdown>
@@ -1174,6 +1177,11 @@
       :data="data"
       :init-type="htmlImageInitType"
     />
+
+    <NoteImageSetDrawer
+      v-model:visible="noteImageSetVisible"
+      :data="data"
+    />
   </div>
 </template>
 
@@ -1183,6 +1191,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import { LeftOutlined, EditOutlined, FileTextOutlined, DownloadOutlined, BulbOutlined, FileWordOutlined, SyncOutlined, CheckCircleOutlined, CloseCircleOutlined, ClockCircleOutlined, FormOutlined, StopOutlined, CopyOutlined, PictureOutlined, DownOutlined } from '@ant-design/icons-vue'
 import HtmlCardImages from './components/HtmlCardImages.vue'
+import NoteImageSetDrawer from './components/NoteImageSetDrawer.vue'
 import { getProductDetail } from '@/api/products'
 import { getContentTemplateList } from '@/api/contentTemplates'
 import { getPromptList } from '@/api/prompts'
@@ -2524,10 +2533,13 @@ async function generateBodyFromTemplate(tpl) {
 // ─── HTML图片生成（考情 / 冲刺 / 备考建议 / 强度） ────────────
 const htmlImageVisible = ref(false)
 const htmlImageInitType = ref('exam_info')
+const noteImageSetVisible = ref(false)
 
 function onImageMenuClick({ key }) {
   if (key === 'cover') {
     openExamCard()
+  } else if (key === 'note_image_set') {
+    noteImageSetVisible.value = true
   } else {
     htmlImageInitType.value = key
     htmlImageVisible.value = true
