@@ -2757,6 +2757,21 @@ const DIR_IMAGE_STYLE_OPTIONS = [
   { value: 'stagger_card', label: '左右错位卡片' },
   { value: 'grouped_card', label: '年份分组面板' },
   { value: 'border_card', label: '极简描边卡片' },
+  { value: 'block_grid', label: '模块方格' },
+  { value: 'ledger_table', label: '账本表格' },
+  { value: 'folder_tabs_square', label: '文件夹标签' },
+  { value: 'side_panel_square', label: '左右分栏方版' },
+  { value: 'exam_checklist', label: '试卷清单' },
+  { value: 'kanban_columns', label: '看板三栏' },
+  { value: 'index_columns', label: '索引双列' },
+  { value: 'stamp_blocks', label: '印章方块' },
+  { value: 'barcode_list', label: '条码列表' },
+  { value: 'calendar_grid_square', label: '日历宫格' },
+  { value: 'blueprint_rect', label: '蓝图矩形' },
+  { value: 'rank_board', label: '榜单排行' },
+  { value: 'file_stack_square', label: '资料叠页' },
+  { value: 'step_bars', label: '阶梯横条' },
+  { value: 'block_overview', label: '方块总览' },
 ]
 const DIR_IMAGE_STYLES = DIR_IMAGE_STYLE_OPTIONS.map(item => item.value)
 
@@ -2769,6 +2784,41 @@ const PDF_SINGLE_STYLE_OPTIONS = [
   { value: 'phone', label: '手机截图' },
   { value: 'blueprint', label: '蓝图分析' },
   { value: 'minimal', label: '极简白底' },
+  { value: 'examRed', label: '考前红榜' },
+  { value: 'fileStack', label: '文件堆叠' },
+  { value: 'memoBoard', label: '备考便签墙' },
+  { value: 'greenPlan', label: '绿色计划表' },
+  { value: 'newspaper', label: '报纸头版' },
+  { value: 'blackGold', label: '黑金冲刺' },
+  { value: 'blueRibbon', label: '蓝色卷宗' },
+  { value: 'pinkHighlighter', label: '荧光笔记' },
+  { value: 'indexTabs', label: '索引标签' },
+  { value: 'gridCard', label: '网格资料卡' },
+  { value: 'clipboard', label: '夹板清单' },
+  { value: 'lectureSlide', label: '课堂投影' },
+  { value: 'ticket', label: '准考证票据' },
+  { value: 'magazine', label: '杂志封面' },
+  { value: 'focusRing', label: '聚焦放大' },
+  { value: 'aurora', label: '极光渐变' },
+  { value: 'lawPaper', label: '法律文书' },
+  { value: 'sciLab', label: '实验记录' },
+  { value: 'metro', label: '地铁导视' },
+  { value: 'receiptLong', label: '长票据' },
+  { value: 'glassLayer', label: '玻璃浮层' },
+  { value: 'notebookBlue', label: '蓝线笔记' },
+  { value: 'kraftSeal', label: '牛皮纸封蜡' },
+  { value: 'radialFocus', label: '径向聚焦' },
+  { value: 'purplePortal', label: '紫色门户' },
+  { value: 'greenChalk', label: '黑板粉笔' },
+  { value: 'windowDesk', label: '桌面窗口' },
+  { value: 'archiveBox', label: '档案盒' },
+  { value: 'orangeBurst', label: '橙色爆发' },
+  { value: 'calmGray', label: '冷静灰阶' },
+  { value: 'blueprintDark', label: '深蓝网格' },
+  { value: 'foldedCorner', label: '折角文件' },
+  { value: 'comicMarker', label: '手绘马克笔' },
+  { value: 'sideCatalog', label: '侧边目录' },
+  { value: 'redLedger', label: '红色账本' },
 ]
 const PDF_SINGLE_STYLES = PDF_SINGLE_STYLE_OPTIONS.map(item => item.value)
 
@@ -3056,10 +3106,226 @@ function drawDirTemplateIcon(ctx, file, style, x, y, size, index) {
   file.isdir === 1 ? drawFolderIcon(ctx, x, y, size) : drawPdfIcon(ctx, x, y, size)
 }
 
+const SQUARE_DIR_STYLES = [
+  'block_grid', 'ledger_table', 'folder_tabs_square', 'side_panel_square', 'exam_checklist',
+  'kanban_columns', 'index_columns', 'stamp_blocks', 'barcode_list', 'calendar_grid_square',
+  'blueprint_rect', 'rank_board', 'file_stack_square', 'step_bars', 'block_overview',
+]
+
+function getSquareDirHeight(style, count) {
+  const n = Math.max(1, count)
+  if (['block_grid', 'stamp_blocks', 'blueprint_rect'].includes(style)) return 168 + Math.ceil(n / 2) * 112
+  if (['kanban_columns', 'calendar_grid_square', 'block_overview'].includes(style)) return 206 + Math.ceil(n / 3) * 124
+  if (style === 'index_columns') return 172 + Math.ceil(n / 2) * 112
+  if (style === 'ledger_table') return 206 + n * 66
+  if (style === 'side_panel_square') return 210 + n * 72
+  if (style === 'exam_checklist') return 198 + n * 68
+  if (style === 'folder_tabs_square') return 188 + n * 76
+  if (style === 'file_stack_square') return 206 + n * 66
+  return 190 + n * 66
+}
+
+function drawSquareTitle(ctx, title, style) {
+  const dark = style === 'blueprint_rect'
+  const accentMap = {
+    block_grid: '#2563eb', ledger_table: '#ea580c', folder_tabs_square: '#0f766e',
+    side_panel_square: '#e11d48', exam_checklist: '#4f46e5', kanban_columns: '#14b8a6',
+    index_columns: '#be123c', stamp_blocks: '#ca8a04', barcode_list: '#0f172a',
+    calendar_grid_square: '#2563eb', blueprint_rect: '#38bdf8', rank_board: '#65a30d',
+    file_stack_square: '#9333ea', step_bars: '#f97316', block_overview: '#0ea5e9',
+  }
+  ctx.fillStyle = dark ? '#f8fafc' : '#111827'
+  ctx.font = 'bold 28px "PingFang SC", "Microsoft YaHei", sans-serif'
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle'
+  ctx.fillText(title, 42, 58)
+  ctx.fillStyle = accentMap[style] || '#2563eb'
+  ctx.fillRect(42, 92, 96, 8)
+  ctx.textBaseline = 'alphabetic'
+}
+
+function squareDirText(ctx, text, maxWidth, x, y, lineHeight = 20, fontSize = 14, maxLines = 2) {
+  const rawLines = wrapDirText(ctx, text, maxWidth)
+  const lines = rawLines.slice(0, maxLines)
+  if (rawLines.length > maxLines && lines.length) {
+    let last = lines[lines.length - 1]
+    while (last.length > 1 && ctx.measureText(`${last}...`).width > maxWidth) last = last.slice(0, -1)
+    lines[lines.length - 1] = `${last}...`
+  }
+  drawDirLines(ctx, lines, x, y, lineHeight, fontSize, 9)
+}
+
+async function renderSquareDirComposite(files, title, bgImageUrl, style) {
+  const DPR = 2
+  const W = 600
+  const H = getSquareDirHeight(style, files.length)
+  const canvas = document.createElement('canvas')
+  canvas.width = W * DPR
+  canvas.height = H * DPR
+  const ctx = canvas.getContext('2d')
+  ctx.scale(DPR, DPR)
+  if (bgImageUrl) {
+    try {
+      const bgImg = await loadImage(bgImageUrl)
+      const scale = Math.max(W / bgImg.width, H / bgImg.height)
+      const bw = bgImg.width * scale
+      const bh = bgImg.height * scale
+      ctx.drawImage(bgImg, (W - bw) / 2, (H - bh) / 2, bw, bh)
+      ctx.fillStyle = 'rgba(255,255,255,0.82)'
+      ctx.fillRect(0, 0, W, H)
+    } catch {
+      ctx.fillStyle = '#f8fafc'
+      ctx.fillRect(0, 0, W, H)
+    }
+  } else {
+    const bg = style === 'ledger_table' ? '#fff7ed' : style === 'exam_checklist' ? '#eef2ff' : style === 'index_columns' ? '#fff1f2'
+      : style === 'stamp_blocks' ? '#fefce8' : style === 'calendar_grid_square' ? '#eff6ff' : style === 'blueprint_rect' ? '#0f172a'
+        : style === 'rank_board' ? '#f7fee7' : style === 'file_stack_square' ? '#faf5ff' : style === 'step_bars' ? '#fff7ed' : '#f8fafc'
+    ctx.fillStyle = bg
+    ctx.fillRect(0, 0, W, H)
+  }
+  if (style === 'blueprint_rect') drawGridBg(ctx, 42, 128, W - 84, H - 176, '#60a5fa', 0.2, 36)
+  drawSquareTitle(ctx, title, style)
+  ctx.lineWidth = 2
+
+  const numbered = (num, x, y, w, h, color, r = 4) => {
+    ctx.fillStyle = color
+    ctx.beginPath(); ctx.roundRect(x, y, w, h, r); ctx.fill()
+    ctx.fillStyle = '#fff'
+    ctx.font = 'bold 17px Arial, sans-serif'
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+    ctx.fillText(String(num).padStart(2, '0'), x + w / 2, y + h / 2)
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'
+  }
+
+  if (style === 'ledger_table') {
+    const x = 58, y = 132, w = 484, rowH = 66
+    ctx.fillStyle = '#fff'; ctx.fillRect(x, y, w, rowH * (files.length + 1))
+    ctx.strokeStyle = '#fed7aa'; ctx.strokeRect(x, y, w, rowH * (files.length + 1))
+    ctx.fillStyle = '#ffedd5'; ctx.fillRect(x, y, w, rowH)
+    ctx.fillStyle = '#111827'; ctx.font = 'bold 17px "PingFang SC", sans-serif'; ctx.fillText('序号', x + 42, y + 30); ctx.fillText('资料内容', x + 150, y + 30)
+    files.forEach((file, i) => {
+      const yy = y + rowH * (i + 1)
+      ctx.strokeStyle = '#fed7aa'; ctx.beginPath(); ctx.moveTo(x, yy); ctx.lineTo(x + w, yy); ctx.stroke()
+      ctx.fillStyle = '#111827'; ctx.font = 'bold 18px Arial'; ctx.fillText(String(i + 1).padStart(2, '0'), x + 42, yy + 31)
+      ctx.font = 'bold 16px "PingFang SC", sans-serif'; squareDirText(ctx, file.name, 318, x + 150, yy + 27, 21, 16)
+    })
+    ctx.beginPath(); ctx.moveTo(x + 106, y); ctx.lineTo(x + 106, y + rowH * (files.length + 1)); ctx.stroke()
+  } else if (style === 'side_panel_square') {
+    const x = 52, y = 132, panelW = 160, rowH = 72, totalH = rowH * files.length + 26
+    ctx.fillStyle = '#111827'; ctx.fillRect(x, y, panelW, totalH)
+    ctx.fillStyle = '#fff'; ctx.fillRect(x + panelW, y, 314, totalH)
+    ctx.strokeStyle = '#e5e7eb'; ctx.strokeRect(x + panelW, y, 314, totalH)
+    files.forEach((file, i) => {
+      const yy = y + 20 + i * rowH
+      numbered(i + 1, x + 42, yy - 12, 66, 32, i % 2 ? '#f43f5e' : '#fb7185', 4)
+      ctx.fillStyle = '#ffe4e6'; ctx.fillRect(x + panelW + 40, yy - 8, 190, 6)
+      ctx.fillStyle = '#111827'; ctx.font = 'bold 16px "PingFang SC", sans-serif'; squareDirText(ctx, file.name, 270, x + panelW + 32, yy + 16, 21, 16)
+    })
+  } else if (style === 'exam_checklist') {
+    const x = 96, y = 126, w = 408, rowH = 68
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.roundRect(x, y, w, rowH * files.length + 44, 4); ctx.fill()
+    ctx.strokeStyle = '#c7d2fe'; ctx.stroke()
+    ctx.fillStyle = '#e0e7ff'; ctx.fillRect(x, y, w, 44)
+    files.forEach((file, i) => {
+      const yy = y + 62 + i * rowH
+      ctx.strokeStyle = '#6366f1'; ctx.strokeRect(x + 32, yy - 24, 28, 28)
+      ctx.beginPath(); ctx.moveTo(x + 38, yy - 10); ctx.lineTo(x + 46, yy - 2); ctx.lineTo(x + 58, yy - 20); ctx.stroke()
+      ctx.fillStyle = '#111827'; ctx.font = 'bold 16px "PingFang SC", sans-serif'; squareDirText(ctx, file.name, 284, x + 82, yy - 8, 21, 16)
+      ctx.strokeStyle = '#e0e7ff'; ctx.beginPath(); ctx.moveTo(x + 82, yy + 25); ctx.lineTo(x + 350, yy + 25); ctx.stroke()
+    })
+  } else if (style === 'kanban_columns') {
+    const heads = [['真题', '#06b6d4', '#ecfeff'], ['考点', '#22c55e', '#f0fdf4'], ['冲刺', '#f97316', '#fff7ed']]
+    heads.forEach(([h, c, bg], col) => {
+      const x = 58 + col * 162
+      ctx.fillStyle = bg; ctx.fillRect(x, 132, 136, H - 182)
+      ctx.strokeStyle = '#d1d5db'; ctx.strokeRect(x, 132, 136, H - 182)
+      ctx.fillStyle = c; ctx.fillRect(x, 132, 136, 42)
+      ctx.fillStyle = '#fff'; ctx.font = 'bold 22px "PingFang SC", sans-serif'; ctx.textAlign = 'center'; ctx.fillText(h, x + 68, 160); ctx.textAlign = 'left'
+    })
+    files.forEach((file, i) => {
+      const x = 70 + (i % 3) * 162, y = 198 + Math.floor(i / 3) * 118
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.roundRect(x, y, 112, 88, 3); ctx.fill(); ctx.strokeStyle = '#e5e7eb'; ctx.stroke()
+      ctx.fillStyle = '#111827'; ctx.font = 'bold 15px Arial'; ctx.fillText(String(i + 1).padStart(2, '0'), x + 16, y + 28)
+      ctx.font = 'bold 14px "PingFang SC", sans-serif'; squareDirText(ctx, file.name, 82, x + 16, y + 52, 18, 14)
+    })
+  } else if (style === 'index_columns') {
+    const colH = H - 198
+    ctx.fillStyle = '#fff'; ctx.fillRect(58, 132, 216, colH); ctx.strokeStyle = '#fecdd3'; ctx.strokeRect(58, 132, 216, colH)
+    ctx.fillStyle = '#fff'; ctx.fillRect(326, 132, 216, colH); ctx.strokeRect(326, 132, 216, colH)
+    files.forEach((file, i) => {
+      const x = i % 2 ? 344 : 76, y = 170 + Math.floor(i / 2) * 108
+      numbered(i + 1, x, y - 24, 48, 42, '#be123c', 0)
+      ctx.fillStyle = '#ffe4e6'; ctx.fillRect(x + 48, y - 24, 148, 62)
+      ctx.fillStyle = '#111827'; ctx.font = 'bold 14px "PingFang SC", sans-serif'; squareDirText(ctx, file.name, 116, x + 66, y - 2, 18, 14)
+    })
+  } else if (style === 'barcode_list') {
+    files.forEach((file, i) => {
+      const y = 130 + i * 66
+      ctx.fillStyle = '#fff'; ctx.fillRect(58, y, 484, 52); ctx.strokeStyle = '#e2e8f0'; ctx.strokeRect(58, y, 484, 52)
+      ctx.fillStyle = '#0f172a'; for (let b = 0; b < 8; b++) ctx.fillRect(78 + b * 6, y + 8, b % 2 ? 2 : 4, 18)
+      numbered(i + 1, 164, y + 6, 48, 22, '#0f172a', 2)
+      ctx.fillStyle = '#111827'; ctx.font = 'bold 15px "PingFang SC", sans-serif'; squareDirText(ctx, file.name, 270, 242, y + 24, 20, 15)
+    })
+  } else if (style === 'rank_board' || style === 'step_bars') {
+    files.forEach((file, i) => {
+      const x = style === 'step_bars' ? 84 + i * 8 : 84
+      const y = 130 + i * 66
+      const w = style === 'rank_board' ? Math.max(300, 430 - i * 14) : 430
+      const accent = style === 'rank_board' ? '#4d7c0f' : '#f97316'
+      ctx.fillStyle = style === 'rank_board' ? (i % 2 ? '#d9f99d' : '#bef264') : (i % 2 ? '#fed7aa' : '#ffedd5')
+      ctx.fillRect(x, y, w, 52)
+      numbered(i + 1, x, y, 58, 52, accent, 0)
+      ctx.fillStyle = '#111827'; ctx.font = 'bold 15px "PingFang SC", sans-serif'; squareDirText(ctx, file.name, w - 82, x + 82, y + 22, 20, 15)
+    })
+  } else if (style === 'file_stack_square') {
+    files.forEach((file, i) => {
+      const x = 72 + i * 10, y = 132 + i * 66
+      ctx.fillStyle = '#fff'; ctx.fillRect(x, y, 420, 58); ctx.strokeStyle = '#d8b4fe'; ctx.strokeRect(x, y, 420, 58)
+      numbered(i + 1, x, y, 62, 58, i % 2 ? '#a855f7' : '#7e22ce', 0)
+      ctx.fillStyle = '#111827'; ctx.font = 'bold 15px "PingFang SC", sans-serif'; squareDirText(ctx, file.name, 318, x + 82, y + 25, 20, 15)
+    })
+  } else if (style === 'calendar_grid_square' || style === 'block_overview') {
+    if (style === 'block_overview') {
+      ctx.fillStyle = '#e0f2fe'; ctx.fillRect(58, 124, 484, 58)
+      ctx.fillStyle = '#111827'; ctx.font = 'bold 26px "PingFang SC", sans-serif'; ctx.fillText(`${files.length}份资料`, 84, 162)
+    }
+    files.forEach((file, i) => {
+      const x = 58 + (i % 3) * 166, y = (style === 'block_overview' ? 212 : 140) + Math.floor(i / 3) * 116
+      ctx.fillStyle = '#fff'; ctx.fillRect(x, y, 134, 92); ctx.strokeStyle = style === 'calendar_grid_square' ? '#bfdbfe' : '#bae6fd'; ctx.strokeRect(x, y, 134, 92)
+      numbered(i + 1, x + 14, y + 12, 36, 28, '#0ea5e9', 2)
+      ctx.fillStyle = '#111827'; ctx.font = 'bold 14px "PingFang SC", sans-serif'; squareDirText(ctx, file.name, 104, x + 14, y + 58, 17, 14)
+    })
+  } else {
+    files.forEach((file, i) => {
+      const gridLike = ['block_grid', 'stamp_blocks', 'blueprint_rect'].includes(style)
+      const x = gridLike ? 66 + (i % 2) * 250 : 78 + (i % 2) * 250
+      const y = gridLike ? 136 + Math.floor(i / 2) * 112 : 130 + i * 76
+      const dark = style === 'blueprint_rect'
+      const accent = style === 'block_grid' ? ['#2563eb', '#16a34a', '#f97316', '#dc2626', '#7c3aed', '#0891b2'][i % 6]
+        : style === 'stamp_blocks' ? '#ca8a04' : style === 'folder_tabs_square' ? '#0f766e' : '#2563eb'
+      if (style === 'folder_tabs_square') {
+        ctx.fillStyle = ['#dbeafe', '#dcfce7', '#fef3c7', '#fee2e2', '#ede9fe', '#cffafe'][i % 6]
+        ctx.beginPath(); ctx.roundRect(58, 128 + i * 76, 120, 22, 4); ctx.fill()
+        ctx.fillStyle = '#fff'; ctx.fillRect(58, 146 + i * 76, 484, 56); ctx.strokeStyle = '#cbd5e1'; ctx.strokeRect(58, 146 + i * 76, 484, 56)
+        numbered(i + 1, 82, 160 + i * 76, 38, 26, accent, 2)
+        ctx.fillStyle = '#111827'; ctx.font = 'bold 15px "PingFang SC", sans-serif'; squareDirText(ctx, file.name, 350, 144, 170 + i * 76, 20, 15)
+      } else {
+        ctx.fillStyle = dark ? '#172554' : '#fff'; ctx.fillRect(x, y, 214, 88); ctx.strokeStyle = dark ? '#38bdf8' : style === 'stamp_blocks' ? '#ca8a04' : '#dbeafe'; ctx.strokeRect(x, y, 214, 88)
+        numbered(i + 1, x, y, 62, 88, accent, 0)
+        ctx.fillStyle = dark ? '#e0f2fe' : '#111827'; ctx.font = 'bold 14px "PingFang SC", sans-serif'; squareDirText(ctx, file.name, 130, x + 78, y + 35, 18, 14)
+      }
+    })
+  }
+  return canvas.toDataURL('image/png')
+}
+
 async function renderStyledCompositeImage(files, title, borderColor, bgColor, bgOpacity, bgImageUrl, titleY, style) {
   const DPR = 2
   const W = 600
   const activeStyle = DIR_IMAGE_STYLES.includes(style) ? style : 'classic'
+  if (SQUARE_DIR_STYLES.includes(activeStyle)) {
+    return renderSquareDirComposite(files, title, bgImageUrl, activeStyle)
+  }
   const BORDER = bgImageUrl ? 0 : 0
   const infoCardStyles = ['year_card', 'timeline_card', 'ticket_card', 'tag_card', 'stagger_card', 'grouped_card', 'border_card']
   const gridStyles = ['sticky', 'calendar', 'folder_wall', 'rainbow', ...infoCardStyles]
@@ -3663,7 +3929,296 @@ async function renderStyledPdfSingleComposite(ctx, canvas, pdfImg, files, border
     return { w, h }
   }
 
-  if (style === 'folder') {
+  const drawPlainText = (text, x, y, color = '#111827', size = 34, weight = 'bold', align = 'left') => {
+    ctx.fillStyle = color
+    ctx.font = `${weight} ${size}px "PingFang SC", "Microsoft YaHei", sans-serif`
+    ctx.textAlign = align
+    ctx.textBaseline = 'middle'
+    ctx.fillText(text, x, y)
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'alphabetic'
+  }
+
+  const drawStyleFrame = (accent, alpha = 0.48, lineWidth = 4) => {
+    ctx.save()
+    ctx.strokeStyle = accent
+    ctx.globalAlpha = alpha
+    ctx.lineWidth = lineWidth
+    ctx.beginPath()
+    ctx.roundRect(58, 58, CANVAS_W - 116, CANVAS_H - 116, 34)
+    ctx.stroke()
+    ctx.restore()
+  }
+
+  const drawPlanLabel = (label, x, y, accent, color = '#ffffff') => {
+    ctx.fillStyle = accent
+    ctx.beginPath()
+    ctx.roundRect(x, y, 184, 46, 23)
+    ctx.fill()
+    drawPlainText(label, x + 92, y + 23, color, 22, 'bold', 'center')
+  }
+
+  if (style === 'examRed') {
+    await drawBg('#fff8f5')
+    drawStyleFrame('#d71920', 0.95, 12)
+    ctx.fillStyle = '#ffebe8'; ctx.beginPath(); ctx.arc(1030, 188, 120, 0, Math.PI * 2); ctx.fill()
+    drawTitle(92, 180, '#111827', 52, 'left')
+    drawPdfPage({ x: 246, y: 300, w: 730, h: 900, r: 20 })
+    drawFileOverlay(650, 1126, { width: 520, fontSize: 22, rowH: 70 })
+    drawPlanLabel('考前急救', 76, 1450, '#f7caca', '#d71920')
+  } else if (style === 'fileStack') {
+    await drawBg('#f7fbff')
+    drawStyleFrame('#60a5fa', 0.6)
+    ctx.fillStyle = '#dbeafe'; ctx.beginPath(); ctx.arc(1030, 188, 116, 0, Math.PI * 2); ctx.fill()
+    drawTitle(92, 180, '#111827', 52, 'left')
+    drawPdfPage({ x: 340, y: 270, w: 700, h: 880, r: 18, rotate: -8 })
+    drawPdfPage({ x: 312, y: 295, w: 700, h: 880, r: 18, rotate: -4 })
+    drawPdfPage({ x: 286, y: 318, w: 700, h: 880, r: 18, rotate: -3 })
+    drawFileOverlay(650, 1126, { width: 520, fontSize: 22, rowH: 70 })
+  } else if (style === 'memoBoard') {
+    await drawBg('#fffaf0')
+    drawStyleFrame('#f59e0b', 0.55)
+    ctx.fillStyle = '#fde68a'; ctx.save(); ctx.translate(84, 250); ctx.rotate(-0.14); ctx.beginPath(); ctx.roundRect(0, 0, 180, 150, 12); ctx.fill(); ctx.restore()
+    ctx.fillStyle = '#bfdbfe'; ctx.save(); ctx.translate(936, 145); ctx.rotate(0.12); ctx.beginPath(); ctx.roundRect(0, 0, 170, 126, 12); ctx.fill(); ctx.restore()
+    drawTitle(92, 180, '#111827', 52, 'left')
+    drawPdfPage({ x: 302, y: 342, w: 660, h: 850, r: 20, rotate: 3 })
+    drawFileOverlay(650, 1126, { width: 520, fontSize: 22, rowH: 70 })
+  } else if (style === 'greenPlan') {
+    await drawBg('#f1fbf5')
+    drawStyleFrame('#22c55e', 0.46)
+    ctx.fillStyle = '#dcfce7'; ctx.beginPath(); ctx.arc(1030, 188, 120, 0, Math.PI * 2); ctx.fill()
+    drawTitle(92, 180, '#111827', 52, 'left')
+    drawPdfPage({ x: 226, y: 306, w: 690, h: 910, r: 18 })
+    drawFileOverlay(650, 1126, { width: 520, fontSize: 22, rowH: 70 })
+  } else if (style === 'newspaper') {
+    await drawBg('#f8f5ef')
+    drawTitle(92, 180, '#111827', 52, 'left')
+    ctx.strokeStyle = '#111827'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(92, 232); ctx.lineTo(1150, 232); ctx.stroke()
+    drawPdfPage({ x: 296, y: 330, w: 650, h: 870, r: 8, shadow: false })
+    ctx.strokeStyle = '#111827'; ctx.lineWidth = 2; ctx.strokeRect(296, 330, 650, 870)
+    drawFileOverlay(650, 1126, { width: 520, fontSize: 20, rowH: 60 })
+  } else if (style === 'blackGold') {
+    await drawBg('#111111')
+    drawStyleFrame('#d4af37', 0.65)
+    ctx.fillStyle = 'rgba(212,175,55,0.18)'; ctx.beginPath(); ctx.arc(1020, 180, 92, 0, Math.PI * 2); ctx.fill()
+    drawTitle(92, 180, '#ffffff', 52, 'left')
+    drawPdfPage({ x: 286, y: 328, w: 690, h: 890, r: 20, rotate: -2 })
+    drawFileOverlay(650, 1126, { width: 520, fontSize: 22, rowH: 70 })
+  } else if (style === 'blueRibbon') {
+    await drawBg('#eff6ff')
+    drawGridBg(ctx, 0, 0, CANVAS_W, CANVAS_H, '#0f4c81', 0.08, 44)
+    drawStyleFrame('#0f4c81', 0.52)
+    drawTitle(92, 180, '#111827', 52, 'left')
+    drawPdfPage({ x: 340, y: 305, w: 650, h: 900, r: 16 })
+    drawFileOverlay(650, 1126, { width: 520, fontSize: 22, rowH: 70 })
+  } else if (style === 'pinkHighlighter') {
+    await drawBg('#fff1f6')
+    drawStyleFrame('#f472b6', 0.58)
+    ctx.fillStyle = '#fbcfe8'; ctx.beginPath(); ctx.arc(1030, 188, 120, 0, Math.PI * 2); ctx.fill()
+    drawTitle(92, 180, '#111827', 52, 'left')
+    drawPdfPage({ x: 286, y: 328, w: 690, h: 880, r: 20, rotate: -3 })
+    drawFileOverlay(650, 1126, { width: 520, fontSize: 22, rowH: 70 })
+    drawPlanLabel('重点速看', 76, 1450, '#f9c7dd', '#be185d')
+  } else if (style === 'indexTabs') {
+    await drawBg('#f8fafc')
+    drawStyleFrame('#8b5cf6', 0.58)
+    ;['#ddd6fe', '#bfdbfe', '#fecdd3', '#bbf7d0', '#fde68a'].forEach((c, i) => {
+      ctx.fillStyle = c; ctx.beginPath(); ctx.roundRect(978 + i * 28, 330 + i * 78, 112, 54, 12); ctx.fill()
+    })
+    drawTitle(92, 180, '#111827', 52, 'left')
+    drawPdfPage({ x: 268, y: 318, w: 690, h: 900, r: 18 })
+    drawFileOverlay(650, 1126, { width: 520, fontSize: 22, rowH: 70 })
+  } else if (style === 'gridCard') {
+    await drawBg('#f6f7fb')
+    drawGridBg(ctx, 0, 0, CANVAS_W, CANVAS_H, '#ef4444', 0.07, 44)
+    drawStyleFrame('#ef4444', 0.45)
+    drawTitle(92, 180, '#111827', 52, 'left')
+    drawPdfPage({ x: 300, y: 330, w: 650, h: 870, r: 18 })
+    drawFileOverlay(650, 1126, { width: 520, fontSize: 22, rowH: 70 })
+  } else if (style === 'clipboard') {
+    await drawBg('#f5f0e8')
+    drawStyleFrame('#92400e', 0.46)
+    ctx.fillStyle = '#7c2d12'; ctx.beginPath(); ctx.roundRect(366, 86, 510, 96, 32); ctx.fill()
+    ctx.fillStyle = '#fde68a'; ctx.beginPath(); ctx.roundRect(512, 54, 220, 80, 28); ctx.fill()
+    drawTitle(92, 180, '#111827', 52, 'left')
+    drawPdfPage({ x: 266, y: 250, w: 710, h: 970, r: 16 })
+    drawFileOverlay(650, 1126, { width: 520, fontSize: 22, rowH: 70 })
+  } else if (style === 'lectureSlide') {
+    await drawBg('#eef2ff')
+    drawGridBg(ctx, 0, 0, CANVAS_W, CANVAS_H, '#4338ca', 0.06, 44)
+    drawStyleFrame('#6366f1', 0.48)
+    drawTitle(92, 180, '#111827', 52, 'left')
+    drawPdfPage({ x: 216, y: 318, w: 760, h: 850, r: 16 })
+    drawFileOverlay(620, 1130, { width: 520, fontSize: 22, rowH: 70 })
+  } else if (style === 'ticket') {
+    await drawBg('#fffbeb')
+    ctx.fillStyle = '#fed7aa'; ctx.beginPath(); ctx.roundRect(86, 248, CANVAS_W - 172, 1172, 24); ctx.fill()
+    drawStyleFrame('#ea580c', 0.52)
+    drawTitle(92, 180, '#111827', 52, 'left')
+    drawPdfPage({ x: 286, y: 326, w: 680, h: 880, r: 18, rotate: 2 })
+    drawFileOverlay(650, 1126, { width: 520, fontSize: 22, rowH: 70 })
+  } else if (style === 'magazine') {
+    await drawBg('#fdf2f8')
+    drawStyleFrame('#be123c', 0.52)
+    ctx.fillStyle = '#ffe4e6'; ctx.beginPath(); ctx.arc(1030, 188, 120, 0, Math.PI * 2); ctx.fill()
+    drawTitle(92, 180, '#111827', 52, 'left')
+    drawPdfPage({ x: 336, y: 280, w: 640, h: 930, r: 18 })
+    drawFileOverlay(86, 1188, { width: 520, fontSize: 22, rowH: 70 })
+  } else if (style === 'focusRing') {
+    await drawBg('#ecfeff')
+    drawStyleFrame('#0891b2', 0.48)
+    ctx.strokeStyle = 'rgba(8,145,178,0.22)'; ctx.lineWidth = 34; ctx.beginPath(); ctx.arc(822, 778, 410, 0, Math.PI * 2); ctx.stroke()
+    ctx.strokeStyle = 'rgba(8,145,178,0.45)'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(822, 778, 330, 0, Math.PI * 2); ctx.stroke()
+    drawTitle(92, 180, '#111827', 52, 'left')
+    drawPdfPage({ x: 326, y: 350, w: 650, h: 840, r: 18 })
+    drawFileOverlay(92, 1164, { width: 520, fontSize: 22, rowH: 70 })
+  } else if (style === 'aurora') {
+    const grad = ctx.createLinearGradient(0, 0, CANVAS_W, 520)
+    grad.addColorStop(0, '#22d3ee'); grad.addColorStop(0.55, '#a78bfa'); grad.addColorStop(1, '#f472b6')
+    await drawBg('#0f172a')
+    ctx.fillStyle = grad; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(CANVAS_W, 0); ctx.lineTo(CANVAS_W, 260); ctx.bezierCurveTo(960, 40, 760, 520, 560, 260); ctx.bezierCurveTo(340, 20, 210, 470, 0, 320); ctx.closePath(); ctx.fill()
+    drawTitle(92, 208, '#ffffff', 56, 'left')
+    drawPdfPage({ x: 300, y: 350, w: 650, h: 850, r: 20, rotate: -2 })
+    drawFileOverlay(640, 1115, { width: 520, fontSize: 22, rowH: 70 })
+  } else if (style === 'lawPaper') {
+    await drawBg('#f7f2e8')
+    ctx.strokeStyle = '#dec8a3'; ctx.lineWidth = 8; ctx.strokeRect(70, 80, 1102, 1496)
+    drawTitle(92, 150, '#111827', 58, 'left')
+    ctx.strokeStyle = '#8b1e1e'; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(92, 252); ctx.lineTo(1150, 252); ctx.stroke()
+    drawPdfPage({ x: 278, y: 322, w: 680, h: 900, r: 4, shadow: false })
+    ctx.strokeStyle = '#8b1e1e'; ctx.lineWidth = 3; ctx.strokeRect(278, 322, 680, 900)
+    drawFileOverlay(620, 1132, { width: 520, fontSize: 22, rowH: 70, shadow: false, radius: 6 })
+  } else if (style === 'sciLab') {
+    await drawBg('#f8fffb')
+    ctx.strokeStyle = '#059669'; ctx.lineWidth = 2; ctx.globalAlpha = 0.45
+    for (let i = 0; i < 6; i++) { ctx.beginPath(); ctx.arc(980 + i * 28, 140 + i * 34, 18 + i * 3, 0, Math.PI * 2); ctx.stroke() }
+    ctx.globalAlpha = 1
+    drawTitle(92, 178, '#111827', 56, 'left')
+    drawPdfPage({ x: 245, y: 320, w: 705, h: 900, r: 18 })
+    drawFileOverlay(640, 1120, { width: 520, fontSize: 22, rowH: 70 })
+  } else if (style === 'metro') {
+    await drawBg('#f8fafc')
+    ctx.fillStyle = '#ef4444'; ctx.fillRect(0, 0, CANVAS_W, 36)
+    ctx.fillStyle = '#1d4ed8'; ctx.fillRect(0, 36, CANVAS_W, 24)
+    drawTitle(92, 175, '#111827', 56, 'left')
+    drawPdfPage({ x: 300, y: 310, w: 650, h: 890, r: 18 })
+    drawFileOverlay(626, 1120, { width: 530, fontSize: 22, rowH: 70 })
+    ctx.lineCap = 'round'; ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 18; ctx.beginPath(); ctx.moveTo(92, 1430); ctx.lineTo(1150, 1430); ctx.stroke()
+    ctx.strokeStyle = '#1d4ed8'; ctx.beginPath(); ctx.moveTo(210, 1430); ctx.lineTo(650, 1430); ctx.stroke(); ctx.lineCap = 'butt'
+  } else if (style === 'receiptLong') {
+    await drawBg('#fffdf4')
+    ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.roundRect(92, 92, 1058, 1468, 4); ctx.fill()
+    ctx.strokeStyle = '#e5e7eb'; ctx.lineWidth = 3; ctx.strokeRect(92, 92, 1058, 1468)
+    drawTitle(92, 188, '#111827', 56, 'left')
+    drawPdfPage({ x: 290, y: 315, w: 650, h: 890, r: 4, shadow: false })
+    drawFileOverlay(610, 1128, { width: 520, fontSize: 22, rowH: 70, shadow: false, radius: 6 })
+  } else if (style === 'glassLayer') {
+    await drawBg('#e0f2fe')
+    ctx.fillStyle = '#bae6fd'; ctx.globalAlpha = 0.75; ctx.beginPath(); ctx.arc(210, 220, 230, 0, Math.PI * 2); ctx.fill()
+    ctx.fillStyle = '#7dd3fc'; ctx.globalAlpha = 0.45; ctx.beginPath(); ctx.arc(1060, 1280, 280, 0, Math.PI * 2); ctx.fill()
+    ctx.globalAlpha = 0.34; ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.roundRect(86, 92, 1070, 1470, 34); ctx.fill(); ctx.globalAlpha = 1
+    drawTitle(92, 180, '#111827', 56, 'left')
+    drawPdfPage({ x: 286, y: 330, w: 680, h: 880, r: 20, rotate: 3 })
+    drawFileOverlay(640, 1122, { width: 520, fontSize: 22, rowH: 70, bg: 'rgba(255,255,255,0.8)' })
+  } else if (style === 'notebookBlue') {
+    await drawBg('#f7fbff')
+    ctx.strokeStyle = '#bfdbfe'; ctx.lineWidth = 2
+    for (let i = 0; i < 26; i++) { ctx.beginPath(); ctx.moveTo(80, 250 + i * 48); ctx.lineTo(1160, 250 + i * 48); ctx.stroke() }
+    ctx.strokeStyle = '#fca5a5'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(168, 96); ctx.lineTo(168, 1560); ctx.stroke()
+    drawTitle(92, 175, '#111827', 56, 'left')
+    drawPdfPage({ x: 285, y: 318, w: 675, h: 895, r: 18, rotate: -1 })
+    drawFileOverlay(640, 1120, { width: 520, fontSize: 22, rowH: 70 })
+  } else if (style === 'kraftSeal') {
+    await drawBg('#f2e4c8')
+    ctx.strokeStyle = '#a16207'; ctx.lineWidth = 4; ctx.setLineDash([18, 12]); ctx.beginPath(); ctx.roundRect(82, 92, 1078, 1472, 28); ctx.stroke(); ctx.setLineDash([])
+    ctx.fillStyle = '#b91c1c'; ctx.beginPath(); ctx.arc(1040, 250, 92, 0, Math.PI * 2); ctx.fill()
+    drawTitle(92, 180, '#111827', 56, 'left')
+    drawPdfPage({ x: 280, y: 326, w: 680, h: 890, r: 18, rotate: 2 })
+    drawFileOverlay(635, 1124, { width: 520, fontSize: 22, rowH: 70 })
+  } else if (style === 'radialFocus') {
+    await drawBg('#fff7ed')
+    ctx.fillStyle = '#fed7aa'; ctx.beginPath(); ctx.arc(820, 780, 520, 0, Math.PI * 2); ctx.fill()
+    ctx.strokeStyle = 'rgba(249,115,22,0.3)'; ctx.lineWidth = 18; ctx.beginPath(); ctx.arc(820, 780, 410, 0, Math.PI * 2); ctx.stroke()
+    drawTitle(92, 180, '#111827', 56, 'left')
+    drawPdfPage({ x: 326, y: 350, w: 650, h: 840, r: 18 })
+    drawFileOverlay(94, 1165, { width: 520, fontSize: 22, rowH: 70 })
+  } else if (style === 'purplePortal') {
+    await drawBg('#f5f3ff')
+    ctx.fillStyle = '#ede9fe'; ctx.beginPath(); ctx.roundRect(72, 72, 1098, 1512, 48); ctx.fill()
+    ctx.fillStyle = 'rgba(255,255,255,0.66)'; ctx.beginPath(); ctx.roundRect(132, 150, 978, 1350, 46); ctx.fill()
+    drawTitle(92, 190, '#111827', 56, 'left')
+    drawPdfPage({ x: 300, y: 342, w: 650, h: 850, r: 18 })
+    drawFileOverlay(640, 1125, { width: 520, fontSize: 22, rowH: 70 })
+  } else if (style === 'greenChalk') {
+    await drawBg('#12352f')
+    ctx.strokeStyle = '#d9f99d'; ctx.lineWidth = 5; ctx.beginPath(); ctx.roundRect(70, 82, 1102, 1492, 20); ctx.stroke()
+    drawTitle(92, 180, '#f8fafc', 56, 'left')
+    drawPdfPage({ x: 290, y: 330, w: 660, h: 870, r: 18, rotate: -2 })
+    drawFileOverlay(620, 1128, { width: 540, fontSize: 22, rowH: 70, bg: '#f8fafc' })
+    ctx.strokeStyle = 'rgba(248,250,252,0.8)'; ctx.lineWidth = 10; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(120, 1430); ctx.lineTo(520, 1430); ctx.stroke(); ctx.lineCap = 'butt'
+  } else if (style === 'windowDesk') {
+    await drawBg('#eef2f7')
+    ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.roundRect(118, 120, 1006, 1320, 22); ctx.fill()
+    ctx.fillStyle = '#cbd5e1'; ctx.beginPath(); ctx.roundRect(118, 120, 1006, 72, 22); ctx.fill()
+    drawTitle(92, 284, '#111827', 54, 'left')
+    drawPdfPage({ x: 282, y: 405, w: 670, h: 780, r: 16, shadow: false })
+    drawFileOverlay(630, 1118, { width: 520, fontSize: 22, rowH: 70 })
+  } else if (style === 'archiveBox') {
+    await drawBg('#f8fafc')
+    ctx.fillStyle = 'rgba(204,251,241,0.7)'; ctx.beginPath(); ctx.roundRect(96, 240, 1050, 1110, 26); ctx.fill()
+    ctx.fillStyle = 'rgba(15,118,110,0.9)'; ctx.beginPath(); ctx.roundRect(96, 170, 410, 130, 28); ctx.fill()
+    drawTitle(92, 180, '#111827', 56, 'left')
+    drawPdfPage({ x: 310, y: 340, w: 640, h: 850, r: 18 })
+    drawFileOverlay(640, 1118, { width: 520, fontSize: 22, rowH: 70 })
+  } else if (style === 'orangeBurst') {
+    await drawBg('#fff7ed')
+    ctx.fillStyle = 'rgba(254,215,170,0.8)'
+    for (let i = 0; i < 18; i++) { ctx.save(); ctx.translate(620, 780); ctx.rotate(i / 18 * Math.PI * 2); ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(620, -18); ctx.lineTo(250, 18); ctx.closePath(); ctx.fill(); ctx.restore() }
+    drawTitle(92, 180, '#111827', 56, 'left')
+    drawPdfPage({ x: 300, y: 330, w: 650, h: 860, r: 18, rotate: -3 })
+    drawFileOverlay(638, 1120, { width: 520, fontSize: 22, rowH: 70 })
+  } else if (style === 'calmGray') {
+    await drawBg('#f3f4f6')
+    ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.roundRect(70, 70, 1102, 1516, 34); ctx.fill()
+    drawTitle(92, 180, '#111827', 56, 'left')
+    drawPdfPage({ x: 292, y: 320, w: 660, h: 880, r: 14, shadow: false })
+    ctx.strokeStyle = '#111827'; ctx.lineWidth = 2; ctx.strokeRect(292, 320, 660, 880)
+    drawFileOverlay(640, 1125, { width: 520, fontSize: 22, rowH: 70, shadow: false, radius: 8 })
+  } else if (style === 'blueprintDark') {
+    await drawBg('#0b2447')
+    drawGridBg(ctx, 0, 0, CANVAS_W, CANVAS_H, '#38bdf8', 0.08, 48)
+    ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 3; ctx.strokeRect(66, 66, 1110, 1524)
+    drawTitle(92, 180, '#f8fafc', 56, 'left')
+    drawPdfPage({ x: 292, y: 330, w: 660, h: 870, r: 18 })
+    drawFileOverlay(638, 1126, { width: 520, fontSize: 22, rowH: 70 })
+  } else if (style === 'foldedCorner') {
+    await drawBg('#fdfdfb')
+    ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.moveTo(92, 92); ctx.lineTo(1010, 92); ctx.lineTo(1150, 232); ctx.lineTo(1150, 1564); ctx.lineTo(92, 1564); ctx.closePath(); ctx.fill()
+    ctx.fillStyle = '#fee2e2'; ctx.beginPath(); ctx.moveTo(1010, 92); ctx.lineTo(1010, 232); ctx.lineTo(1150, 232); ctx.closePath(); ctx.fill()
+    drawTitle(92, 180, '#111827', 56, 'left')
+    drawPdfPage({ x: 300, y: 330, w: 650, h: 860, r: 18 })
+    drawFileOverlay(638, 1120, { width: 520, fontSize: 22, rowH: 70 })
+  } else if (style === 'comicMarker') {
+    await drawBg('#fffbeb')
+    ctx.strokeStyle = '#111827'; ctx.lineWidth = 5; ctx.beginPath(); ctx.roundRect(85, 116, 1065, 1424, 38); ctx.stroke()
+    drawTitle(92, 190, '#111827', 56, 'left')
+    drawPdfPage({ x: 288, y: 328, w: 670, h: 875, r: 18, rotate: -2 })
+    drawFileOverlay(636, 1122, { width: 520, fontSize: 22, rowH: 70 })
+    ctx.strokeStyle = 'rgba(253,230,138,0.8)'; ctx.lineWidth = 32; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(110, 1340); ctx.quadraticCurveTo(410, 1280, 740, 1346); ctx.stroke(); ctx.lineCap = 'butt'
+  } else if (style === 'sideCatalog') {
+    await drawBg('#f8fafc')
+    ctx.fillStyle = '#cffafe'; ctx.fillRect(0, 0, 260, CANVAS_H)
+    drawTitle(310, 180, '#111827', 56, 'left')
+    drawPdfPage({ x: 386, y: 330, w: 610, h: 850, r: 18 })
+    drawFileOverlay(92, 1100, { width: 500, fontSize: 22, rowH: 70 })
+  } else if (style === 'redLedger') {
+    await drawBg('#fff5f5')
+    ctx.fillStyle = '#b91c1c'; ctx.beginPath(); ctx.roundRect(76, 70, 170, 1516, 26); ctx.fill()
+    ctx.strokeStyle = '#b91c1c'; ctx.lineWidth = 10; ctx.beginPath(); ctx.roundRect(76, 70, 1090, 1516, 26); ctx.stroke()
+    drawTitle(300, 180, '#111827', 56, 'left')
+    drawPdfPage({ x: 360, y: 320, w: 620, h: 880, r: 18 })
+    drawFileOverlay(600, 1122, { width: 520, fontSize: 22, rowH: 70 })
+  } else if (style === 'folder') {
     await drawBg('#f1c46b')
     ctx.fillStyle = '#ffe0a3'
     ctx.beginPath(); ctx.roundRect(118, 72, 430, 112, 22); ctx.fill()

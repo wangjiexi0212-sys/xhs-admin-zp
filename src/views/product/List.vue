@@ -32,6 +32,7 @@
             <BellOutlined /> 消息
           </a-button>
         </a-badge>
+        <a-button :loading="cardTemplatePreviewLoading" @click="openCardTemplatePreview">卡片图模板预览</a-button>
         <a-button type="primary" @click="goCreate">+ 新增商品</a-button>
       </a-space>
     </div>
@@ -88,6 +89,22 @@
         </div>
         <a-divider style="margin: 12px 0" />
       </template>
+      <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px">
+        <span style="font-size: 13px; font-weight: 500; color: #555">卡片文案模版</span>
+        <a-switch v-model:checked="dirBatchUseCardTitleTemplates" size="small" />
+        <span style="font-size: 12px; color: #999">{{ dirBatchUseCardTitleTemplates ? '开启，随机使用考前冲刺模版' : '关闭，使用原标题池' }}</span>
+      </div>
+      <div v-if="dirBatchUseCardTitleTemplates" style="padding: 8px 12px; margin-bottom: 12px; background: #fff7e6; border: 1px solid #ffd591; border-radius: 6px; font-size: 12px; color: #8a4b00; line-height: 1.7">
+        示例：{{ cardTitleTemplatePreview }}。生成时会为每个商品随机取一条模版，并拼到“单位名笔试，”后面。
+      </div>
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; margin-bottom: 12px; background: #f6ffed; border: 1px solid #b7eb8f; border-radius: 6px">
+        <div>
+          <div style="font-size: 13px; font-weight: 500; color: #31511b">卡片图静态模板预览</div>
+          <div style="font-size: 12px; color: #6b8f45; margin-top: 2px">用固定样例文案查看所有卡片图模板效果</div>
+        </div>
+        <a-button size="small" :loading="cardTemplatePreviewLoading" @click="openCardTemplatePreview">查看效果图</a-button>
+      </div>
+      <a-divider style="margin: 12px 0" />
       <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px">
         <span style="font-size: 13px; font-weight: 500; color: #555">飞书多维表格</span>
         <a-switch v-model:checked="feishuEnabled" size="small" />
@@ -115,6 +132,29 @@
           @click="onConfirmBatchDirSettings"
         >开始生成</a-button>
       </div>
+    </a-modal>
+
+    <!-- 卡片图模板预览 -->
+    <a-modal
+      v-model:open="cardTemplatePreviewVisible"
+      title="卡片图模板效果预览"
+      :footer="null"
+      width="980px"
+    >
+      <div class="card-preview-toolbar">
+        <span class="card-preview-sample">静态样例：{{ CARD_TEMPLATE_PREVIEW_TEXT }}</span>
+        <a-button :loading="cardTemplatePreviewLoading" @click="loadCardTemplatePreviews">重新生成一组</a-button>
+        <span class="card-preview-tip">同一模板会随机展示不同布局、底部区和信息标签</span>
+      </div>
+      <a-spin :spinning="cardTemplatePreviewLoading">
+        <div class="card-preview-grid">
+          <div v-for="item in cardTemplatePreviews" :key="item.id" class="card-preview-item">
+            <img :src="`data:image/png;base64,${item.base64}`" :alt="item.name" />
+            <div class="card-preview-name">{{ item.name }}</div>
+          </div>
+        </div>
+        <a-empty v-if="!cardTemplatePreviews.length && !cardTemplatePreviewLoading" description="暂无预览" />
+      </a-spin>
     </a-modal>
 
     <!-- 批量生成目录图 · 进度弹窗 -->
@@ -368,7 +408,7 @@ const HISTORY_TITLE_POOL = [
   '深挖真题，梳理高频题型', '复盘真题，找准失分根源',
 ]
 function pickRandomHistoryTitle() {
-  return HISTORY_TITLE_POOL[Math.floor(Math.random() * HISTORY_TITLE_POOL.length)]
+  return pickRandomSecure(HISTORY_TITLE_POOL)
 }
 
 const MOCK_TITLE_POOL = [
@@ -381,7 +421,7 @@ const MOCK_TITLE_POOL = [
   '回看模拟题，梳理框架', '吃透模拟题，从容应考',
 ]
 function pickRandomMockTitle() {
-  return MOCK_TITLE_POOL[Math.floor(Math.random() * MOCK_TITLE_POOL.length)]
+  return pickRandomSecure(MOCK_TITLE_POOL)
 }
 
 function drawGridBg(ctx, x, y, w, h, color, opacity, cellSize = 28) {
@@ -1042,9 +1082,93 @@ const TITLE_POOL = [
   '吃透考题侧重点稳进面',
 ]
 
+const CARD_TITLE_TEMPLATE_POOL = [
+  '考前必看，就背这些重点',
+  '考前冲刺，这几页得看',
+  '时间不多了，赶紧背这些',
+  '临时抱佛脚，先看这几页',
+  '考前3天，重点抓紧背',
+  '别乱复习了，重点在这',
+  '考前必看，少走点弯路',
+  '最后冲刺，抓紧背这些',
+  '熬夜整理的重点，快背',
+  '考前急救，这几页多看看',
+  '来来回回就考这些知识点',
+  '高频考点，背熟不吃亏',
+  '常考的就这些，赶紧背',
+  '重点就这么多，抓紧看',
+  '出题方向整理好了，速看',
+  '这些知识点，真的很常见',
+  '核心考点，直接划重点',
+  '常考题型，集中背这些',
+  '这几页重点，值得反复看',
+  '别背偏了，重点在这里',
+  '零基础也能跟着学',
+  '现在开始准备，还来得及',
+  '备考进度为0，先背这些',
+  '基础差的，直接看这篇',
+  '别慌，3天先抓住重点',
+  '不知道背啥，先看这里',
+  '小白备考，先啃这几页',
+  '没时间复习，先抓重点',
+  '零基础冲刺，照着背就行',
+  '刚开始备考，直接抄作业',
+  '别再傻傻地从头背了',
+  '真的别乱刷题，先看这',
+  '再拖下去，时间真不多了',
+  '背不完？先背这几页',
+  '复习没方向的，快来看',
+  '别把时间浪费在冷门题',
+  '越临近考试，越要看这些',
+  '别焦虑了，重点整理好了',
+  '别再盲目备考了，速看',
+  '背了又忘？这几页反复看',
+  '这份重点笔记，建议收藏',
+  '浓缩版考点，直接开背',
+  '核心知识点，都整理好了',
+  '重点整理好了，直接背',
+  '一张图看懂考试重点',
+  '考前必备的高频速记表',
+  '这份备考清单，太实用了',
+  '知识点压缩好了，快存',
+  '整理好的重点，照着学',
+  '考前重点合集，建议存图',
+  '背会这些重点！不会丢分',
+  '常考知识点，背完上班',
+  '真的很好考，备考只需3天',
+  '考前冲刺，就背这些',
+  '再不开始复习，就迟了',
+  '千万别裸考，就背这些题',
+  '考题就差这里抽，速背',
+  '备考进度为0的人，现在开始学',
+  '死磕这几页，0基础也能过',
+  '笔试高频题，背完就能过',
+  '来来回回就这些题，熬夜背吧',
+  '这几页背完，直接上岸',
+  '真的很好考，直接背就过了',
+  '备考大纲在这里，直接背',
+  '就这些重点，2天拿下',
+  '反复考这些，抓紧背',
+  '一次过，就看这些题',
+  '瞬间不着急了，就考这些内容',
+  '考前急救资料，速背',
+]
+
 function pickRandom(arr) {
+  return pickRandomSecure(arr)
+}
+
+function pickRandomSecure(arr) {
   if (!Array.isArray(arr) || !arr.length) return null
-  return arr[Math.floor(Math.random() * arr.length)]
+  const buf = new Uint32Array(1)
+  crypto.getRandomValues(buf)
+  return arr[buf[0] % arr.length]
+}
+
+function buildProductCardText(detail, useTemplatePool = false) {
+  const pool = useTemplatePool ? CARD_TITLE_TEMPLATE_POOL : TITLE_POOL
+  const suffix = pickRandomSecure(pool) || ''
+  return `${detail?.company_name || ''}笔试，${suffix}`
 }
 
 // 为单个商品生成标题 + 正文，返回 { title, body }，失败抛出异常
@@ -1058,7 +1182,7 @@ async function generateNoteForProduct(detail, presetTitle = null) {
   if (!active) throw new Error('未配置使用中的模型')
 
   // --- 生成标题：优先使用预设标题（卡片图文案），否则从 TITLE_POOL 随机取一条 ---
-  const title = presetTitle || `${detail.company_name || ''}笔试，${TITLE_POOL[Math.floor(Math.random() * TITLE_POOL.length)]}`
+  const title = presetTitle || buildProductCardText(detail)
 
   // --- 生成正文：从 BODY_TEMPLATES 固定风格模版池随机取一条，与单品页面保持一致 ---
   const tpl = BODY_TEMPLATES[Math.floor(Math.random() * BODY_TEMPLATES.length)]
@@ -1422,6 +1546,7 @@ const dirBatchMode = ref('complete')        // complete | dirOnly | examGrid | e
 const dirBatchUseBgImage = ref(false)       // 是否使用背景图（默认关闭 = 边框+颜色模式）
 const dirBatchBorderColor = ref('#F9863B')  // 边框颜色（背景图关闭时生效）
 const dirBatchGenBody = ref(true)           // 是否生成正文（默认开启）
+const dirBatchUseCardTitleTemplates = ref(false) // 是否使用考前冲刺卡片文案模版
 const feishuEnabled = ref(false)            // 飞书文档开关
 const feishuFirstScheduleTime = ref('')     // 飞书第一篇定时发布时间
 const dirBatchVisible = ref(false)
@@ -1429,6 +1554,12 @@ const dirBatchGenerating = ref(false)
 const dirBatchLogs = ref([])
 const dirBatchDone = ref(0)
 const dirBatchTotal = ref(0)
+const dirBatchOnlyDir = computed(() => dirBatchMode.value === 'dirOnly')
+const cardTitleTemplatePreview = computed(() => `xxx笔试，${CARD_TITLE_TEMPLATE_POOL[0]}`)
+const CARD_TEMPLATE_PREVIEW_TEXT = '示例单位笔试，考前冲刺就背这些'
+const cardTemplatePreviewVisible = ref(false)
+const cardTemplatePreviewLoading = ref(false)
+const cardTemplatePreviews = ref([])
 
 const DIR_BATCH_BORDER_COLORS = [
   '#F9863B', '#FF6B6B', '#F59E0B', '#10B981', '#14B8A6',
@@ -1451,6 +1582,43 @@ function resetFeishuFirstScheduleTime() {
   feishuFirstScheduleTime.value = formatDateTimeInputValue(Date.now() + 70 * 60 * 1000)
 }
 
+function openCardTemplatePreview() {
+  cardTemplatePreviewVisible.value = true
+  if (!cardTemplatePreviews.value.length) {
+    loadCardTemplatePreviews()
+  }
+}
+
+function loadCardTemplatePreviews() {
+  if (cardTemplatePreviewLoading.value) return
+  cardTemplatePreviewLoading.value = true
+  const worker = new Worker(
+    new URL('../../workers/batchDirGen.worker.js', import.meta.url),
+  )
+  worker.onmessage = (e) => {
+    const data = e.data || {}
+    if (data.type === 'card-template-previews') {
+      cardTemplatePreviews.value = data.previews || []
+      cardTemplatePreviewLoading.value = false
+      worker.terminate()
+    } else if (data.type === 'card-template-preview-error') {
+      message.error(data.message || '卡片图模板预览生成失败')
+      cardTemplatePreviewLoading.value = false
+      worker.terminate()
+    }
+  }
+  worker.onerror = (err) => {
+    message.error(err?.message || '卡片图模板预览生成失败')
+    cardTemplatePreviewLoading.value = false
+    worker.terminate()
+  }
+  worker.postMessage({
+    type: 'preview-card-templates',
+    sampleText: CARD_TEMPLATE_PREVIEW_TEXT,
+    cardSchemes: CARD_STYLE_SCHEMES,
+  })
+}
+
 async function onBatchGenerateDirImages() {
   if (!selectedRowKeys.value.length) {
     message.warning('请先勾选商品')
@@ -1463,7 +1631,14 @@ async function onBatchGenerateDirImages() {
 
 function onConfirmBatchDirSettings() {
   dirBatchSettingsVisible.value = false
-  runBatchDirImages(dirBatchMode.value, dirBatchUseBgImage.value, dirBatchBorderColor.value, dirBatchGenBody.value, feishuFirstScheduleTime.value)
+  runBatchDirImages(
+    dirBatchMode.value,
+    dirBatchUseBgImage.value,
+    dirBatchBorderColor.value,
+    dirBatchGenBody.value,
+    feishuFirstScheduleTime.value,
+    dirBatchUseCardTitleTemplates.value
+  )
 }
 
 function padDatePart(n) {
@@ -1504,7 +1679,7 @@ function shuffleTags(tags) {
   return shuffled
 }
 
-async function runBatchDirImages(generationMode = 'complete', useBgImage = false, borderColor = '#F9863B', genBody = true, firstScheduleTime = '') {
+async function runBatchDirImages(generationMode = 'complete', useBgImage = false, borderColor = '#F9863B', genBody = true, firstScheduleTime = '', useCardTitleTemplates = false) {
   if (!selectedRowKeys.value.length) {
     message.warning('请先勾选商品')
     return
@@ -1601,6 +1776,8 @@ async function runBatchDirImages(generationMode = 'complete', useBgImage = false
       generationMode,
       onlyDirImages: generationMode === 'dirOnly',
       titlePool: TITLE_POOL,
+      cardTitleTemplatePool: CARD_TITLE_TEMPLATE_POOL,
+      useCardTitleTemplates,
       historyTitlePool: HISTORY_TITLE_POOL,
       mockTitlePool: MOCK_TITLE_POOL,
       cardSchemes: CARD_STYLE_SCHEMES,
@@ -1621,7 +1798,7 @@ async function runBatchDirImages(generationMode = 'complete', useBgImage = false
       let title, body
       // cardText 由 Worker 生成卡片图时确定，此处直接复用，确保笔记标题与卡片图文案完全一致
       // 若 Worker 未生成卡片图（onlyDirImages 模式下卡片图仍会生成，但作为兜底保留随机逻辑）
-      const noteTitle = cardText || `${detail.company_name || ''}笔试，${TITLE_POOL[Math.floor(Math.random() * TITLE_POOL.length)]}`
+      const noteTitle = cardText || buildProductCardText(detail, useCardTitleTemplates)
       if (genBody) {
         // 完整生成：标题复用卡片图文案 + 正文（LLM）
         const res = await generateNoteForProduct(detail, noteTitle)
@@ -1976,5 +2153,55 @@ onMounted(() => {
   border-radius: 4px;
   font-size: 13px;
   color: #1677ff;
+}
+.card-preview-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+.card-preview-sample {
+  padding: 6px 10px;
+  background: #f5f5f5;
+  border: 1px solid #eee;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #555;
+}
+.card-preview-tip {
+  font-size: 12px;
+  color: #999;
+}
+.card-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: 14px;
+  max-height: 68vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.card-preview-item {
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+  padding: 8px;
+  background: #fff;
+}
+.card-preview-item img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  border-radius: 6px;
+  background: #f5f5f5;
+}
+.card-preview-name {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #555;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 </style>
