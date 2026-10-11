@@ -97,6 +97,14 @@
       <div v-if="dirBatchUseCardTitleTemplates" style="padding: 8px 12px; margin-bottom: 12px; background: #fff7e6; border: 1px solid #ffd591; border-radius: 6px; font-size: 12px; color: #8a4b00; line-height: 1.7">
         示例：{{ cardTitleTemplatePreview }}。生成时会为每个商品随机取一条模版，并拼到“单位名笔试，”后面。
       </div>
+      <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px">
+        <span style="font-size: 13px; font-weight: 500; color: #555">封面图替换卡片图</span>
+        <a-switch v-model:checked="dirBatchUseCoverImage" size="small" />
+        <span style="font-size: 12px; color: #999">{{ dirBatchUseCoverImage ? '开启，不生成卡片图，改为生成封面图' : '关闭，继续生成卡片图' }}</span>
+      </div>
+      <div v-if="dirBatchUseCoverImage" style="padding: 8px 12px; margin-bottom: 12px; background: #f0f9ff; border: 1px solid #bae0ff; border-radius: 6px; font-size: 12px; color: #31506f; line-height: 1.7">
+        封面图会参考商品详情页「生成笔记」抽屉里的生成封面图逻辑；写入 ZIP 和上传飞书前会先做下载同款去重与去 AI 标记处理。
+      </div>
       <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; margin-bottom: 12px; background: #f6ffed; border: 1px solid #b7eb8f; border-radius: 6px">
         <div>
           <div style="font-size: 13px; font-weight: 500; color: #31511b">卡片图静态模板预览</div>
@@ -272,14 +280,18 @@ import { useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import { getProductList, deleteProduct, getProductDetail } from '@/api/products'
 import { getJobTypeList } from '@/api/jobTypes'
-import { buildRandomGradient, triggerBlobDownload } from '@/utils/imageProcess'
+import { buildRandomGradient, processImageForDownload, triggerBlobDownload } from '@/utils/imageProcess'
 import { getBaiduFiles } from '@/api/baidu'
 import { getToken } from '@/api/request'
 import { BellOutlined } from '@ant-design/icons-vue'
 import { chatLlm } from '@/api/llm'
 import { getPromptList } from '@/api/prompts'
+import { getCardPromptList } from '@/api/cardPrompts'
+import { drawCoverStream } from '@/api/draw'
+import { proxyImageForDownload } from '@/api/xhsRewrite'
 import { BODY_TEMPLATES } from '@/utils/bodyTemplates'
 import { useLlmStore } from '@/stores/llm'
+import { useAiImageStore } from '@/stores/aiImage'
 import { Document, Packer, Paragraph, TextRun, HeadingLevel } from 'docx'
 import { saveAs } from 'file-saver'
 import { writeFeishuBitableRecords, uploadFeishuBitableImage } from '@/api/feishuConfig'
@@ -287,6 +299,7 @@ import { getBgImageList } from '@/api/bgImages'
 
 const router = useRouter()
 const llmStore = useLlmStore()
+const aiImageStore = useAiImageStore()
 
 const keyword = ref('')
 const filterJobTypeId = ref()
@@ -1547,6 +1560,7 @@ const dirBatchUseBgImage = ref(false)       // 是否使用背景图（默认关
 const dirBatchBorderColor = ref('#F9863B')  // 边框颜色（背景图关闭时生效）
 const dirBatchGenBody = ref(true)           // 是否生成正文（默认开启）
 const dirBatchUseCardTitleTemplates = ref(false) // 是否使用考前冲刺卡片文案模版
+const dirBatchUseCoverImage = ref(false)    // 是否用 AI 封面图替换卡片图
 const feishuEnabled = ref(false)            // 飞书文档开关
 const feishuFirstScheduleTime = ref('')     // 飞书第一篇定时发布时间
 const dirBatchVisible = ref(false)
@@ -1637,7 +1651,8 @@ function onConfirmBatchDirSettings() {
     dirBatchBorderColor.value,
     dirBatchGenBody.value,
     feishuFirstScheduleTime.value,
-    dirBatchUseCardTitleTemplates.value
+    dirBatchUseCardTitleTemplates.value,
+    dirBatchUseCoverImage.value,
   )
 }
 
@@ -1662,11 +1677,164 @@ function createFeishuScheduleTimeGenerator(startTime) {
 }
 
 function isCardImageLabel(label) {
-  return String(label || '').includes('卡片图')
+  const text = String(label || '')
+  return text.includes('卡片图') || text.includes('封面图')
 }
 
 function sortImagesForFeishu(images) {
   return [...images].sort((a, b) => Number(isCardImageLabel(b.label)) - Number(isCardImageLabel(a.label)))
+}
+
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = String(reader.result || '')
+      resolve(result.replace(/^data:[^;]+;base64,/, ''))
+    }
+    reader.onerror = reject
+    reader.readAsDataURL(blob)
+  })
+}
+
+function buildWrittenExamConstraintForDetail(detail) {
+  const content = String(detail?.written_exam_content || '').trim()
+  if (!content) {
+    return [
+      '【笔试内容约束】',
+      '商品详情未填写明确的笔试内容，可按商品类型和参考文本的现有逻辑生成，但不要无依据写得过于具体。',
+    ].join('\n')
+  }
+  return [
+    '【笔试内容约束】',
+    '以下是商品详情中填写的真实笔试内容，后续生成标题、正文、封面图时必须严格围绕这些内容展开：',
+    content,
+    '',
+    '生成内容必须严格围绕上述笔试内容展开；如果只写了某一科或某一类内容，就只写该范围。',
+    '不要主动扩展到未出现的考试科目或模块。例如只写“公共基础/公共基础知识”时，不要写行测、申论、面试、专业知识等无关内容。',
+  ].join('\n')
+}
+
+function appendWrittenExamConstraintToPromptForDetail(prompt, detail) {
+  return [
+    String(prompt || '').trim(),
+    '',
+    buildWrittenExamConstraintForDetail(detail),
+    '【生图内容约束】图片里的文案、学习建议、科目名称、关键词和视觉元素都必须遵守上面的笔试内容约束；不要出现未标注的考试科目或模块。',
+  ].filter(Boolean).join('\n')
+}
+
+function sanitizeCoverPromptText(text) {
+  let result = String(text || '')
+  const words = [...SENSITIVE_WORD_LIST].sort((a, b) => b.length - a.length)
+  for (const word of words) {
+    if (!word) continue
+    result = result.split(word).join('')
+  }
+  return result
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/【】/g, '')
+    .trim()
+}
+
+async function pickRandomCardPromptForDetail(detail) {
+  const pageSize = 100
+  const fetchByJobType = async (jobTypeId) => {
+    if (!jobTypeId) return []
+    const res = await getCardPromptList({ job_type_id: jobTypeId, page: 1, pageSize })
+    return Array.isArray(res?.list) ? res.list : []
+  }
+
+  let promptList = await fetchByJobType(detail?.job_type_id)
+  if (!promptList.length) {
+    const res = await getCardPromptList({ page: 1, pageSize })
+    promptList = Array.isArray(res?.list) ? res.list : []
+  }
+
+  const activeList = promptList.filter(item => item && item.status !== 0 && String(item.content || '').trim())
+  return pickRandom(activeList)
+}
+
+function buildCoverPromptFromCardPromptForDetail(detail, cardPrompt, cardText) {
+  const companyName = String(detail?.company_name || '').trim()
+  const promptContent = String(cardPrompt?.content || '').trim()
+  const cardTextForCover = String(cardText || (companyName ? `${companyName}笔试` : detail?.title || '笔试资料')).trim()
+
+  return [
+    '请根据单位名称生成小红书封面图。',
+    '',
+    `封面核心主题：${cardTextForCover}`,
+    companyName ? `封面中必须突出单位名称：${companyName}` : '',
+    '',
+    '【随机抽取的卡片提示词】',
+    promptContent,
+    '',
+    '要求：直接按随机抽取的卡片提示词风格出图，画面适合作为小红书封面，文字清晰醒目，竖版比例。',
+  ].filter(Boolean).join('\n')
+}
+
+function drawCoverStreamOnce(params, onProgress) {
+  return new Promise((resolve, reject) => {
+    drawCoverStream(params, {
+      onProgress,
+      onDone: resolve,
+      onError: reject,
+    })
+  })
+}
+
+async function processCoverUrlToBase64(url) {
+  try {
+    const blob = await processImageForDownload(url)
+    return await blobToBase64(blob)
+  } catch (e) {
+    const proxied = await proxyImageForDownload(url)
+    const blob = await processImageForDownload(proxied.url)
+    return await blobToBase64(blob)
+  }
+}
+
+async function generateBatchCoverImage(detail, cardText, onProgress) {
+  const text = sanitizeCoverPromptText(cardText || buildProductCardText(detail, dirBatchUseCardTitleTemplates.value))
+  const cardPrompt = await pickRandomCardPromptForDetail(detail)
+  if (!cardPrompt) {
+    throw new Error(detail?.job_type_name ? `未找到「${detail.job_type_name}」可用的卡片提示词` : '未找到可用的卡片提示词')
+  }
+
+  const params = {
+    product_id: detail.id,
+    card_text: text,
+    prompt: sanitizeCoverPromptText(appendWrittenExamConstraintToPromptForDetail(
+      buildCoverPromptFromCardPromptForDetail(detail, cardPrompt, text),
+      detail,
+    )),
+  }
+
+  const activeProvider = aiImageStore.activeProvider
+  if (activeProvider === 'md2card') {
+    const cfg = aiImageStore.activeConfig
+    if (cfg?.model) params.keywords = cfg.model
+    if (cfg?.concurrency) params.count = cfg.concurrency
+  } else {
+    const active = llmStore.active
+    if (!active) throw new Error('请先在「系统设置 → 大模型」中设置使用中的模型')
+    params.llm_provider = active.provider
+    params.llm_api_format = active.api_format
+    params.llm_api_key = active.api_key
+    params.llm_base_url = active.base_url || ''
+    params.llm_model = active.default_model
+  }
+
+  const data = await drawCoverStreamOnce(params, onProgress)
+  if (data?.prompt_only) throw new Error('封面接口仅返回提示词，未生成图片')
+  const urls = Array.isArray(data?.urls) ? data.urls.filter(Boolean) : []
+  const rawUrls = urls.length ? urls : (data?.url ? [data.url] : [])
+  if (!rawUrls.length) throw new Error('封面接口未返回图片')
+  return {
+    base64: await processCoverUrlToBase64(rawUrls[0]),
+    prompt: sanitizeCoverPromptText(data?.prompt || params.prompt),
+  }
 }
 
 function shuffleTags(tags) {
@@ -1679,11 +1847,39 @@ function shuffleTags(tags) {
   return shuffled
 }
 
-async function runBatchDirImages(generationMode = 'complete', useBgImage = false, borderColor = '#F9863B', genBody = true, firstScheduleTime = '', useCardTitleTemplates = false) {
+async function runBatchDirImages(generationMode = 'complete', useBgImage = false, borderColor = '#F9863B', genBody = true, firstScheduleTime = '', useCardTitleTemplates = false, useCoverImage = false) {
   if (!selectedRowKeys.value.length) {
     message.warning('请先勾选商品')
     return
   }
+
+  if (useCoverImage) {
+    try {
+      await aiImageStore.ensureLoaded()
+    } catch (e) {
+      message.error(e.message || 'AI绘图配置加载失败')
+      return
+    }
+    if (!aiImageStore.activeProvider) {
+      Modal.warning({
+        title: '提示',
+        content: '请先在「系统设置 → AI绘图」中将某个渠道设为使用中',
+        okText: '去设置',
+        onOk: () => router.push('/system/ai-image'),
+      })
+      return
+    }
+    if (aiImageStore.activeProvider !== 'md2card' && !llmStore.active) {
+      Modal.warning({
+        title: '提示',
+        content: '当前 AI 绘图渠道需要大模型适配提示词，请先在「系统设置 → 大模型」中设置使用中的模型',
+        okText: '去设置',
+        onOk: () => router.push('/system/llm'),
+      })
+      return
+    }
+  }
+
   dirBatchLogs.value = []
   dirBatchDone.value = 0
   dirBatchTotal.value = selectedRowKeys.value.length
@@ -1748,8 +1944,8 @@ async function runBatchDirImages(generationMode = 'complete', useBgImage = false
       } else if (data.type === 'product-images') {
         const { company, id, images, cardText } = data
         const folder = zip.folder(company)
-        for (const { label, base64 } of images) {
-          folder.file(`${label}.png`, base64, { base64: true })
+        for (const { label, base64, ext = 'png' } of images) {
+          folder.file(`${label}.${ext}`, base64, { base64: true })
           totalImages++
         }
         const detail = productDetails.find(p => p.id === id)?.detail
@@ -1781,6 +1977,7 @@ async function runBatchDirImages(generationMode = 'complete', useBgImage = false
       historyTitlePool: HISTORY_TITLE_POOL,
       mockTitlePool: MOCK_TITLE_POOL,
       cardSchemes: CARD_STYLE_SCHEMES,
+      replaceCardWithCover: useCoverImage,
     })
   }).catch((err) => {
     dirBatchLogs.value.push({ text: `Worker 异常退出：${err.message}`, type: 'error' })
@@ -1791,6 +1988,26 @@ async function runBatchDirImages(generationMode = 'complete', useBgImage = false
     const { detail, folder, images, cardText } = productImageMap[company]
     if (!detail) continue
     const shuffledTags = shuffleTags(detail.xhs_tags)
+    const noteTitle = cardText || buildProductCardText(detail, useCardTitleTemplates)
+
+    if (useCoverImage) {
+      dirBatchLogs.value.push({ text: `${company} - 生成封面图中...`, type: 'info' })
+      try {
+        const cover = await generateBatchCoverImage(detail, noteTitle, (event) => {
+          if (event.step === 'llm') {
+            dirBatchLogs.value.push({ text: `  └ ${company} 封面提示词适配中...`, type: 'info' })
+          } else if (event.step === 'draw') {
+            dirBatchLogs.value.push({ text: `  └ ${company} AI绘图中...`, type: 'info' })
+          }
+        })
+        folder.file('封面图.jpg', cover.base64, { base64: true })
+        images.unshift({ label: '封面图', base64: cover.base64, ext: 'jpg' })
+        totalImages++
+        dirBatchLogs.value.push({ text: `  └ ${company} 封面图 ✓（已去重和去AI标记）`, type: 'success' })
+      } catch (e) {
+        dirBatchLogs.value.push({ text: `  └ ${company} 封面图失败：${e.message}`, type: 'error' })
+      }
+    }
 
     dirBatchLogs.value.push({ text: `${company} - 生成笔记内容中...`, type: 'info' })
     let noteResult = null
@@ -1798,7 +2015,6 @@ async function runBatchDirImages(generationMode = 'complete', useBgImage = false
       let title, body
       // cardText 由 Worker 生成卡片图时确定，此处直接复用，确保笔记标题与卡片图文案完全一致
       // 若 Worker 未生成卡片图（onlyDirImages 模式下卡片图仍会生成，但作为兜底保留随机逻辑）
-      const noteTitle = cardText || buildProductCardText(detail, useCardTitleTemplates)
       if (genBody) {
         // 完整生成：标题复用卡片图文案 + 正文（LLM）
         const res = await generateNoteForProduct(detail, noteTitle)
@@ -1823,9 +2039,9 @@ async function runBatchDirImages(generationMode = 'complete', useBgImage = false
     if (feishuEnabled.value && noteResult) {
       const nowTs = Date.now()
       const fileTokens = []
-      for (const { label, base64 } of sortImagesForFeishu(images)) {
+      for (const { label, base64, ext = 'png' } of sortImagesForFeishu(images)) {
         try {
-          const res = await uploadFeishuBitableImage({ base64, filename: `${label}.png` })
+          const res = await uploadFeishuBitableImage({ base64, filename: `${label}.${ext}` })
           if (res?.file_token) fileTokens.push(res.file_token)
         } catch (e) {
           dirBatchLogs.value.push({ text: `  └ 图片上传飞书失败（${label}）：${e.message}`, type: 'warn' })

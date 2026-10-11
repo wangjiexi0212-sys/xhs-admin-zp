@@ -2274,7 +2274,7 @@ function drawKraftDecoration(ctx, W, H, scheme, scale) {
 }
 
 // ── 主批量循环 ───────────────────────────────────────────────────────
-async function runBatch({ productDetails, onlyDirImages, generationMode = 'complete', bgPool, borderColor, titlePool, cardTitleTemplatePool, useCardTitleTemplates, historyTitlePool, mockTitlePool, cardSchemes }) {
+async function runBatch({ productDetails, onlyDirImages, generationMode = 'complete', bgPool, borderColor, titlePool, cardTitleTemplatePool, useCardTitleTemplates, historyTitlePool, mockTitlePool, cardSchemes, replaceCardWithCover }) {
   _TITLE_POOL                = titlePool             || []
   _CARD_TITLE_TEMPLATE_POOL  = cardTitleTemplatePool || []
   _USE_CARD_TITLE_TEMPLATES  = !!useCardTitleTemplates
@@ -2353,22 +2353,26 @@ async function runBatch({ productDetails, onlyDirImages, generationMode = 'compl
       }
     }
 
-    // 生成卡片图
-    // cardText 同步回主线程，作为笔记标题，保证卡片图文案与笔记标题完全一致
+    // 生成卡片文案：卡片图或封面图都会复用它作为笔记标题
     let cardText = ''
-    log(`  └ 生成卡片图中...`, 'info')
-    try {
-      const scheme = pickCardScheme() || { bg: '#d4f7d4', text: '#2d4a2d', accent: '#52c07a' }
-      cardText = buildCardText(detail)
-      const cardDataUrl = await renderCardImage(cardText, scheme)
-      images.push({ label: '卡片图', base64: cardDataUrl.replace(/^data:image\/png;base64,/, '') })
-      log(`  └ 卡片图 ✓`, 'success')
-    } catch (e) {
-      log(`  └ 卡片图失败：${e.message}`, 'error')
+    try { cardText = buildCardText(detail) } catch (_) { cardText = '' }
+
+    if (replaceCardWithCover) {
+      log(`  └ 已开启封面图替换卡片图，跳过卡片图生成`, 'info')
+    } else {
+      log(`  └ 生成卡片图中...`, 'info')
+      try {
+        const scheme = pickCardScheme() || { bg: '#d4f7d4', text: '#2d4a2d', accent: '#52c07a' }
+        const cardDataUrl = await renderCardImage(cardText, scheme)
+        images.push({ label: '卡片图', base64: cardDataUrl.replace(/^data:image\/png;base64,/, '') })
+        log(`  └ 卡片图 ✓`, 'success')
+      } catch (e) {
+        log(`  └ 卡片图失败：${e.message}`, 'error')
+      }
     }
 
     // 把本商品所有图片发回主线程（主线程负责：笔记生成 + docx + ZIP + 飞书）
-    // cardText：卡片图使用的文案，主线程直接用于笔记标题，无需重新随机
+    // cardText：卡片/封面使用的文案，主线程直接用于笔记标题，无需重新随机
     post({ type: 'product-images', id, company, images, cardText })
 
     done++; prog(done, total)
