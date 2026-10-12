@@ -1604,6 +1604,8 @@ const CARD_TEMPLATE_STYLES = [
   'poster','check','tags','folder','note2','mono','exam','stamp','dark2','app',
   'course','wrong','side','gridnote','paperclip','blue','photo','cutout','softpink','greenfile',
   'orangeburst','blueprint_card','receipt_card','neon','vertical','filetab','calendar_card','folderwall_card','outline_card','cream_card','stamp2','marker',
+  'ref_dark_border','ref_plaid','ref_arch','ref_ticket','ref_purple_sidebar','ref_clipboard','ref_minimal_red','ref_green_wave','ref_green_bands','ref_envelope','ref_purple_wave','ref_blue_sidebar','ref_brown_banner',
+  'ref_tea_dark_border','ref_tea_plaid','ref_tea_arch','ref_tea_ticket','ref_tea_purple_sidebar','ref_tea_clipboard','ref_tea_minimal_red','ref_tea_green_wave','ref_tea_green_bands','ref_tea_envelope','ref_tea_purple_wave','ref_tea_blue_sidebar','ref_tea_brown_banner',
 ]
 
 const CARD_TEMPLATE_STYLE_NAMES = {
@@ -1639,6 +1641,32 @@ const CARD_TEMPLATE_STYLE_NAMES = {
   cream_card: '奶油纸张',
   stamp2: '描边印章',
   marker: '马克笔',
+  ref_dark_border: '深蓝细框',
+  ref_plaid: '紫灰格纹',
+  ref_arch: '绿色拱门',
+  ref_ticket: '牛皮纸票券',
+  ref_purple_sidebar: '紫色侧栏',
+  ref_clipboard: '蓝灰夹板',
+  ref_minimal_red: '黑红极简',
+  ref_green_wave: '绿波几何',
+  ref_green_bands: '绿色横条',
+  ref_envelope: '信封折角',
+  ref_purple_wave: '紫色波浪',
+  ref_blue_sidebar: '蓝灰侧栏',
+  ref_brown_banner: '棕色横幅',
+  ref_tea_dark_border: '茶金青墨·深蓝细框',
+  ref_tea_plaid: '茶金青墨·紫灰格纹',
+  ref_tea_arch: '茶金青墨·绿色拱门',
+  ref_tea_ticket: '茶金青墨·牛皮纸票券',
+  ref_tea_purple_sidebar: '茶金青墨·紫色侧栏',
+  ref_tea_clipboard: '茶金青墨·蓝灰夹板',
+  ref_tea_minimal_red: '茶金青墨·黑红极简',
+  ref_tea_green_wave: '茶金青墨·绿波几何',
+  ref_tea_green_bands: '茶金青墨·绿色横条',
+  ref_tea_envelope: '茶金青墨·信封折角',
+  ref_tea_purple_wave: '茶金青墨·紫色波浪',
+  ref_tea_blue_sidebar: '茶金青墨·蓝灰侧栏',
+  ref_tea_brown_banner: '茶金青墨·棕色横幅',
 }
 
 const CARD_BOTTOM_HINTS = [
@@ -2073,12 +2101,358 @@ function drawTemplateCardDecor(ctx, W, H, style, palette, scale) {
   ctx.restore()
 }
 
+const REFERENCE_CARD_STYLES = new Set([
+  'ref_dark_border','ref_plaid','ref_arch','ref_ticket','ref_purple_sidebar','ref_clipboard','ref_minimal_red',
+  'ref_green_wave','ref_green_bands','ref_envelope','ref_purple_wave','ref_blue_sidebar','ref_brown_banner',
+])
+
+const REFERENCE_TEA_THEME_MAP = {
+  ref_tea_dark_border: 'ref_dark_border',
+  ref_tea_plaid: 'ref_plaid',
+  ref_tea_arch: 'ref_arch',
+  ref_tea_ticket: 'ref_ticket',
+  ref_tea_purple_sidebar: 'ref_purple_sidebar',
+  ref_tea_clipboard: 'ref_clipboard',
+  ref_tea_minimal_red: 'ref_minimal_red',
+  ref_tea_green_wave: 'ref_green_wave',
+  ref_tea_green_bands: 'ref_green_bands',
+  ref_tea_envelope: 'ref_envelope',
+  ref_tea_purple_wave: 'ref_purple_wave',
+  ref_tea_blue_sidebar: 'ref_blue_sidebar',
+  ref_tea_brown_banner: 'ref_brown_banner',
+}
+
+const REFERENCE_TEA_THEME_PALETTES = {
+  ref_tea_dark_border: { ink: '#10212f', deep: '#163f5d', accent: '#80b8c8', soft: '#d9e9ed', paper: '#f6fbfb', pale: '#e8f3f6', line: '#9cc7d1' },
+  ref_tea_plaid: { ink: '#33252f', deep: '#7f536c', accent: '#b88ca2', soft: '#eadde5', paper: '#fbf7fa', pale: '#f2e9ef', line: '#c9aebe' },
+  ref_tea_arch: { ink: '#12382c', deep: '#1f765f', accent: '#8fbf78', soft: '#dcebd6', paper: '#fffef6', pale: '#edf5e8', line: '#a9c99b' },
+  ref_tea_ticket: { ink: '#372b22', deep: '#80674d', accent: '#b79a72', soft: '#eadfce', paper: '#fffaf0', pale: '#f4ead9', line: '#c9b28e' },
+  ref_tea_purple_sidebar: { ink: '#2c2034', deep: '#704381', accent: '#b799c8', soft: '#eadff0', paper: '#fcf8ff', pale: '#f3edf7', line: '#c9b4d2' },
+  ref_tea_clipboard: { ink: '#202538', deep: '#37405d', accent: '#98a7c4', soft: '#e0e5ee', paper: '#fbfcff', pale: '#eef2f6', line: '#b9c4d6' },
+  ref_tea_minimal_red: { ink: '#191713', deep: '#9f252c', accent: '#d8a14b', soft: '#efe3cb', paper: '#fffaf0', pale: '#f4ecdc', line: '#c7b088' },
+  ref_tea_green_wave: { ink: '#18392f', deep: '#5c7d68', accent: '#a7c8b1', soft: '#dfece4', paper: '#f8fbf7', pale: '#edf5ef', line: '#bfd5c6' },
+  ref_tea_green_bands: { ink: '#1d4624', deep: '#315d34', accent: '#9dd35f', soft: '#e5f2d2', paper: '#f9fff2', pale: '#eef7df', line: '#bedb93' },
+  ref_tea_envelope: { ink: '#2b1d35', deep: '#71407e', accent: '#d0b8dd', soft: '#eadfed', paper: '#fffaff', pale: '#f4eef6', line: '#cdbbd4' },
+  ref_tea_purple_wave: { ink: '#301b36', deep: '#7a4185', accent: '#d6a6c9', soft: '#eeddea', paper: '#fff8fd', pale: '#f6ecf4', line: '#d5bfd1' },
+  ref_tea_blue_sidebar: { ink: '#243642', deep: '#38586b', accent: '#9fc4d7', soft: '#dfeaf0', paper: '#f8fbfd', pale: '#eef5f8', line: '#bfd3dd' },
+  ref_tea_brown_banner: { ink: '#3f3228', deep: '#5d4938', accent: '#d4a35f', soft: '#e8dfd3', paper: '#fbf7ef', pale: '#f1e9df', line: '#cdbda8' },
+}
+
+function hexToRgb(hex) {
+  const v = String(hex || '').replace('#', '')
+  const n = parseInt(v.length === 3 ? v.split('').map(ch => ch + ch).join('') : v, 16)
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
+}
+
+function mixRgb(a, b, t) {
+  return [
+    Math.round(a[0] + (b[0] - a[0]) * t),
+    Math.round(a[1] + (b[1] - a[1]) * t),
+    Math.round(a[2] + (b[2] - a[2]) * t),
+  ]
+}
+
+function paintPixel(data, i, rgb) {
+  data[i] = rgb[0]
+  data[i + 1] = rgb[1]
+  data[i + 2] = rgb[2]
+}
+
+function applyTeaReferenceTheme(ctx, W, H, palette = REFERENCE_TEA_THEME_PALETTES.ref_tea_brown_banner) {
+  const img = ctx.getImageData(0, 0, W, H)
+  const data = img.data
+  const ink = hexToRgb(palette.ink)
+  const deep = hexToRgb(palette.deep)
+  const accent = hexToRgb(palette.accent)
+  const soft = hexToRgb(palette.soft)
+  const paper = hexToRgb(palette.paper)
+  const pale = hexToRgb(palette.pale)
+  const line = hexToRgb(palette.line)
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i + 3] === 0) continue
+    const r = data[i], g = data[i + 1], b = data[i + 2]
+    const max = Math.max(r, g, b)
+    const min = Math.min(r, g, b)
+    const lum = (r * 0.2126 + g * 0.7152 + b * 0.0722) / 255
+    const sat = max === 0 ? 0 : (max - min) / max
+    if (lum > 0.94) {
+      paintPixel(data, i, paper)
+    } else if (lum > 0.82) {
+      paintPixel(data, i, mixRgb(paper, soft, sat > 0.12 ? 0.72 : 0.28))
+    } else if (lum > 0.66) {
+      paintPixel(data, i, sat > 0.10 ? mixRgb(soft, accent, 0.22) : pale)
+    } else if (lum > 0.46) {
+      paintPixel(data, i, sat > 0.12 ? accent : line)
+    } else if (lum > 0.26) {
+      paintPixel(data, i, sat > 0.10 ? deep : mixRgb(ink, deep, 0.36))
+    } else {
+      paintPixel(data, i, ink)
+    }
+  }
+  ctx.putImageData(img, 0, 0)
+}
+
+function drawRefTextBlock(ctx, text, x, y, maxWidth, fontSize, color, options = {}) {
+  const minSize = options.minSize || 28
+  const weight = options.weight || 900
+  const family = options.family || '"PingFang SC", "Helvetica Neue", sans-serif'
+  const align = options.align || 'center'
+  const maxLines = options.maxLines || 4
+  let size = fontSize
+  let lines = []
+  ctx.textBaseline = 'top'
+  ctx.textAlign = align
+  while (size >= minSize) {
+    ctx.font = `${weight} ${size}px ${family}`
+    lines = wrapCardLines(ctx, text, maxWidth)
+    if (lines.length <= maxLines) break
+    size -= 2
+  }
+  const lineHeight = Math.round(size * (options.lineHeight || 1.28))
+  const drawLines = lines.slice(0, maxLines)
+  const tx = align === 'center' ? x + maxWidth / 2 : x
+  ctx.fillStyle = color
+  drawLines.forEach((line, i) => ctx.fillText(line, tx, y + i * lineHeight))
+  ctx.textAlign = 'left'
+  return y + drawLines.length * lineHeight
+}
+
+function drawRefPill(ctx, x, y, w, h, fill, text, color, fontSize = 34, radius = 18) {
+  ctx.fillStyle = fill
+  ctx.beginPath(); ctx.roundRect(x, y, w, h, radius); ctx.fill()
+  ctx.fillStyle = color
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.font = `900 ${fontSize}px "PingFang SC", "Helvetica Neue", sans-serif`
+  ctx.fillText(text, x + w / 2, y + h / 2)
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'top'
+}
+
+function drawRefContentText(ctx, x, y, maxWidth, title, lines, color, accent, align = 'center') {
+  ctx.fillStyle = accent
+  ctx.textAlign = align
+  ctx.textBaseline = 'top'
+  ctx.font = `900 24px "PingFang SC", "Helvetica Neue", sans-serif`
+  const tx = align === 'center' ? x + maxWidth / 2 : x
+  if (title) ctx.fillText(title, tx, y)
+  ctx.fillStyle = color
+  ctx.font = `900 36px "PingFang SC", "Helvetica Neue", sans-serif`
+  lines.forEach((line, i) => ctx.fillText(line, tx, y + 56 + i * 54))
+  ctx.textAlign = 'left'
+}
+
+function drawRefRuledBg(ctx, W, H, color = '#d9e4df') {
+  ctx.strokeStyle = color
+  ctx.lineWidth = 1.2
+  for (let y = 100; y < H; y += 145) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke()
+  }
+}
+
+function drawRefCardImage(ctx, W, H, style, text) {
+  const { main, sub } = splitCardText(text || '')
+  const title = main || '2026招聘考试资料'
+  const tagText = '笔试资料  面试资料  历年真题'
+  ctx.font = '900 36px "PingFang SC", sans-serif'
+  const infoLines = (sub && sub.length > 8)
+    ? wrapCardLines(ctx, sub, 800).slice(0, 2)
+    : ['综合知识 | 法律基础知识', '笔试资料 | 历年真题']
+
+  ctx.clearRect(0, 0, W, H)
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, W, H)
+
+  if (style === 'ref_dark_border') {
+    ctx.fillStyle = '#13202b'; ctx.fillRect(0, 0, W, H)
+    ctx.strokeStyle = '#a6c7cd'; ctx.lineWidth = 4
+    ctx.beginPath(); ctx.roundRect(54, 54, W - 108, H - 108, 28); ctx.stroke()
+    drawRefTextBlock(ctx, title, 84, 284, W - 168, 70, '#f6fbfb', { maxLines: 4, minSize: 46 })
+    drawRefPill(ctx, 96, 734, W - 192, 108, 'transparent', tagText, '#a6c7cd', 38, 54)
+    ctx.strokeStyle = '#a6c7cd'; ctx.lineWidth = 5
+    ctx.beginPath(); ctx.roundRect(96, 734, W - 192, 108, 54); ctx.stroke()
+    drawRefContentText(ctx, 120, 990, W - 240, '', infoLines, '#f6fbfb', '#f6fbfb')
+    drawRefTextBlock(ctx, '电子版资料 可打印', 120, 1276, W - 240, 30, '#f6fbfb', { maxLines: 1, minSize: 24 })
+    return
+  }
+
+  if (style === 'ref_plaid') {
+    ctx.fillStyle = '#f6f0f4'; ctx.fillRect(0, 0, W, H)
+    for (let x = 0; x < W; x += 90) {
+      ctx.fillStyle = (x / 90) % 2 ? '#8f7987' : '#a8929f'
+      ctx.fillRect(x, 0, 90, 90); ctx.fillRect(x, H - 90, 90, 90)
+    }
+    ctx.strokeStyle = '#473f46'; ctx.lineWidth = 4
+    ctx.beginPath(); ctx.roundRect(56, 134, W - 112, H - 226, 16); ctx.stroke()
+    ctx.fillStyle = '#8f7987'; ctx.fillRect(82, 166, 314, 70)
+    drawRefTextBlock(ctx, title, 88, 300, W - 176, 68, '#3f3840', { maxLines: 3, minSize: 42 })
+    drawRefPill(ctx, 96, 740, W - 192, 102, '#8f7987', tagText.replaceAll('  ', ' · '), '#fff', 38, 22)
+    drawRefContentText(ctx, 110, 932, W - 220, '备考内容', infoLines, '#3f3840', '#a18b99', 'left')
+    drawRefPill(ctx, 444, 1190, 504, 96, '#8f7987', '电子版资料 可打印', '#fff', 34, 48)
+    return
+  }
+
+  if (style === 'ref_arch') {
+    ctx.fillStyle = '#dcead6'; ctx.fillRect(0, 0, W, H)
+    ctx.fillStyle = '#fffef6'; ctx.beginPath(); ctx.roundRect(88, 82, W - 176, H - 168, 420); ctx.fill()
+    ctx.strokeStyle = '#1f765f'; ctx.lineWidth = 7
+    ctx.beginPath(); ctx.roundRect(114, 114, W - 228, H - 228, 390); ctx.stroke()
+    drawRefTextBlock(ctx, title, 150, 340, W - 300, 58, '#134536', { maxLines: 4, minSize: 38 })
+    drawRefPill(ctx, 164, 750, W - 328, 104, '#1f765f', tagText.replaceAll('  ', ' · '), '#fff', 38, 18)
+    drawRefContentText(ctx, 190, 940, W - 380, '笔试内容', infoLines, '#134536', '#1f765f')
+    drawRefPill(ctx, 270, 1244, W - 540, 96, '#1f765f', '电子版资料 可打印', '#fff', 34, 48)
+    return
+  }
+
+  if (style === 'ref_ticket') {
+    ctx.fillStyle = '#eee7de'; ctx.fillRect(0, 0, W, H)
+    ctx.fillStyle = '#fffdf8'; ctx.beginPath(); ctx.roundRect(68, 78, W - 136, H - 156, 28); ctx.fill()
+    ctx.strokeStyle = '#826f5b'; ctx.lineWidth = 4; ctx.setLineDash([14, 10])
+    ctx.beginPath(); ctx.roundRect(68, 78, W - 136, H - 156, 28); ctx.stroke(); ctx.setLineDash([])
+    for (let y = 144; y < H - 110; y += 108) {
+      ctx.fillStyle = '#eee7de'; ctx.beginPath(); ctx.arc(68, y, 17, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.arc(W - 68, y, 17, 0, Math.PI * 2); ctx.fill()
+    }
+    ctx.save(); ctx.translate(710, 150); ctx.rotate(-0.13); ctx.strokeStyle = '#a89178'; ctx.lineWidth = 6; ctx.beginPath(); ctx.roundRect(0, 0, 248, 82, 12); ctx.stroke(); ctx.restore()
+    drawRefTextBlock(ctx, title, 110, 310, W - 220, 62, '#342d28', { maxLines: 4, minSize: 40 })
+    drawRefPill(ctx, 130, 746, W - 260, 104, '#826f5b', tagText.replaceAll('  ', ' · '), '#fff', 38, 16)
+    drawRefContentText(ctx, 130, 944, W - 260, '笔试内容', infoLines, '#342d28', '#a89178', 'left')
+    drawRefPill(ctx, 286, 1240, W - 572, 94, '#826f5b', '电子版资料 可打印', '#fff', 34, 48)
+    return
+  }
+
+  if (style === 'ref_purple_sidebar') {
+    ctx.fillStyle = '#f3edf5'; ctx.fillRect(0, 0, W, H)
+    ctx.fillStyle = '#704381'; ctx.fillRect(0, 0, 122, H)
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.roundRect(154, 60, W - 214, H - 120, 34); ctx.fill()
+    ctx.fillStyle = '#704381'; ctx.font = '900 28px "PingFang SC", sans-serif'; ctx.fillText('招聘考试资料', 200, 112)
+    drawRefTextBlock(ctx, title, 206, 198, W - 292, 64, '#2c2034', { maxLines: 4, minSize: 40 })
+    drawRefPill(ctx, 204, 718, W - 312, 110, '#704381', tagText, '#fff', 39, 18)
+    drawRefContentText(ctx, 206, 918, W - 310, '笔试内容', infoLines, '#2c2034', '#704381', 'left')
+    drawRefPill(ctx, 382, 1230, 488, 96, '#704381', '电子版资料 可打印', '#fff', 34, 48)
+    return
+  }
+
+  if (style === 'ref_clipboard') {
+    ctx.fillStyle = '#edf1f4'; ctx.fillRect(0, 0, W, H); drawRefRuledBg(ctx, W, H, '#d8dee4')
+    ctx.fillStyle = '#dde0ea'; ctx.beginPath(); ctx.moveTo(470, 60); ctx.lineTo(710, 60); ctx.lineTo(790, 130); ctx.lineTo(390, 130); ctx.closePath(); ctx.fill()
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.roundRect(70, 130, W - 140, H - 220, 26); ctx.fill()
+    ctx.fillStyle = '#37405d'; ctx.beginPath(); ctx.roundRect(92, 156, W - 184, 104, 10); ctx.fill()
+    drawRefTextBlock(ctx, title, 92, 278, W - 184, 70, '#202538', { maxLines: 4, minSize: 42 })
+    drawRefTextBlock(ctx, tagText, 170, 834, W - 340, 44, '#37405d', { maxLines: 1, minSize: 30 })
+    drawRefContentText(ctx, 160, 980, W - 320, '', infoLines, '#202538', '#202538')
+    drawRefPill(ctx, 286, 1232, W - 572, 98, '#37405d', '电子版资料 可打印', '#fff', 34, 48)
+    return
+  }
+
+  if (style === 'ref_minimal_red') {
+    ctx.fillStyle = '#efe8da'; ctx.fillRect(0, 0, W, H)
+    ctx.fillStyle = '#fffef9'; ctx.fillRect(48, 48, W - 96, H - 96)
+    ctx.strokeStyle = '#141414'; ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(74, 152); ctx.lineTo(W - 74, 152); ctx.stroke()
+    drawRefTextBlock(ctx, title, 110, 214, W - 220, 70, '#111', { maxLines: 4, minSize: 42 })
+    ctx.strokeStyle = '#141414'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(74, 696); ctx.lineTo(W - 74, 696); ctx.stroke()
+    drawRefTextBlock(ctx, tagText.replaceAll('  ', ' | '), 100, 746, W - 200, 38, '#ba202b', { maxLines: 1, minSize: 28 })
+    ctx.strokeStyle = '#aaa39a'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(W / 2, 834); ctx.lineTo(W / 2, 1110); ctx.stroke()
+    drawRefContentText(ctx, 100, 886, 390, '核心内容', infoLines.slice(0, 2), '#111', '#ba202b', 'left')
+    drawRefContentText(ctx, 610, 886, 350, '资料说明', ['电子版资料', '支持打印复习'], '#111', '#ba202b', 'left')
+    drawRefPill(ctx, 270, 1248, W - 540, 96, '#c3222b', '电子版资料 可打印', '#fff', 34, 48)
+    return
+  }
+
+  if (style === 'ref_green_wave') {
+    ctx.fillStyle = '#edf3ef'; ctx.fillRect(0, 0, W, H)
+    ctx.fillStyle = '#5c7d68'
+    ctx.beginPath(); ctx.moveTo(0, 42); ctx.bezierCurveTo(220, -26, 300, 78, 456, 38); ctx.bezierCurveTo(660, -28, 850, 28, W, 148); ctx.lineTo(W, 592); ctx.lineTo(0, 592); ctx.closePath(); ctx.fill()
+    ctx.fillStyle = '#dbe7df'; ctx.beginPath(); ctx.arc(W - 120, 540, 190, 0, Math.PI * 2); ctx.fill()
+    drawRefTextBlock(ctx, title, 82, 142, W - 164, 62, '#fff', { maxLines: 4, minSize: 40 })
+    drawRefPill(ctx, 96, 714, W - 192, 104, '#5c7d68', tagText.replaceAll('  ', ' · '), '#fff', 38, 16)
+    ctx.fillStyle = '#fffef9'; ctx.beginPath(); ctx.roundRect(132, 906, W - 264, 258, 90); ctx.fill()
+    drawRefContentText(ctx, 170, 954, W - 340, '笔试内容', infoLines, '#18392f', '#5c7d68')
+    drawRefPill(ctx, 270, 1248, W - 540, 96, '#5c7d68', '电子版资料 可打印', '#fff', 34, 48)
+    return
+  }
+
+  if (style === 'ref_green_bands') {
+    ctx.fillStyle = '#f1f6f2'; ctx.fillRect(0, 0, W, H); drawRefRuledBg(ctx, W, H, '#d4ded6')
+    ctx.fillStyle = '#315d34'; ctx.fillRect(0, 70, 904, 65); ctx.fillRect(0, 548, 966, 220)
+    ctx.fillStyle = '#dbe8db'; ctx.fillRect(138, 196, W - 138, 330)
+    drawRefTextBlock(ctx, title, 200, 218, W - 250, 70, '#1d4624', { maxLines: 3, minSize: 42 })
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.roundRect(126, 548, W - 252, 220, 28); ctx.fill()
+    drawRefTextBlock(ctx, tagText.replaceAll('  ', ' · '), 160, 580, W - 320, 52, '#315d34', { maxLines: 2, minSize: 34 })
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.roundRect(74, 810, W - 148, 512, 28); ctx.fill()
+    drawRefContentText(ctx, 150, 858, W - 300, '', infoLines, '#1d4624', '#1d4624')
+    drawRefPill(ctx, 286, 1210, W - 572, 96, '#315d34', '电子版资料 可打印', '#fff', 34, 48)
+    return
+  }
+
+  if (style === 'ref_envelope') {
+    ctx.fillStyle = '#f3eff5'; ctx.fillRect(0, 0, W, H); drawRefRuledBg(ctx, W, H, '#ded7e2')
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.roundRect(60, 88, W - 120, H - 180, 26); ctx.fill()
+    ctx.fillStyle = '#e4dce7'; ctx.beginPath(); ctx.moveTo(60, 88); ctx.lineTo(W - 60, 88); ctx.lineTo(W / 2, 262); ctx.closePath(); ctx.fill()
+    ctx.strokeStyle = '#c7b9cb'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(60, 88); ctx.lineTo(W / 2, 262); ctx.lineTo(W - 60, 88); ctx.stroke()
+    drawRefTextBlock(ctx, title, 96, 300, W - 192, 68, '#2b1d35', { maxLines: 4, minSize: 42 })
+    drawRefPill(ctx, 130, 624, W - 260, 108, '#71407e', tagText, '#fff', 38, 16)
+    drawRefContentText(ctx, 140, 902, W - 280, '', infoLines, '#2b1d35', '#2b1d35')
+    drawRefPill(ctx, 286, 1228, W - 572, 96, '#71407e', '电子版资料 可打印', '#fff', 34, 48)
+    return
+  }
+
+  if (style === 'ref_purple_wave') {
+    ctx.fillStyle = '#f8f2f8'; ctx.fillRect(0, 0, W, H)
+    ctx.fillStyle = '#fff'; ctx.fillRect(60, 70, W - 120, H - 140)
+    ctx.fillStyle = '#7a4185'; ctx.beginPath(); ctx.roundRect(60, 70, W - 120, 55, 18); ctx.fill()
+    drawRefTextBlock(ctx, title, 96, 222, W - 192, 70, '#2b1d35', { maxLines: 4, minSize: 42 })
+    drawRefTextBlock(ctx, tagText, 170, 636, W - 340, 40, '#7a4185', { maxLines: 1, minSize: 30 })
+    drawRefContentText(ctx, 120, 810, W - 240, '笔试内容', infoLines, '#2b1d35', '#7a4185')
+    ctx.fillStyle = '#e8d9ec'; ctx.beginPath(); ctx.moveTo(60, 1180); ctx.bezierCurveTo(250, 1080, 430, 1245, 610, 1130); ctx.bezierCurveTo(770, 1024, 900, 1120, W - 60, 1192); ctx.lineTo(W - 60, H - 70); ctx.lineTo(60, H - 70); ctx.closePath(); ctx.fill()
+    drawRefPill(ctx, 286, 1220, W - 572, 96, '#7a4185', '电子版资料 可打印', '#fff', 34, 48)
+    return
+  }
+
+  if (style === 'ref_blue_sidebar') {
+    ctx.fillStyle = '#f0f4f6'; ctx.fillRect(0, 0, W, H)
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.roundRect(70, 60, 815, H - 120, 20); ctx.fill()
+    ctx.fillStyle = '#38586b'; ctx.beginPath(); ctx.roundRect(110, 714, 710, 112, 18); ctx.fill()
+    ctx.fillStyle = '#38586b'; ctx.fillRect(884, 148, 158, 112); ctx.fillRect(884, 574, 158, 112); ctx.fillRect(884, 1000, 158, 112)
+    ctx.strokeStyle = '#d4dde3'; ctx.lineWidth = 16; ctx.beginPath(); ctx.arc(944, 184, 130, 0, Math.PI * 2); ctx.stroke()
+    ctx.fillStyle = '#38586b'; ctx.font = '900 28px "PingFang SC", sans-serif'; ctx.fillText('2026 招聘考试', 110, 118)
+    drawRefTextBlock(ctx, title, 110, 266, 710, 68, '#243642', { align: 'left', maxLines: 4, minSize: 42 })
+    drawRefTextBlock(ctx, tagText, 130, 754, 670, 38, '#fff', { maxLines: 1, minSize: 28 })
+    drawRefContentText(ctx, 110, 920, 650, '', infoLines, '#243642', '#243642', 'left')
+    drawRefPill(ctx, 304, 1236, 490, 96, '#38586b', '电子版资料 可打印', '#fff', 34, 48)
+    return
+  }
+
+  if (style === 'ref_brown_banner') {
+    ctx.fillStyle = '#f5f3f0'; ctx.fillRect(0, 0, W, H)
+    ctx.strokeStyle = '#d1cbc4'; ctx.lineWidth = 3; ctx.strokeRect(60, 88, W - 120, H - 176); ctx.strokeRect(96, 122, W - 192, H - 244)
+    ctx.fillStyle = '#5d4938'; ctx.fillRect(0, 70, 904, 148)
+    ctx.fillStyle = '#fff'; ctx.font = '900 32px "PingFang SC", sans-serif'; ctx.fillText('2026 招聘考试资料', 70, 138)
+    ctx.fillStyle = '#e7e3df'; ctx.fillRect(138, 240, W - 138, 178)
+    drawRefTextBlock(ctx, title, 160, 244, W - 220, 54, '#3f3228', { maxLines: 3, minSize: 36, family: '"Songti SC", serif' })
+    ctx.fillStyle = '#5d4938'; ctx.fillRect(0, 436, 966, 156)
+    drawRefTextBlock(ctx, sub || '所属单位辅警招聘', 180, 474, 760, 54, '#fff', { maxLines: 1, minSize: 34 })
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.roundRect(74, 626, W - 148, 696, 28); ctx.fill()
+    drawRefTextBlock(ctx, tagText, 160, 730, W - 320, 42, '#5d4938', { maxLines: 1, minSize: 30 })
+    drawRefContentText(ctx, 210, 930, W - 420, '', ['法律基础 · 行政能力', '书面表达 · 专业素养'], '#3f3228', '#3f3228')
+    drawRefPill(ctx, 286, 1214, W - 572, 96, '#5d4938', '电子版资料 可打印', '#fff', 34, 48)
+  }
+}
+
 async function renderTemplateCardImage(text, templateStyle, bottomHint) {
   const SCALE = 3
   const W = 360 * SCALE, H = 480 * SCALE
   const canvas = new OffscreenCanvas(W, H)
   const ctx = canvas.getContext('2d')
   const style = templateStyle || rndPick(CARD_TEMPLATE_STYLES)
+  if (REFERENCE_TEA_THEME_MAP[style]) {
+    drawRefCardImage(ctx, W, H, REFERENCE_TEA_THEME_MAP[style], text)
+    applyTeaReferenceTheme(ctx, W, H, REFERENCE_TEA_THEME_PALETTES[style])
+    return offscreenToDataUrl(canvas)
+  }
+  if (REFERENCE_CARD_STYLES.has(style)) {
+    drawRefCardImage(ctx, W, H, style, text)
+    return offscreenToDataUrl(canvas)
+  }
   const palette = getTemplateCardPalette(style)
   const variant = pickCardAntiVariant(style)
   drawTemplateCardBackground(ctx, W, H, style, SCALE)

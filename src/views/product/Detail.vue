@@ -25,6 +25,10 @@
               <a-menu-item key="timeline_score">📊 时间轴/分值</a-menu-item>
               <a-menu-divider />
               <a-menu-item key="note_image_set">📚 整组笔记配图</a-menu-item>
+              <template v-if="isCommunityWorkerProduct">
+                <a-menu-divider />
+                <a-menu-item key="community_worker_set">🏘️ 社区工作者图文模板</a-menu-item>
+              </template>
             </a-menu>
           </template>
         </a-dropdown>
@@ -1182,6 +1186,125 @@
       v-model:visible="noteImageSetVisible"
       :data="data"
     />
+
+    <!-- 社区工作者专用图文模板 -->
+    <a-drawer
+      v-model:open="communityImageDrawer.visible"
+      title="社区工作者图文模板"
+      placement="right"
+      width="86%"
+      :destroy-on-close="false"
+      :mask-closable="false"
+    >
+      <template #extra>
+        <a-space>
+          <span class="community-template-label">版式</span>
+          <a-select
+            v-model:value="communityImageDrawer.template"
+            size="small"
+            style="width: 132px"
+            :options="communityWorkerTemplateOptions"
+          />
+          <a-button
+            v-if="communityImageDrawer.images.length"
+            :loading="communityImageDrawer.downloading"
+            @click="downloadCommunityWorkerImages"
+          >
+            <DownloadOutlined /> 下载全部
+          </a-button>
+          <a-button
+            type="primary"
+            :loading="communityImageDrawer.generating"
+            @click="generateCommunityWorkerImages"
+          >
+            {{ communityImageDrawer.images.length ? '重新生成' : '生成图片' }}
+          </a-button>
+        </a-space>
+      </template>
+
+      <a-alert
+        type="info"
+        show-icon
+        style="margin-bottom: 14px"
+        :message="`单位：${communityImageMeta.orgLine} ／ 商品类型：${data.job_type_name || '-'}`"
+        description="根据商品详情中的单位名称、公告名称、笔试内容、招聘人数与时间信息生成 6 张社区工作者图文资料图。"
+      />
+
+      <div v-if="communityImageDrawer.generating" class="field-placeholder loading-box community-loading">
+        <a-spin /> <span style="margin-left: 8px; color: #999">正在生成社区工作者图文图片...</span>
+      </div>
+      <div v-else-if="communityImageDrawer.images.length" class="community-result-grid">
+        <div v-for="(img, idx) in communityImageDrawer.images" :key="idx" class="community-result-item">
+          <a-image :src="img.blobUrl" :width="180" :height="240" />
+          <a-button size="small" type="link" @click="downloadCommunityWorkerImage(idx)">
+            <DownloadOutlined /> 下载第 {{ idx + 1 }} 张
+          </a-button>
+        </div>
+      </div>
+      <a-empty v-else description="点击右上角生成图片" />
+
+      <div class="community-render-host" aria-hidden="true">
+        <div
+          v-for="page in communityWorkerPages"
+          :key="page.no"
+          class="community-poster"
+          :class="[communityImageDrawer.theme, communityImageDrawer.activeTemplate, page.type === 'overview' ? 'cw-page-overview' : 'cw-page-detail']"
+          :data-community-page="page.no"
+        >
+          <section class="cw-header">
+            <div class="cw-kicker">{{ communityImageMeta.orgLine }} · 社区专职工作者</div>
+            <div class="cw-title">{{ page.title }}</div>
+            <div v-if="page.badge" class="cw-badge">{{ page.badge }}</div>
+            <div class="cw-subrow">
+              <span>{{ page.subtitle }}</span>
+              <strong>{{ String(page.no).padStart(2, '0') }} / 06</strong>
+            </div>
+          </section>
+
+          <section v-if="page.type === 'overview'" class="cw-body cw-body-overview">
+            <div class="cw-blackbar">
+              笔试共考 <b>四大模块</b>：综合知识 + 社会工作知识 + 能力素质 + 写作
+            </div>
+            <div class="cw-section-title">笔试范围 · 4 大模块</div>
+            <div class="cw-overview-grid">
+              <div class="cw-module-list">
+                <div v-for="mod in page.modules" :key="mod" class="cw-module-pill">{{ mod }}</div>
+              </div>
+              <div class="cw-module-points">
+                <div v-for="line in page.moduleLines" :key="line" class="cw-dot-line" v-html="line"></div>
+              </div>
+            </div>
+            <div class="cw-section-title">备考时间线</div>
+            <div class="cw-timeline">
+              <div v-for="item in page.timeline" :key="item.title" class="cw-time-point">
+                <span></span>
+                <strong>{{ item.title }}</strong>
+                <em>{{ item.text }}</em>
+              </div>
+            </div>
+            <div class="cw-section-title">备考关键</div>
+            <div class="cw-key-list">
+              <div v-for="line in page.keys" :key="line" v-html="line"></div>
+            </div>
+          </section>
+
+          <section v-else class="cw-body">
+            <div v-for="block in page.blocks" :key="block.label" class="cw-row">
+              <div class="cw-row-label">{{ block.label }}</div>
+              <div class="cw-row-content">
+                <div v-for="line in block.lines" :key="line" class="cw-dot-line" v-html="line"></div>
+              </div>
+            </div>
+          </section>
+
+          <section class="cw-footer">
+            <strong>完整版资料戳主页</strong>
+            <span>|</span>
+            <em>{{ page.footer }}</em>
+          </section>
+        </div>
+      </div>
+    </a-drawer>
   </div>
 </template>
 
@@ -1212,6 +1335,7 @@ import { getBgImageList } from '@/api/bgImages'
 import { Document, Packer, Paragraph, TextRun, HeadingLevel } from 'docx'
 import { saveAs } from 'file-saver'
 import { BODY_TEMPLATES } from '@/utils/bodyTemplates'
+import { toPng } from 'html-to-image'
 
 const route = useRoute()
 const router = useRouter()
@@ -1239,6 +1363,16 @@ const coverImageUrl = ref('')
 const coverImageUrls = ref([])
 const coverPromptUsed = ref('')
 const templateModalVisible = ref(false)
+const communityImageDrawer = reactive({
+  visible: false,
+  generating: false,
+  downloading: false,
+  theme: 'cw-theme-red',
+  template: 'random',
+  activeTemplate: 'cw-template-classic',
+  contentSeed: Date.now(),
+  images: [],
+})
 
 // ─── 备考海报一键生图 ──────────────────────────────────────
 const examCardState = reactive({
@@ -2534,15 +2668,514 @@ async function generateBodyFromTemplate(tpl) {
 const htmlImageVisible = ref(false)
 const htmlImageInitType = ref('exam_info')
 const noteImageSetVisible = ref(false)
+const communityWorkerKeywords = ['社区工作者', '社区专职工作者', '社工岗', '社区招聘', '基层治理', '居委会', '社区工作']
+const communityWorkerThemes = [
+  'cw-theme-red',
+  'cw-theme-blue',
+  'cw-theme-green',
+  'cw-theme-purple',
+  'cw-theme-orange',
+  'cw-theme-teal',
+  'cw-theme-brown',
+  'cw-theme-rose',
+]
+const communityWorkerTemplates = [
+  { label: '经典重点', value: 'cw-template-classic' },
+  { label: '紧凑清单', value: 'cw-template-compact' },
+  { label: '卡片分组', value: 'cw-template-card' },
+  { label: '表格分割', value: 'cw-template-table' },
+  { label: '细线档案', value: 'cw-template-outline' },
+]
+const communityWorkerTemplateOptions = [
+  { label: '随机版式', value: 'random' },
+  ...communityWorkerTemplates,
+]
+
+const isCommunityWorkerProduct = computed(() => {
+  const d = data.value || {}
+  const text = [
+    d.job_type_name,
+    d.title,
+    d.company_name,
+    d.written_exam_content,
+    d.interview_content,
+  ].filter(Boolean).join(' ')
+  return communityWorkerKeywords.some(k => text.includes(k))
+})
+
+const communityImageMeta = computed(() => buildCommunityWorkerMeta(data.value || {}))
+const communityWorkerPages = computed(() => buildCommunityWorkerPages(communityImageMeta.value, communityImageDrawer.contentSeed))
 
 function onImageMenuClick({ key }) {
   if (key === 'cover') {
     openExamCard()
   } else if (key === 'note_image_set') {
     noteImageSetVisible.value = true
+  } else if (key === 'community_worker_set') {
+    openCommunityWorkerImages()
   } else {
     htmlImageInitType.value = key
     htmlImageVisible.value = true
+  }
+}
+
+function cleanText(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim()
+}
+
+function extractRegionText(d) {
+  const title = cleanText(d.title)
+  const company = cleanText(d.company_name)
+  const source = `${title} ${company}`
+  const match = source.match(/(\d{4}年?)?([\u4e00-\u9fa5]{2,16}(?:省|市|区|县|旗|州|盟|开发区|经开区|高新区|街道|镇|乡))/)
+  if (match?.[2]) return match[2].replace(/^年/, '')
+  return company || title || '社区工作者'
+}
+
+function extractYearText(d) {
+  const text = `${d.title || ''} ${d.written_exam_time || ''} ${d.apply_time || ''}`
+  const match = text.match(/20\d{2}/)
+  return match?.[0] || new Date().getFullYear()
+}
+
+function hasExamTopic(text, patterns) {
+  return patterns.some(p => text.includes(p))
+}
+
+function buildCommunityWorkerMeta(d) {
+  const examText = cleanText(d.written_exam_content || '')
+  const allText = cleanText([d.title, d.company_name, d.job_type_name, d.written_exam_content, d.interview_content].filter(Boolean).join(' '))
+  const region = extractRegionText(d)
+  const year = extractYearText(d)
+  const jobName = allText.includes('专职工作者') ? '社区专职工作者' : '社区工作者'
+  const orgLine = `${region}`
+  const recruitLine = d.recruit_count ? `招聘 ${d.recruit_count} 人` : '以公告岗位表为准'
+  const timeLine = d.written_exam_time ? `笔试时间：${d.written_exam_time}` : (d.apply_time ? `报名时间：${d.apply_time}` : '考试时间以公告为准')
+  const contentLine = examText || '综合知识、社会工作知识、能力素质与写作'
+  const hasWriting = hasExamTopic(contentLine, ['写作', '作文', '公文', '申论', '应用文'])
+  const hasSocWork = hasExamTopic(contentLine, ['社会工作', '社工', '社区', '基层治理'])
+  const hasLaw = hasExamTopic(contentLine, ['法律', '民法典', '宪法', '法规', '法'])
+  const hasAbility = hasExamTopic(contentLine, ['能力', '行测', '职业能力', '判断推理', '言语理解'])
+  const modules = [
+    '综合知识',
+    hasSocWork ? '社会工作知识' : '社区工作知识',
+    hasAbility ? '能力素质' : '能力测验',
+    hasWriting ? '写作能力' : '应用写作',
+  ]
+  return { region, year, jobName, orgLine, recruitLine, timeLine, contentLine, modules, hasWriting, hasSocWork, hasLaw, hasAbility }
+}
+
+function blue(text) {
+  return `<span class="cw-blue">${text}</span>`
+}
+
+function red(text) {
+  return `<span class="cw-red">${text}</span>`
+}
+
+function pickCommunityWorkerTheme() {
+  const idx = Math.floor(Math.random() * communityWorkerThemes.length)
+  return communityWorkerThemes[idx] || 'cw-theme-red'
+}
+
+function pickCommunityWorkerTemplate() {
+  const idx = Math.floor(Math.random() * communityWorkerTemplates.length)
+  return communityWorkerTemplates[idx]?.value || 'cw-template-classic'
+}
+
+function resolveCommunityWorkerTemplate() {
+  return communityImageDrawer.template === 'random'
+    ? pickCommunityWorkerTemplate()
+    : (communityImageDrawer.template || 'cw-template-classic')
+}
+
+function hashCommunityWorkerText(value) {
+  let hash = 2166136261
+  const text = String(value || '')
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i)
+    hash = Math.imul(hash, 16777619)
+  }
+  return hash >>> 0
+}
+
+function pickCommunityWorkerVariant(seed, key, variants, ctx = {}) {
+  if (!variants?.length) return []
+  const idx = hashCommunityWorkerText(`${seed}:${key}`) % variants.length
+  const picked = variants[idx]
+  return typeof picked === 'function' ? picked(ctx) : picked
+}
+
+const communityWorkerOverviewVariants = {
+  moduleLines: [
+    [
+      `政治理论 · 法律常识 · 经济科技人文 · ${blue('公文基础')}`,
+      `概述 · 专业伦理与价值观 · ${blue('三大方法')}`,
+      `言语理解 · 判断推理 · 沟通协调 · ${blue('应急处置')}`,
+      `应用文写作 · 大作文 · ${blue('格式规范')}`,
+    ],
+    [
+      `时政热点 · 法律基础 · 公共管理 · ${blue('市情区情')}`,
+      `社工价值观 · 个案小组社区 · ${blue('实务流程')}`,
+      `言语判断 · 资料分析 · 沟通表达 · ${blue('现场处置')}`,
+      `通知报告 · 方案简报 · ${blue('议论文写作')}`,
+    ],
+    [
+      `综合常识 · 基层治理 · 法治知识 · ${blue('公文规范')}`,
+      `社会工作理论 · 服务伦理 · ${blue('三大直接方法')}`,
+      `职业能力 · 群众沟通 · 矛盾协调 · ${blue('应急响应')}`,
+      `应用文格式 · 写作素材 · ${blue('答题框架')}`,
+    ],
+  ],
+  keys: [
+    ({ safeRegion }) => [
+      `■ 社会工作知识是拉分核心，${blue('三大方法 + 专业伦理')}反复过`,
+      `■ 个案 = ${red('1对1')} · 小组 = ${red('多人互助')} · 社区 = ${red('整体介入')}，别搞混`,
+      `■ 应用文写作是易拿分项，${blue('通知 · 请示 · 报告 · 函')}背模板稳拿分`,
+      `■ 招考细则、岗位条件以${blue(safeRegion)}官方公告为准`,
+    ],
+    ({ safeRegion }) => [
+      `■ 先把${blue('综合知识 + 社工知识')}框架搭牢，再做真题回填`,
+      `■ 社区工作常考${red('居民自治、网格治理、矛盾调解')}，要能举例`,
+      `■ 写作题优先保证${blue('格式、层次、对策')}，不要只堆口号`,
+      `■ 地区信息以${blue(safeRegion)}公告和附件为准，避免记错条件`,
+    ],
+    ({ safeRegion }) => [
+      `■ 复习顺序建议：${blue('法律常识 → 社工方法 → 能力题 → 写作')}`,
+      `■ 专业伦理抓住${red('尊重、接纳、保密、自决')}几个关键词`,
+      `■ 案例题按${blue('问题识别、依据分析、措施落地')}展开`,
+      `■ ${blue(safeRegion)}岗位要求、时间节点以官方发布为准`,
+    ],
+  ],
+}
+
+const communityWorkerBlockLineVariants = {
+  政治理论与时政: [
+    ['党的创新理论与重要精神', '时事政治与最新会议精神', '基层治理、共同富裕重要论述'],
+    ['最新会议精神与政策热点', '基层党建、群众路线与治理现代化', '共同富裕、民生服务相关表述'],
+    ['政治理论基础与时政热点', '党和国家重大方针政策', '社区治理、公共服务高频表述'],
+  ],
+  法律常识: [
+    [`宪法 · 民法典 · ${blue('城市居民委员会组织法')}`, '未成年人保护法 · 人民调解法', '治安管理处罚法 · 劳动法'],
+    [`民法典社区场景 · ${blue('居委会组织法')}`, '人民调解、物业服务与邻里纠纷', '劳动就业、社会保障相关法规'],
+    [`宪法基础 · ${blue('基层群众自治制度')}`, '婚姻家庭、侵权责任常见考点', '治安管理、未成年人保护常识'],
+  ],
+  经济科技人文: [
+    ['基本经济制度与市场经济常识', '科技常识 · 生活常识', '历史文化 · 地理国情 · 区情市情'],
+    ['经济常识、产业政策与民生热点', '科技生活、公共安全与生态环保', '历史人文、地理国情与地方概况'],
+    ['市场经济基础与宏观政策', '常识判断中的科技、人文、生活知识', '省市区情、地方发展关键词'],
+  ],
+  公文基础知识: [
+    ['公文的种类与格式要素', '行文规则 · 常见文种辨析', '事务文书：总结 · 简报 · 活动方案'],
+    ['通知、报告、请示、函等文种', '标题、主送、正文、落款格式', '简报、总结、方案的结构要点'],
+    ['法定公文与事务文书区分', '行文关系、语言规范与格式规范', '基层工作常用材料写作'],
+  ],
+  区情市情: [
+    ({ safeRegion, safeRecruitLine, safeTimeLine }) => [`地区：${safeRegion}`, safeRecruitLine, safeTimeLine],
+    ({ safeRegion, safeRecruitLine, safeTimeLine }) => [`报考地区：${safeRegion}`, `岗位信息：${safeRecruitLine}`, safeTimeLine],
+    ({ safeRegion, safeRecruitLine, safeTimeLine }) => [`重点关注：${safeRegion}区情`, safeRecruitLine, safeTimeLine],
+  ],
+  社会工作概述: [
+    [`专业助人活动，目标是${blue('助人自助')}`, '功能：预防 · 恢复 · 发展', '角色：服务提供者 · 支持者 · 倡导者'],
+    [`核心目标：促进服务对象${blue('自助与发展')}`, '主要功能：救助、预防、发展', '常见角色：资源链接者、支持者、协调者'],
+    [`以专业方法回应服务需求，强调${blue('助人自助')}`, '服务过程重视评估、介入与跟进', '工作角色包含倡导、支持、服务与管理'],
+  ],
+  专业价值观与伦理: [
+    [`核心：尊重 · 接纳 · 个别化 · ${blue('保密')}`, '对服务对象、对同事、对机构的伦理', '伦理困境与处理原则'],
+    [`尊重服务对象，兼顾${blue('自决与保密')}`, '处理多方关系时坚持专业边界', '遇到伦理冲突按原则排序判断'],
+    [`价值基础：平等、接纳、尊严与${blue('个别化')}`, '保护隐私，避免标签化服务对象', '伦理困境看责任、风险与合法性'],
+  ],
+  社会工作理论: [
+    ['系统理论与生态系统理论', `${blue('优势视角')}与增能（赋权）理论`, '危机干预 · 认知行为理论'],
+    ['人在环境中、系统互动视角', `${blue('增能理论')}与优势视角常考`, '认知行为、危机介入与社会支持'],
+    ['生态系统理论强调环境影响', `${blue('优势视角')}关注资源和潜能`, '危机干预重在及时稳定与支持'],
+  ],
+  人类行为与社会环境: [
+    ['人生发展阶段与各阶段任务', '家庭 · 群体 · 组织 · 社区', '社会环境对个人行为的影响'],
+    ['婴幼儿、青少年、中老年发展特点', '家庭系统、学校单位与社区环境', '个人行为与社会支持网络相关'],
+    ['发展阶段、角色变化与需求差异', '微观到宏观环境层层影响', '社区资源会影响居民问题解决'],
+  ],
+  社会政策与法规: [
+    ['社会救助 · 社会保险 · 社会福利', '老年人 · 未成年人 · 残疾人政策', '劳动就业 · 医疗卫生政策'],
+    ['救助、养老、就业、医疗政策', '特殊群体保障与权益维护', '政策对象、申请条件、服务流程'],
+    ['社会保障体系与民生政策', '儿童、老人、残疾人服务要点', '社区政策宣传与资源转介'],
+  ],
+  个案工作: [
+    [`特点：${blue('一对一')} · 个性化服务`, '过程：接案→预估→计划→介入→评估→结案', '技巧：倾听 · 同理 · 澄清 · 面质'],
+    [`服务形式强调${blue('一人一案')}`, '流程：建立关系、评估需求、制定计划', '技巧：共情、引导、反馈与资源链接'],
+    [`针对个人或家庭问题开展${blue('个别化介入')}`, '重视专业关系、目标设定和跟踪评估', '常用会谈、支持、协调和转介技巧'],
+  ],
+  小组工作: [
+    ['类型：教育 · 成长 · 支持 · 治疗', '小组动力与小组过程（五阶段）', '领导者角色与带领技巧'],
+    ['常见类型：成长小组、支持小组、教育小组', '关注组员互动、规范形成与凝聚力', '带领者要促进参与、处理冲突'],
+    ['以群体互动促进改变和成长', '准备期、开始期、中期、后期、结束期', '技巧包括破冰、讨论、反馈和总结'],
+  ],
+  社区工作: [
+    [`三大模式：${blue('地区发展 · 社会策划 · 社区照顾')}`, '过程：社区分析 → 计划 → 动员 → 评估', '与居民自治、网格化治理相结合'],
+    [`重点掌握${blue('社区分析、资源动员、居民参与')}`, '服务从需求调查到项目评估闭环', '结合议事协商、志愿服务和网格治理'],
+    [`地区发展重参与，社会策划重方案，${blue('社区照顾')}重支持网络`, '常用方法：走访、访谈、会议、倡导', '目标是提升社区能力和居民参与'],
+  ],
+  高频提示: [
+    [`${red('个案 = 1对1 · 小组 = 多人互助 · 社区 = 整体介入')}`, `社会工作行政、督导属${blue('间接方法')}，别混为一谈`],
+    [`三大直接方法要按${red('对象范围')}区分`, `案例题先定问题，再写${blue('服务目标和介入措施')}`],
+    [`看到居民、楼栋、社区资源，多半联想到${red('社区工作')}`, `看到一对一访谈和家庭问题，优先考虑${blue('个案工作')}`],
+  ],
+  基本职业能力: [
+    ['言语理解与表达', '判断推理：图形 · 定义 · 类比 · 逻辑', '数量关系与资料分析'],
+    ['阅读理解、语句排序与逻辑填空', '图形推理、定义判断、类比推理', '资料分析、简单计算与比较'],
+    ['言语表达、判断推理、资料处理', '数量关系看速度和准确率', '题干关键词、选项排除要熟练'],
+  ],
+  沟通协调能力: [
+    ['群众沟通与矛盾调解', '团队协作 · 资源链接整合', '倾听共情 · 表达说服'],
+    ['群众诉求回应与情绪安抚', '跨部门协调、信息同步与跟进反馈', '先倾听再解释，先共情再处理'],
+    ['沟通要讲事实、讲政策、讲方法', '协调资源时明确责任和时限', '处理分歧时重视换位思考'],
+  ],
+  应变与处置: [
+    ['突发事件应对与应急响应流程', '现场处置 · 信息上报', '舆情感知与初步应对'],
+    ['先稳现场，再核信息，再报流程', '突发矛盾、投诉舆情、公共安全', '注意依法依规和分级响应'],
+    ['风险识别、快速研判、及时处置', '信息收集、上报、协同和复盘', '群众安抚与秩序维护同步推进'],
+  ],
+  心理素质: [
+    ['抗压能力与情绪管理', '自我调适 · 积极心态', '服务意识 · 责任担当'],
+    ['面对复杂群众工作保持耐心', '压力情境下稳定表达和判断', '岗位意识、纪律意识和担当意识'],
+    ['耐心细致、情绪稳定、服务主动', '遇到冲突不激化、不回避', '在规则内解决问题、回应诉求'],
+  ],
+  答题要点: [
+    [`案例分析按"${blue('定性 → 依据 → 措施')}"三步走`, `处置题${blue('分条作答')}、要点齐全`, '结合社工理念，体现"助人自助"'],
+    [`作答要体现${blue('群众立场 + 依法处理')}`, '先写原则，再列步骤，最后补长效机制', `措施要有${red('主体、动作、结果')}`],
+    ['案例题避免空泛表态，要写可执行动作', `高频词：${blue('走访、评估、协调、转介、反馈')}`, '结尾补复盘、宣传、制度完善'],
+  ],
+  应用文写作: [
+    ['通知 · 请示 · 报告 · 函等法定文种', '工作总结 · 简报 · 活动方案', '格式：标题 · 主送 · 正文 · 落款'],
+    ['通知、报告、请示、函重点区分', '方案、总结、简报常用于社区场景', '格式正确、语言简洁、事项明确'],
+    ['应用文先判文种，再套结构', '主送、正文、落款、日期别遗漏', '正文按背景、事项、要求展开'],
+  ],
+  大作文: [
+    [`立意紧扣${blue('基层治理 · 为民服务')}`, '结构：总—分—总，对策型框架', '素材：时政金句 · 社区治理案例'],
+    [`主题常围绕${blue('群众工作、社区服务、基层治理')}`, '开头点题，中间分论点，结尾升华', '素材可用志愿服务、网格治理、协商议事'],
+    [`观点要落到${blue('服务居民和解决问题')}`, '分论点建议并列清晰、句式统一', '对策写具体，避免只喊口号'],
+  ],
+  报考基本条件: [
+    ['拥护党的领导，遵守法律法规', `年满 ${blue('18 周岁')}，具有中国国籍`, '学历以公告为准 · 身心健康'],
+    ['政治素质、纪律意识和服务意识达标', `年龄、学历、户籍等以${blue('公告条件')}为准`, '岗位表、资格复审材料要逐项核对'],
+    ['遵纪守法，具备岗位履职能力', `报考资格以${blue('公告和岗位表')}为准`, '学历、专业、年龄、地区条件需核验'],
+  ],
+  备考顺序: [
+    ['先搭四大模块框架，通读讲义', `再专攻${blue('社会工作知识与写作')}`, '最后冲刺时政与省市区情'],
+    [`先过${blue('综合知识和法律常识')}`, '中期刷社工方法与案例题', '临考整理错题、模板和区情'],
+    ['基础阶段建框架，专项阶段抓高频', `冲刺阶段强化${blue('写作模板和真题复盘')}`, '考前回看公告、政策和地方信息'],
+  ],
+  资料与信息: [
+    ({ safeRegion }) => [`以${blue(safeRegion)}官方渠道公告为准`, '招考细则、岗位表以公告附件为主', `${red('警惕非官方来源的"内部信息"')}`],
+    ({ safeRegion }) => [`关注${blue(safeRegion)}人社、民政等官方发布`, '报名、缴费、准考证和笔试时间要复核', `${red('非官方承诺包过信息不要轻信')}`],
+    ({ safeRegion }) => [`岗位条件以${blue(safeRegion)}公告原文为准`, '资料复习围绕公告科目和岗位要求', `${red('内部资料、押题承诺需谨慎甄别')}`],
+  ],
+}
+
+function escapeHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+function buildCommunityWorkerPages(meta, seed = 0) {
+  const modules = meta.modules
+  const safeRegion = escapeHtml(meta.region)
+  const safeRecruitLine = escapeHtml(meta.recruitLine)
+  const safeTimeLine = escapeHtml(meta.timeLine)
+  const variantCtx = { safeRegion, safeRecruitLine, safeTimeLine }
+  const pages = [
+    {
+      no: 1,
+      type: 'overview',
+      title: `${meta.region}${meta.jobName}`,
+      badge: '破局指南',
+      subtitle: '笔试范围逐项拆解 · 6 张图讲透',
+      modules,
+      moduleLines: [
+        `政治理论 · 法律常识 · 经济科技人文 · ${blue('公文基础')}`,
+        `概述 · 专业伦理与价值观 · ${blue('三大方法')}`,
+        `言语理解 · 判断推理 · 沟通协调 · ${blue('应急处置')}`,
+        `应用文写作 · 大作文 · ${blue('格式规范')}`,
+      ],
+      timeline: [
+        { title: '基础', text: '四大模块 搭建框架' },
+        { title: '专项', text: '社工方法 实务突破' },
+        { title: '冲刺', text: '写作模板 套题训练' },
+        { title: '临考', text: '时政背诵 卷面打磨' },
+      ],
+      keys: [
+        `■ 社会工作知识是拉分核心，${blue('三大方法 + 专业伦理')}反复过`,
+        `■ 个案 = ${red('1对1')} · 小组 = ${red('多人互助')} · 社区 = ${red('整体介入')}，别搞混`,
+        `■ 应用文写作是易拿分项，${blue('通知 · 请示 · 报告 · 函')}背模板稳拿分`,
+        `■ 招考细则、岗位条件以${blue(safeRegion)}官方公告为准`,
+      ],
+      footer: '考点速记 + 真题题库',
+    },
+    {
+      no: 2,
+      title: '综合知识',
+      subtitle: '笔试范围逐项拆解',
+      blocks: [
+        { label: '政治理论与时政', lines: ['党的创新理论与重要精神', '时事政治与最新会议精神', '基层治理、共同富裕重要论述'] },
+        { label: '法律常识', lines: [`宪法 · 民法典 · ${blue('城市居民委员会组织法')}`, '未成年人保护法 · 人民调解法', '治安管理处罚法 · 劳动法'] },
+        { label: '经济科技人文', lines: ['基本经济制度与市场经济常识', '科技常识 · 生活常识', `历史文化 · 地理国情 · ${safeRegion}区情`] },
+        { label: '公文基础知识', lines: ['公文的种类与格式要素', '行文规则 · 常见文种辨析', '事务文书：总结 · 简报 · 活动方案'] },
+        { label: '区情市情', lines: [`地区：${safeRegion}`, safeRecruitLine, safeTimeLine] },
+      ],
+      footer: '综合知识手册 + 公文模板',
+    },
+    {
+      no: 3,
+      title: '社会工作知识（上）',
+      subtitle: '笔试范围逐项拆解',
+      blocks: [
+        { label: '社会工作概述', lines: [`专业助人活动，目标是${blue('助人自助')}`, '功能：预防 · 恢复 · 发展', '角色：服务提供者 · 支持者 · 倡导者'] },
+        { label: '专业价值观与伦理', lines: [`核心：尊重 · 接纳 · 个别化 · ${blue('保密')}`, '对服务对象、对同事、对机构的伦理', '伦理困境与处理原则'] },
+        { label: '社会工作理论', lines: ['系统理论与生态系统理论', `${blue('优势视角')}与增能（赋权）理论`, '危机干预 · 认知行为理论'] },
+        { label: '人类行为与社会环境', lines: ['人生发展阶段与各阶段任务', '家庭 · 群体 · 组织 · 社区', '社会环境对个人行为的影响'] },
+        { label: '社会政策与法规', lines: ['社会救助 · 社会保险 · 社会福利', '老年人 · 未成年人 · 残疾人政策', '劳动就业 · 医疗卫生政策'] },
+      ],
+      footer: '社工理论精讲 + 专业伦理速记',
+    },
+    {
+      no: 4,
+      title: '社会工作知识（下）',
+      subtitle: '笔试范围逐项拆解',
+      blocks: [
+        { label: '个案工作', lines: [`特点：${blue('一对一')} · 个性化服务`, '过程：接案→预估→计划→介入→评估→结案', '技巧：倾听 · 同理 · 澄清 · 面质'] },
+        { label: '小组工作', lines: ['类型：教育 · 成长 · 支持 · 治疗', '小组动力与小组过程（五阶段）', '领导者角色与带领技巧'] },
+        { label: '社区工作', lines: [`三大模式：${blue('地区发展 · 社会策划 · 社区照顾')}`, '过程：社区分析 → 计划 → 动员 → 评估', '与居民自治、网格化治理相结合'] },
+        { label: '高频提示', lines: [`${red('个案 = 1对1 · 小组 = 多人互助 · 社区 = 整体介入')}`, `社会工作行政、督导属${blue('间接方法')}，别混为一谈`] },
+      ],
+      footer: '三大方法真题 + 案例精讲',
+    },
+    {
+      no: 5,
+      title: '能力素质',
+      subtitle: '笔试范围逐项拆解',
+      blocks: [
+        { label: '基本职业能力', lines: ['言语理解与表达', '判断推理：图形 · 定义 · 类比 · 逻辑', '数量关系与资料分析'] },
+        { label: '沟通协调能力', lines: ['群众沟通与矛盾调解', '团队协作 · 资源链接整合', '倾听共情 · 表达说服'] },
+        { label: '应变与处置', lines: ['突发事件应对与应急响应流程', '现场处置 · 信息上报', '舆情感知与初步应对'] },
+        { label: '心理素质', lines: ['抗压能力与情绪管理', '自我调适 · 积极心态', '服务意识 · 责任担当'] },
+        { label: '答题要点', lines: [`案例分析按"${blue('定性 → 依据 → 措施')}"三步走`, `处置题${blue('分条作答')}、要点齐全`, '结合社工理念，体现"助人自助"'] },
+      ],
+      footer: '能力题库 + 案例分析精讲',
+    },
+    {
+      no: 6,
+      title: '写作能力 · 划重点',
+      subtitle: '笔试范围逐项拆解',
+      blocks: [
+        { label: '应用文写作', lines: ['通知 · 请示 · 报告 · 函等法定文种', '工作总结 · 简报 · 活动方案', '格式：标题 · 主送 · 正文 · 落款'] },
+        { label: '大作文', lines: [`立意紧扣${blue('基层治理 · 为民服务')}`, '结构：总—分—总，对策型框架', '素材：时政金句 · 社区治理案例'] },
+        { label: '报考基本条件', lines: ['拥护党的领导，遵守法律法规', `年满 ${blue('18 周岁')}，具有中国国籍`, '学历以公告为准 · 身心健康'] },
+        { label: '备考顺序', lines: ['先搭四大模块框架，通读讲义', `再专攻${blue('社会工作知识与写作')}`, '最后冲刺时政与省市区情'] },
+        { label: '资料与信息', lines: [`以${blue(safeRegion)}官方渠道公告为准`, '招考细则、岗位表以公告附件为主', `${red('警惕非官方来源的"内部信息"')}`] },
+      ],
+      footer: '写作模板 + 全套备考计划表',
+    },
+  ]
+  return pages.map(page => {
+    if (page.type === 'overview') {
+      return {
+        ...page,
+        moduleLines: pickCommunityWorkerVariant(seed, 'overview-module-lines', communityWorkerOverviewVariants.moduleLines, variantCtx),
+        keys: pickCommunityWorkerVariant(seed, 'overview-keys', communityWorkerOverviewVariants.keys, variantCtx),
+      }
+    }
+    return {
+      ...page,
+      blocks: page.blocks.map(block => {
+        const variants = communityWorkerBlockLineVariants[block.label]
+        if (!variants) return block
+        return {
+          ...block,
+          lines: pickCommunityWorkerVariant(seed, `${page.no}-${block.label}`, variants, variantCtx),
+        }
+      }),
+    }
+  })
+}
+
+function revokeCommunityWorkerImages() {
+  communityImageDrawer.images.forEach(img => {
+    if (img.blobUrl) URL.revokeObjectURL(img.blobUrl)
+  })
+  communityImageDrawer.images = []
+}
+
+onBeforeUnmount(revokeCommunityWorkerImages)
+
+function openCommunityWorkerImages() {
+  if (!isCommunityWorkerProduct.value) {
+    message.warning('当前商品类型未识别为社区工作者')
+    return
+  }
+  if (!communityImageDrawer.images.length) {
+    communityImageDrawer.theme = pickCommunityWorkerTheme()
+    communityImageDrawer.activeTemplate = resolveCommunityWorkerTemplate()
+    communityImageDrawer.contentSeed = Date.now()
+  }
+  communityImageDrawer.visible = true
+}
+
+async function generateCommunityWorkerImages() {
+  communityImageDrawer.generating = true
+  try {
+    revokeCommunityWorkerImages()
+    communityImageDrawer.theme = pickCommunityWorkerTheme()
+    communityImageDrawer.activeTemplate = resolveCommunityWorkerTemplate()
+    communityImageDrawer.contentSeed = Date.now() + Math.floor(Math.random() * 100000)
+    await nextTick()
+    const nodes = Array.from(document.querySelectorAll('[data-community-page]'))
+    if (!nodes.length) throw new Error('未找到社区工作者模板节点')
+    const results = []
+    for (const node of nodes) {
+      const dataUrl = await toPng(node, {
+        cacheBust: true,
+        pixelRatio: 1,
+        width: 1080,
+        height: 1440,
+        backgroundColor: '#ffffff',
+        style: { transform: 'none' },
+      })
+      const blob = await (await fetch(dataUrl)).blob()
+      results.push({ blob, blobUrl: URL.createObjectURL(blob) })
+    }
+    communityImageDrawer.images = results
+    message.success(`已生成 ${results.length} 张社区工作者图文图片`)
+  } catch (e) {
+    message.error(e.message || '社区工作者图文图片生成失败')
+  } finally {
+    communityImageDrawer.generating = false
+  }
+}
+
+async function downloadCommunityWorkerImage(idx) {
+  const item = communityImageDrawer.images[idx]
+  if (!item) return
+  try {
+    const blob = await processImageForDownload(item.blobUrl)
+    triggerBlobDownload(blob, `社区工作者图文-${data.value.id || 'item'}-${idx + 1}.jpg`)
+  } catch (e) {
+    message.error(e.message || '下载失败')
+  }
+}
+
+async function downloadCommunityWorkerImages() {
+  communityImageDrawer.downloading = true
+  try {
+    for (let i = 0; i < communityImageDrawer.images.length; i++) {
+      await downloadCommunityWorkerImage(i)
+      await new Promise(resolve => setTimeout(resolve, 180))
+    }
+  } finally {
+    communityImageDrawer.downloading = false
   }
 }
 
@@ -6374,5 +7007,550 @@ async function openCustomDir(item, idx) {
   color: #999;
   margin-bottom: 10px;
   word-break: break-all;
+}
+
+.community-loading {
+  min-height: 240px;
+}
+
+.community-result-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 16px;
+}
+
+.community-result-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px;
+  background: #fafafa;
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+}
+
+.community-result-item :deep(.ant-image img) {
+  width: 180px;
+  height: 240px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid #eee;
+}
+
+.community-template-label {
+  color: #666;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.community-render-host {
+  position: fixed;
+  left: -99999px;
+  top: 0;
+  width: 1080px;
+  height: 1440px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.community-poster {
+  --cw-primary: #cf0a32;
+  --cw-primary-dark: #b6072a;
+  --cw-secondary: #286ec8;
+  --cw-danger: #d33a32;
+  --cw-footer-bg: #fff3df;
+  --cw-footer-text: #b14b08;
+  --cw-footer-line: #eba92e;
+  --cw-black: #111;
+  position: relative;
+  width: 1080px;
+  height: 1440px;
+  overflow: hidden;
+  background: #fff;
+  color: #262a31;
+  font-family: "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.community-poster.cw-theme-blue {
+  --cw-primary: #1556a8;
+  --cw-primary-dark: #0d3f82;
+  --cw-secondary: #d96b1f;
+  --cw-danger: #c93737;
+  --cw-footer-bg: #eaf3ff;
+  --cw-footer-text: #0d4b92;
+  --cw-footer-line: #f0a23a;
+  --cw-black: #10233f;
+}
+
+.community-poster.cw-theme-green {
+  --cw-primary: #1f7a4d;
+  --cw-primary-dark: #155f3a;
+  --cw-secondary: #b76b10;
+  --cw-danger: #c33d32;
+  --cw-footer-bg: #eef8ed;
+  --cw-footer-text: #17623a;
+  --cw-footer-line: #d8a12f;
+  --cw-black: #132c23;
+}
+
+.community-poster.cw-theme-purple {
+  --cw-primary: #6b3fa0;
+  --cw-primary-dark: #512b7e;
+  --cw-secondary: #1e73be;
+  --cw-danger: #c63b5d;
+  --cw-footer-bg: #f4edff;
+  --cw-footer-text: #5b2d86;
+  --cw-footer-line: #c49a3c;
+  --cw-black: #251d31;
+}
+
+.community-poster.cw-theme-orange {
+  --cw-primary: #d75a1d;
+  --cw-primary-dark: #a94112;
+  --cw-secondary: #1672b8;
+  --cw-danger: #bc2f2f;
+  --cw-footer-bg: #fff1e6;
+  --cw-footer-text: #b44a16;
+  --cw-footer-line: #e0aa24;
+  --cw-black: #2d2118;
+}
+
+.community-poster.cw-theme-teal {
+  --cw-primary: #087b83;
+  --cw-primary-dark: #06626a;
+  --cw-secondary: #b06a20;
+  --cw-danger: #c84343;
+  --cw-footer-bg: #e8f8f7;
+  --cw-footer-text: #05656b;
+  --cw-footer-line: #d9a63f;
+  --cw-black: #102a2e;
+}
+
+.community-poster.cw-theme-brown {
+  --cw-primary: #7a5235;
+  --cw-primary-dark: #5d3d28;
+  --cw-secondary: #1f6fb2;
+  --cw-danger: #b83b34;
+  --cw-footer-bg: #f7efe5;
+  --cw-footer-text: #6b4329;
+  --cw-footer-line: #c8964a;
+  --cw-black: #2a211a;
+}
+
+.community-poster.cw-theme-rose {
+  --cw-primary: #c0265b;
+  --cw-primary-dark: #951b45;
+  --cw-secondary: #176eb3;
+  --cw-danger: #d14a32;
+  --cw-footer-bg: #fff0f4;
+  --cw-footer-text: #a41d4a;
+  --cw-footer-line: #e3a338;
+  --cw-black: #2e1822;
+}
+
+.cw-header {
+  height: 316px;
+  padding: 36px 64px 0;
+  background: var(--cw-primary);
+  color: #fff;
+}
+
+.cw-page-detail .cw-header {
+  height: 262px;
+}
+
+.cw-kicker {
+  font-size: 28px;
+  line-height: 1.2;
+  font-weight: 900;
+}
+
+.cw-title {
+  margin-top: 16px;
+  font-size: 52px;
+  line-height: 1.12;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.cw-page-detail .cw-title {
+  margin-top: 18px;
+  font-size: 56px;
+}
+
+.cw-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 62px;
+  margin-top: 12px;
+  padding: 0 28px;
+  border: 3px solid #fff;
+  font-size: 30px;
+  line-height: 1;
+  font-weight: 900;
+}
+
+.cw-subrow {
+  position: absolute;
+  left: 64px;
+  right: 64px;
+  top: 238px;
+  height: 58px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  border-top: 1px solid rgba(255, 255, 255, .45);
+  font-size: 26px;
+  font-weight: 900;
+}
+
+.cw-page-detail .cw-subrow {
+  top: 182px;
+}
+
+.cw-subrow strong {
+  font-size: 36px;
+  letter-spacing: 4px;
+}
+
+.cw-body {
+  position: absolute;
+  left: 64px;
+  right: 64px;
+  top: 360px;
+  bottom: 92px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.cw-page-detail .cw-body {
+  top: 300px;
+  justify-content: flex-start;
+}
+
+.cw-body-overview {
+  top: 360px;
+  justify-content: flex-start;
+}
+
+.cw-blackbar {
+  height: 66px;
+  padding: 0 30px;
+  display: flex;
+  align-items: center;
+  background: var(--cw-black);
+  border-radius: 14px;
+  color: #fff;
+  font-size: 28px;
+  font-weight: 900;
+}
+
+.cw-blackbar b {
+  color: #f5b53f;
+  margin: 0 6px;
+}
+
+.cw-section-title {
+  margin-top: 20px;
+  padding-left: 24px;
+  border-left: 9px solid var(--cw-primary);
+  color: var(--cw-primary);
+  font-size: 32px;
+  line-height: 1.25;
+  font-weight: 900;
+}
+
+.cw-overview-grid {
+  display: grid;
+  grid-template-columns: 210px 1fr;
+  gap: 28px;
+  margin-top: 14px;
+}
+
+.cw-module-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cw-module-pill,
+.cw-row-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 66px;
+  padding: 0 12px;
+  border-radius: 8px;
+  background: var(--cw-primary);
+  color: #fff;
+  text-align: center;
+  font-size: 28px;
+  line-height: 1.16;
+  font-weight: 900;
+}
+
+.cw-module-points {
+  padding-top: 6px;
+}
+
+.cw-row {
+  display: grid;
+  grid-template-columns: 232px 1fr;
+  gap: 30px;
+  align-items: center;
+  min-height: 162px;
+  border-bottom: 2px dashed #e5e9ef;
+}
+
+.cw-page-detail .cw-row {
+  min-height: 148px;
+}
+
+.cw-row:last-child {
+  border-bottom: none;
+}
+
+.cw-row-label {
+  min-height: 80px;
+  font-size: 28px;
+}
+
+.cw-row-content {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.cw-dot-line {
+  position: relative;
+  padding-left: 28px;
+  font-size: 26px;
+  line-height: 1.32;
+  color: #2a2e34;
+  font-weight: 900;
+}
+
+.cw-dot-line::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: .56em;
+  width: 8px;
+  height: 8px;
+  background: var(--cw-primary);
+}
+
+.cw-blue {
+  color: var(--cw-secondary);
+}
+
+.cw-red {
+  color: var(--cw-danger);
+}
+
+.cw-page-detail.cw-template-compact .cw-body {
+  top: 286px;
+}
+
+.cw-page-detail.cw-template-compact .cw-row {
+  grid-template-columns: 210px 1fr;
+  gap: 22px;
+  min-height: 132px;
+}
+
+.cw-page-detail.cw-template-compact .cw-row-label {
+  min-height: 66px;
+  font-size: 26px;
+}
+
+.cw-page-detail.cw-template-compact .cw-row-content {
+  gap: 8px;
+}
+
+.cw-page-detail.cw-template-compact .cw-dot-line {
+  font-size: 24px;
+  line-height: 1.24;
+}
+
+.cw-page-detail.cw-template-card .cw-body {
+  top: 292px;
+  gap: 16px;
+}
+
+.cw-page-detail.cw-template-card .cw-row {
+  min-height: 126px;
+  padding: 14px 18px;
+  border: 2px solid #edf0f4;
+  border-bottom: 2px solid #edf0f4;
+  border-radius: 16px;
+  background: #fbfcff;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, .04);
+}
+
+.cw-page-detail.cw-template-card .cw-row-label {
+  min-height: 66px;
+  border-radius: 14px;
+  font-size: 26px;
+}
+
+.cw-page-detail.cw-template-card .cw-row-content {
+  gap: 9px;
+}
+
+.cw-page-detail.cw-template-card .cw-dot-line {
+  font-size: 24px;
+  line-height: 1.24;
+}
+
+.cw-page-detail.cw-template-table .cw-body {
+  top: 290px;
+  border-top: 4px solid var(--cw-primary);
+  border-bottom: 4px solid var(--cw-primary);
+}
+
+.cw-page-detail.cw-template-table .cw-row {
+  grid-template-columns: 252px 1fr;
+  gap: 24px;
+  min-height: 138px;
+  border-bottom: 2px solid #e5e9ef;
+}
+
+.cw-page-detail.cw-template-table .cw-row-label {
+  min-height: 88px;
+  justify-content: flex-start;
+  padding-left: 22px;
+  border-radius: 0;
+  border-left: 10px solid var(--cw-primary);
+  background: transparent;
+  color: var(--cw-primary);
+  font-size: 27px;
+}
+
+.cw-page-detail.cw-template-table .cw-row-content {
+  gap: 10px;
+}
+
+.cw-page-detail.cw-template-table .cw-dot-line {
+  font-size: 25px;
+  line-height: 1.26;
+}
+
+.cw-page-detail.cw-template-outline .cw-body {
+  top: 292px;
+}
+
+.cw-page-detail.cw-template-outline .cw-row {
+  grid-template-columns: 238px 1fr;
+  gap: 28px;
+  min-height: 140px;
+  border-bottom: 1px dashed #d8dee8;
+}
+
+.cw-page-detail.cw-template-outline .cw-row-label {
+  min-height: 76px;
+  border: 3px solid var(--cw-primary);
+  background: #fff;
+  color: var(--cw-primary);
+  font-size: 27px;
+}
+
+.cw-page-detail.cw-template-outline .cw-row-content {
+  gap: 10px;
+}
+
+.cw-page-detail.cw-template-outline .cw-dot-line {
+  font-size: 25px;
+  line-height: 1.27;
+}
+
+.cw-page-detail.cw-template-outline .cw-dot-line::before {
+  border-radius: 50%;
+}
+
+.cw-timeline {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  margin: 18px 84px 0;
+}
+
+.cw-timeline::before {
+  content: "";
+  position: absolute;
+  left: 26px;
+  right: 26px;
+  top: 13px;
+  height: 4px;
+  background: var(--cw-primary);
+}
+
+.cw-time-point {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.cw-time-point span {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--cw-primary);
+}
+
+.cw-time-point strong {
+  margin-top: 22px;
+  color: var(--cw-primary);
+  font-size: 30px;
+  line-height: 1;
+}
+
+.cw-time-point em {
+  margin-top: 8px;
+  color: #555;
+  font-size: 20px;
+  line-height: 1.34;
+  font-style: normal;
+  white-space: pre-line;
+}
+
+.cw-key-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.cw-key-list > div {
+  font-size: 24px;
+  line-height: 1.34;
+}
+
+.cw-footer {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 90px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  border-top: 4px solid var(--cw-footer-line);
+  background: var(--cw-footer-bg);
+  color: var(--cw-footer-text);
+  font-size: 26px;
+  font-weight: 900;
+}
+
+.cw-footer em {
+  font-style: normal;
 }
 </style>
