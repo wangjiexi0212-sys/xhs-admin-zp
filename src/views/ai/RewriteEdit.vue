@@ -356,9 +356,19 @@
     title="图片文字提取"
     :width="640"
     :body-style="{ padding: '16px' }"
+    :mask-closable="false"
   >
     <div v-if="!extractResults.length" class="extract-empty">暂无提取结果</div>
     <template v-else>
+      <div class="extract-gen-mode">
+        <div>
+          <div class="extract-gen-mode-title">生成图片方式</div>
+          <div class="extract-gen-mode-desc">
+            {{ extractUseA4DocumentImage ? '开启后使用 HTML/CSS A4 文档页方案，直接把二创文本排版成图片' : '关闭时使用原来的 AI 参考图生成图片' }}
+          </div>
+        </div>
+        <a-switch v-model:checked="extractUseA4DocumentImage" checked-children="A4" un-checked-children="AI" />
+      </div>
       <!-- 提取结果列表 -->
       <div class="extract-result-list">
         <div v-for="(item, ri) in extractResults" :key="ri" class="extract-result-item">
@@ -414,6 +424,7 @@
                   <div class="item-genimg-divider">
                     <span class="item-genimg-label">
                       <PictureOutlined style="color:#ff2442;margin-right:3px" />AI 生成图片
+                    <span v-if="extractUseA4DocumentImage" class="genimg-mode-tag">A4文档页</span>
                     </span>
                   </div>
 
@@ -427,7 +438,7 @@
                     @click="generateItemImage(extractResults.indexOf(item))"
                   >
                     <PictureOutlined />
-                    {{ item.genImgStatus === 'error' ? '重新生成' : '生成图片' }}
+                    {{ item.genImgStatus === 'error' ? '重新生成' : (extractUseA4DocumentImage ? '生成文档图' : '生成图片') }}
                   </a-button>
                   <div v-if="item.genImgStatus === 'error'" class="genimg-err-text">{{ item.genImgErrMsg }}</div>
 
@@ -571,6 +582,7 @@ const extractResults       = ref([])      // [{ idx, src, text, status }]
 const rewriteLoading                = ref(false)
 const rewriteResult                 = ref('')
 const extractGenImgBatchDownloading = ref(false)
+const extractUseA4DocumentImage     = ref(false)
 
 // ─── 日志 ────────────────────────────────────────────────
 const logs        = ref([])   // { time, type:'success'|'error'|'info'|'running', text, detail }
@@ -1066,6 +1078,357 @@ async function downloadAllGenImgs() {
   message.success(`已下载 ${ok} / ${done.length} 张`)
 }
 
+function normalizeDocText(text) {
+  return String(text || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/^---+$/gm, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+function stripMarkdownInline(text) {
+  return String(text || '')
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/^#+\s*/g, '')
+    .replace(/^[-*]\s+/, '')
+    .trim()
+}
+
+function isA4BlockHeading(line) {
+  return /^(考点权重总览|[一二三四五六七八九十]+[、.．]|考点\s*\d+)/u.test(String(line || '').trim())
+}
+
+function isA4TitleLine(line) {
+  const text = String(line || '').trim()
+  if (!text || isA4BlockHeading(text)) return false
+  if (/^(最高权重|高权重|中高权重|中权重|要点[:：]|重点[:：])/u.test(text)) return false
+  if (text.length > 42) return false
+  return /(?:\d{4}\s*年|考试|笔试|高频|考点|重点|备考|资料|汇总|速记|时事)/u.test(text)
+}
+
+function parseA4DocumentContent(text) {
+  const normalized = normalizeDocText(text)
+  const rawLines = normalized.split('\n').map(line => line.trim()).filter(Boolean)
+  const lines = rawLines.map(stripMarkdownInline).filter(Boolean)
+  let title = ''
+  let subtitle = ''
+  let cursor = 0
+  if (isA4TitleLine(lines[0])) {
+    title = lines[0]
+    cursor = 1
+  }
+  if (title && isA4TitleLine(lines[1]) && !/[|·]/.test(lines[1])) {
+    title = `${title}\n${lines[1]}`
+    cursor = 2
+  }
+  if (title && lines[cursor] && /[|·]/.test(lines[cursor])) {
+    subtitle = lines[cursor]
+    cursor++
+  }
+  const blocks = []
+  for (let i = cursor; i < lines.length; i++) {
+    const line = lines[i]
+    if (isA4BlockHeading(line)) {
+      blocks.push({ type: 'heading', text: line })
+    } else if (/^[-•·]\s*/u.test(rawLines[i] || '') || /^(最高权重|高权重|中高权重|中权重)/u.test(line)) {
+      blocks.push({ type: 'bullet', text: line.replace(/^[-•·]\s*/u, '') })
+    } else {
+      blocks.push({ type: 'paragraph', text: line })
+    }
+  }
+  return { title, subtitle, blocks }
+}
+
+function splitHighlightSegments(text) {
+  const patterns = [
+    /\d{4}\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日/g,
+    /\d{4}\s*年/g,
+    /[一二三四五六七八九十百千万零〇两]+分之[一二三四五六七八九十百千万零〇两]+/g,
+    /[一二三四五六七八九十百千万零〇两]+(?:户|人|年|日|章|次|名)/g,
+    /(?:最高权重|高权重|必背|常考|重要程度：最高|不得超过三人|每届任期五年|提前十日|二十日前|过半数|五分之四以上|每半年至少召开一次)/g,
+    /【[^】]+】/g,
+  ]
+  const ranges = []
+  for (const re of patterns) {
+    let match
+    while ((match = re.exec(text))) {
+      ranges.push({ start: match.index, end: match.index + match[0].length })
+    }
+  }
+  ranges.sort((a, b) => a.start - b.start || b.end - a.end)
+  const merged = []
+  for (const range of ranges) {
+    const last = merged[merged.length - 1]
+    if (last && range.start <= last.end) last.end = Math.max(last.end, range.end)
+    else merged.push({ ...range })
+  }
+  const segments = []
+  let pos = 0
+  for (const range of merged) {
+    if (range.start > pos) segments.push({ text: text.slice(pos, range.start), highlight: false })
+    segments.push({ text: text.slice(range.start, range.end), highlight: true })
+    pos = range.end
+  }
+  if (pos < text.length) segments.push({ text: text.slice(pos), highlight: false })
+  return segments.filter(seg => seg.text)
+}
+
+function buildRichTextChars(segments) {
+  const chars = []
+  segments.forEach(seg => {
+    ;[...seg.text].forEach(ch => chars.push({ text: ch, highlight: seg.highlight }))
+  })
+  return chars
+}
+
+function wrapRichTextLines(ctx, segments, maxWidth, options = {}) {
+  const { indent = 0, font, boldFont } = options
+  const chars = buildRichTextChars(segments)
+  const lines = []
+  let line = []
+  let lineWidth = 0
+  let currentIndent = indent
+  for (const ch of chars) {
+    const isSpace = /\s/.test(ch.text)
+    ctx.font = ch.highlight ? boldFont : font
+    const w = ctx.measureText(ch.text).width
+    const available = maxWidth - currentIndent
+    if (!isSpace && line.length && lineWidth + w > available) {
+      lines.push({ chars: line, indent: currentIndent })
+      line = []
+      lineWidth = 0
+      currentIndent = 0
+    }
+    if (!isSpace || line.length) {
+      line.push(ch)
+      lineWidth += w
+    }
+  }
+  if (line.length) lines.push({ chars: line, indent: currentIndent })
+  return lines
+}
+
+function drawRichTextLine(ctx, line, x, y, options = {}) {
+  const { font, boldFont, color = '#111111', highlightColor = '#c01818' } = options
+  let cx = x + (line.indent || 0)
+  for (const ch of line.chars) {
+    ctx.font = ch.highlight ? boldFont : font
+    ctx.fillStyle = ch.highlight ? highlightColor : color
+    ctx.fillText(ch.text, cx, y)
+    cx += ctx.measureText(ch.text).width
+  }
+}
+
+function drawA4DocumentImage(text) {
+  const { title, subtitle, blocks } = parseA4DocumentContent(text)
+  const W = 1080
+  const H = 1528
+  const measureCanvas = document.createElement('canvas')
+  const measureCtx = measureCanvas.getContext('2d')
+
+  function font(weight, size, family = '"Songti SC", "SimSun", "Noto Serif CJK SC", serif') {
+    return `${weight} ${size}px ${family}`
+  }
+
+  function makeConfig(base, columns) {
+    return {
+      columns,
+      marginX: columns === 1 ? Math.max(62, Math.round(base * 3.7)) : Math.max(46, Math.round(base * 2.7)),
+      top: columns === 1 ? 84 : 68,
+      bottom: columns === 1 ? 92 : 70,
+      colGap: columns === 1 ? 0 : Math.max(28, Math.round(base * 2)),
+      titleSize: Math.max(28, Math.round(base * 1.85)),
+      titleLine: Math.max(38, Math.round(base * 2.35)),
+      subtitleSize: Math.max(13, Math.round(base * 0.82)),
+      subtitleLine: Math.max(22, Math.round(base * 1.35)),
+      headingSize: Math.max(14, Math.round(base * 1.12)),
+      headingLine: Math.max(20, Math.round(base * 1.45)),
+      normalSize: base,
+      normalLine: Math.max(17, Math.round(base * 1.46)),
+      smallSize: Math.max(11, base - 1),
+      smallLine: Math.max(16, Math.round(base * 1.34)),
+      paragraphIndent: Math.max(22, Math.round(base * 2)),
+      bulletPad: Math.max(8, Math.round(base * 0.7)),
+    }
+  }
+
+  const configs = [
+    makeConfig(24, 1), makeConfig(22, 1), makeConfig(20, 1),
+    makeConfig(19, 2), makeConfig(18, 2), makeConfig(17, 2),
+    makeConfig(16, 2), makeConfig(15, 2), makeConfig(14, 2),
+    makeConfig(13, 2), makeConfig(12, 2), makeConfig(11, 2),
+    makeConfig(10, 2), makeConfig(9, 2), makeConfig(8, 2),
+  ]
+
+  function contentTop(cfg) {
+    if (!title) return cfg.top + 18
+    const titleLines = title.split('\n').slice(0, 2)
+    return cfg.top + titleLines.length * cfg.titleLine + (subtitle ? cfg.subtitleLine + 18 : 14) + 25
+  }
+
+  function buildLayout(cfg, force = false) {
+    const contentWidth = W - cfg.marginX * 2
+    const colWidth = (contentWidth - cfg.colGap * (cfg.columns - 1)) / cfg.columns
+    const normalFont = font(400, cfg.normalSize)
+    const boldFont = font(700, cfg.normalSize)
+    const smallFont = font(400, cfg.smallSize)
+    const smallBoldFont = font(700, cfg.smallSize)
+    const headingFont = font(700, cfg.headingSize)
+    const units = []
+
+    for (const block of blocks) {
+      if (block.type === 'heading') {
+        measureCtx.font = headingFont
+        splitTextLines(measureCtx, block.text, colWidth).forEach((line, idx) => {
+          units.push({ type: 'heading', text: line, font: headingFont, height: cfg.headingLine, gapBefore: idx === 0 ? Math.round(cfg.headingLine * 0.35) : 0 })
+        })
+        units.push({ type: 'gap', height: Math.max(2, Math.round(cfg.headingLine * 0.1)) })
+      } else if (block.type === 'bullet') {
+        const lines = wrapRichTextLines(measureCtx, [{ text: '· ', highlight: false }, ...splitHighlightSegments(block.text)], colWidth - cfg.bulletPad * 2, {
+          font: smallFont,
+          boldFont: smallBoldFont,
+        })
+        lines.forEach((line, idx) => {
+          units.push({ type: 'rich', line, font: smallFont, boldFont: smallBoldFont, height: cfg.smallLine, box: true, leftBar: idx === 0, inset: cfg.bulletPad })
+        })
+        units.push({ type: 'gap', height: Math.max(2, Math.round(cfg.smallLine * 0.16)) })
+      } else {
+        const lines = wrapRichTextLines(measureCtx, splitHighlightSegments(block.text), colWidth, {
+          indent: cfg.paragraphIndent,
+          font: normalFont,
+          boldFont,
+        })
+        lines.forEach(line => units.push({ type: 'rich', line, font: normalFont, boldFont, height: cfg.normalLine, inset: 0 }))
+        units.push({ type: 'gap', height: Math.max(2, Math.round(cfg.normalLine * 0.14)) })
+      }
+    }
+
+    const startY = contentTop(cfg)
+    const maxY = H - cfg.bottom
+    const positioned = []
+    let col = 0
+    let y = startY
+    for (const unit of units) {
+      const h = unit.height + (unit.gapBefore || 0)
+      if (unit.type !== 'gap' && y + h > maxY && col < cfg.columns - 1) {
+        col += 1
+        y = startY
+      }
+      if (unit.type !== 'gap' && y + h > maxY && !force) return null
+      if (unit.type === 'gap' && y + h > maxY) continue
+      positioned.push({
+        ...unit,
+        x: cfg.marginX + col * (colWidth + cfg.colGap),
+        y: y + (unit.gapBefore || 0),
+        colWidth,
+      })
+      y += h
+    }
+    return { cfg, positioned, colWidth, contentWidth }
+  }
+
+  let layout = null
+  for (const cfg of configs) {
+    layout = buildLayout(cfg)
+    if (layout) break
+  }
+  if (!layout) layout = buildLayout(configs[configs.length - 1], true)
+
+  const { cfg, positioned, contentWidth } = layout
+  const canvas = document.createElement('canvas')
+  canvas.width = W
+  canvas.height = H
+  const ctx = canvas.getContext('2d')
+  ctx.textBaseline = 'top'
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, W, H)
+  ctx.strokeStyle = '#d8d8d8'
+  ctx.lineWidth = 1
+  const c = 24
+  ;[[72, 58, 1, 1], [W - 96, 58, -1, 1], [72, H - 82, 1, -1], [W - 96, H - 82, -1, -1]].forEach(([x, y, sx, sy]) => {
+    ctx.beginPath()
+    ctx.moveTo(x, y)
+    ctx.lineTo(x + c * sx, y)
+    ctx.moveTo(x, y)
+    ctx.lineTo(x, y + c * sy)
+    ctx.stroke()
+  })
+
+  if (title) {
+    let hy = cfg.top
+    ctx.textAlign = 'center'
+    ctx.fillStyle = '#111111'
+    ctx.font = font(700, cfg.titleSize)
+    for (const line of title.split('\n').slice(0, 2)) {
+      ctx.fillText(line, W / 2, hy)
+      hy += cfg.titleLine
+    }
+    if (subtitle) {
+      ctx.font = font(400, cfg.subtitleSize, '"PingFang SC", "Microsoft YaHei", sans-serif')
+      ctx.fillStyle = '#666666'
+      ctx.fillText(subtitle, W / 2, hy)
+      hy += cfg.subtitleLine + 18
+    } else {
+      hy += 14
+    }
+    ctx.fillStyle = '#111111'
+    ctx.fillRect(cfg.marginX, hy, contentWidth, cfg.columns === 1 ? 3 : 2)
+  }
+  ctx.textAlign = 'left'
+
+  positioned.forEach(unit => {
+    if (unit.type === 'heading') {
+      ctx.font = unit.font
+      ctx.fillStyle = '#111111'
+      ctx.fillText(unit.text, unit.x, unit.y)
+    } else if (unit.type === 'rich') {
+      if (unit.box) {
+        ctx.fillStyle = '#f8f8f4'
+        ctx.fillRect(unit.x, unit.y - 4, unit.colWidth, unit.height + 5)
+        if (unit.leftBar) {
+          ctx.fillStyle = '#c01818'
+          ctx.fillRect(unit.x, unit.y - 4, 4, unit.height + 5)
+        }
+      }
+      drawRichTextLine(ctx, unit.line, unit.x + (unit.inset || 0), unit.y, {
+        font: unit.font,
+        boldFont: unit.boldFont,
+        color: '#111111',
+        highlightColor: '#c01818',
+      })
+    }
+  })
+
+  if (cfg.columns > 1) {
+    ctx.strokeStyle = '#eeeeee'
+    ctx.lineWidth = 1
+    const midX = cfg.marginX + (contentWidth - cfg.colGap) / 2 + cfg.colGap / 2
+    ctx.beginPath()
+    ctx.moveTo(midX, contentTop(cfg))
+    ctx.lineTo(midX, H - cfg.bottom)
+    ctx.stroke()
+  }
+
+  return canvas.toDataURL('image/png')
+}
+
+function splitTextLines(ctx, text, maxWidth) {
+  const lines = []
+  let line = ''
+  for (const ch of [...String(text || '')]) {
+    const next = line + ch
+    if (line && ctx.measureText(next).width > maxWidth) {
+      lines.push(line)
+      line = ch
+    } else {
+      line = next
+    }
+  }
+  if (line) lines.push(line)
+  return lines
+}
+
 // ─── 按条目生成图片（二创文案 + 原图参考 → 全能绘图）──────────
 async function generateItemImage(i) {
   const item = extractResults.value[i]
@@ -1078,6 +1441,13 @@ async function generateItemImage(i) {
   item.genImgErrMsg = ''
 
   try {
+    if (extractUseA4DocumentImage.value) {
+      item.genImgUrl = drawA4DocumentImage(item.rewriteText.trim())
+      item.genImgStatus = 'done'
+      message.success('文档图生成成功')
+      return
+    }
+
     // 获取原图的公开 URL（复用已上传的 R2 地址）
     const origImg = images.value.find(img => img.src === item.src)
     let refImageUrl = ''
@@ -1608,6 +1978,28 @@ function saveDraft() {
   padding: 48px 0;
   font-size: 14px;
 }
+.extract-gen-mode {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+.extract-gen-mode-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+}
+.extract-gen-mode-desc {
+  margin-top: 2px;
+  font-size: 12px;
+  color: #8c8c8c;
+  line-height: 1.5;
+}
 
 /* ─── 条目内二创分隔 ────────────────────────────────────── */
 .item-rewrite-divider {
@@ -1689,6 +2081,15 @@ function saveDraft() {
   white-space: nowrap;
   display: flex;
   align-items: center;
+}
+.genimg-mode-tag {
+  margin-left: 6px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: #fff1f0;
+  color: #ff2442;
+  font-size: 10px;
+  font-weight: 600;
 }
 
 .genimg-btn {
