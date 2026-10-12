@@ -28,6 +28,7 @@
               <template v-if="isCommunityWorkerProduct">
                 <a-menu-divider />
                 <a-menu-item key="community_worker_set">🏘️ 社区工作者图文模板</a-menu-item>
+                <a-menu-item key="community_mind_map_set">🧠 社区工作者思维导图模板</a-menu-item>
               </template>
             </a-menu>
           </template>
@@ -1305,6 +1306,154 @@
         </div>
       </div>
     </a-drawer>
+
+    <!-- 社区工作者专用思维导图模板 -->
+    <a-drawer
+      v-model:open="communityMindMapDrawer.visible"
+      title="社区工作者思维导图模板"
+      placement="right"
+      width="86%"
+      :destroy-on-close="false"
+      :mask-closable="false"
+    >
+      <template #extra>
+        <a-space>
+          <a-button
+            v-if="communityMindMapDrawer.images.length"
+            :loading="communityMindMapDrawer.downloading"
+            @click="downloadCommunityMindMapImages"
+          >
+            <DownloadOutlined /> 下载全部
+          </a-button>
+          <a-button
+            type="primary"
+            :loading="communityMindMapDrawer.generating"
+            @click="generateCommunityMindMapImages"
+          >
+            {{ communityMindMapDrawer.images.length ? '重新生成' : '生成图片' }}
+          </a-button>
+        </a-space>
+      </template>
+
+      <a-alert
+        type="info"
+        show-icon
+        style="margin-bottom: 14px"
+        :message="`单位：${communityImageMeta.orgLine} ／ 商品类型：${data.job_type_name || '-'}`"
+        description="独立生成 6 张社区工作者思维导图资料图，节点文案会按模块随机组合。"
+      />
+
+      <div v-if="communityMindMapDrawer.generating" class="field-placeholder loading-box community-loading">
+        <a-spin /> <span style="margin-left: 8px; color: #999">正在生成社区工作者思维导图图片...</span>
+      </div>
+      <div v-else-if="communityMindMapDrawer.images.length" class="community-result-grid">
+        <div v-for="(img, idx) in communityMindMapDrawer.images" :key="idx" class="community-result-item">
+          <a-image :src="img.blobUrl" :width="180" :height="240" />
+          <a-button size="small" type="link" @click="downloadCommunityMindMapImage(idx)">
+            <DownloadOutlined /> 下载第 {{ idx + 1 }} 张
+          </a-button>
+        </div>
+      </div>
+      <a-empty v-else description="点击右上角生成思维导图" />
+
+      <div class="community-render-host" aria-hidden="true">
+        <div
+          v-for="page in communityMindMapPages"
+          :key="page.no"
+          class="community-mind-poster"
+          :class="communityMindMapDrawer.theme"
+          :data-community-mind-page="page.no"
+        >
+          <section class="cmm-header">
+            <div class="cmm-kicker">{{ communityImageMeta.year }}年{{ communityImageMeta.orgLine }} · 专职化城市社区工作者</div>
+            <div class="cmm-title">{{ page.title }}</div>
+            <div class="cmm-line"></div>
+            <div class="cmm-subrow">
+              <span>{{ page.subtitle }}</span>
+              <strong>{{ String(page.no).padStart(2, '0') }} / 06</strong>
+            </div>
+          </section>
+
+          <section class="cmm-body" :class="page.type === 'overview' ? 'cmm-body-overview' : 'cmm-body-branch'">
+            <template v-if="page.type === 'overview'">
+              <svg class="cmm-overview-lines" viewBox="0 0 960 620" preserveAspectRatio="none">
+                <path d="M480 408 C420 320 360 180 296 121" fill="none" :stroke="communityMindMapPalette.green" stroke-width="4" stroke-linecap="round" />
+                <path d="M480 408 C410 352 360 280 296 277" fill="none" :stroke="communityMindMapPalette.green" stroke-width="4" stroke-linecap="round" />
+                <path d="M480 408 C410 442 360 438 296 433" fill="none" :stroke="communityMindMapPalette.green" stroke-width="4" stroke-linecap="round" />
+                <path d="M480 408 C540 315 595 210 660 201" fill="none" :stroke="communityMindMapPalette.green" stroke-width="4" stroke-linecap="round" />
+                <path d="M480 408 C545 392 600 358 660 355" fill="none" :stroke="communityMindMapPalette.green" stroke-width="4" stroke-linecap="round" />
+              </svg>
+              <div
+                v-for="node in page.nodes"
+                :key="node.title"
+                class="cmm-node cmm-overview-node"
+                :class="`cmm-node-${node.tone}`"
+                :style="{ left: `${node.x}px`, top: `${node.y}px` }"
+              >
+                <div class="cmm-node-title">{{ node.title }}</div>
+                <div class="cmm-node-text">{{ node.text }}</div>
+              </div>
+              <div class="cmm-center-node">
+                <strong>{{ communityImageMeta.jobName }}</strong>
+                <span>{{ page.centerBadge }}</span>
+              </div>
+              <div class="cmm-overview-summary">
+                <strong>{{ page.summaryTitle }}</strong>
+                <span>{{ page.summaryText }}</span>
+              </div>
+              <div class="cmm-phase-row">
+                <div v-for="phase in page.phases" :key="phase.title" class="cmm-phase-card">
+                  <strong>{{ phase.title }}</strong>
+                  <span>{{ phase.text }}</span>
+                </div>
+              </div>
+              <div class="cmm-tag-row">
+                <span v-for="tag in page.tags" :key="tag">{{ tag }}</span>
+              </div>
+            </template>
+
+            <template v-else>
+              <svg class="cmm-branch-lines" viewBox="0 0 952 890" preserveAspectRatio="none">
+                <path
+                  v-for="line in page.lines"
+                  :key="line.d"
+                  :d="line.d"
+                  :class="line.tone ? `cmm-line-${line.tone}` : ''"
+                  fill="none"
+                  :stroke="line.tone === 'red' ? communityMindMapPalette.red : communityMindMapPalette.green"
+                  stroke-width="4"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+              <div class="cmm-root-node">{{ page.root }}</div>
+              <div
+                v-for="node in page.nodes"
+                :key="node.title"
+                class="cmm-node cmm-branch-node"
+                :class="`cmm-node-${node.tone}`"
+                :style="{ left: `${node.x}px`, top: `${node.y}px` }"
+              >
+                <div class="cmm-node-title">{{ node.title }}</div>
+                <div class="cmm-node-lines">
+                  <div v-for="line in node.lines" :key="line">{{ line }}</div>
+                </div>
+              </div>
+              <div v-if="page.tip" class="cmm-tip" :class="`cmm-tip-${page.tip.tone || 'gold'}`">
+                <strong>{{ page.tip.title }}</strong>
+                <span v-for="line in page.tip.lines" :key="line">{{ line }}</span>
+              </div>
+            </template>
+          </section>
+
+          <section class="cmm-footer">
+            <strong>完整版资料戳主页</strong>
+            <span>|</span>
+            <em>{{ page.footer }}</em>
+          </section>
+        </div>
+      </div>
+    </a-drawer>
   </div>
 </template>
 
@@ -1370,6 +1519,14 @@ const communityImageDrawer = reactive({
   theme: 'cw-theme-red',
   template: 'random',
   activeTemplate: 'cw-template-classic',
+  contentSeed: Date.now(),
+  images: [],
+})
+const communityMindMapDrawer = reactive({
+  visible: false,
+  generating: false,
+  downloading: false,
+  theme: 'cmm-theme-default',
   contentSeed: Date.now(),
   images: [],
 })
@@ -2679,6 +2836,20 @@ const communityWorkerThemes = [
   'cw-theme-brown',
   'cw-theme-rose',
 ]
+const communityMindMapThemes = [
+  'cmm-theme-default',
+  'cmm-theme-emerald',
+  'cmm-theme-indigo',
+  'cmm-theme-brown',
+  'cmm-theme-ocean',
+  'cmm-theme-cyan',
+  'cmm-theme-wine',
+  'cmm-theme-violet',
+  'cmm-theme-olive',
+  'cmm-theme-graphite',
+  'cmm-theme-coral',
+  'cmm-theme-pine',
+]
 const communityWorkerTemplates = [
   { label: '经典重点', value: 'cw-template-classic' },
   { label: '紧凑清单', value: 'cw-template-compact' },
@@ -2705,6 +2876,24 @@ const isCommunityWorkerProduct = computed(() => {
 
 const communityImageMeta = computed(() => buildCommunityWorkerMeta(data.value || {}))
 const communityWorkerPages = computed(() => buildCommunityWorkerPages(communityImageMeta.value, communityImageDrawer.contentSeed))
+const communityMindMapPages = computed(() => buildCommunityMindMapPages(communityImageMeta.value, communityMindMapDrawer.contentSeed))
+const communityMindMapPalette = computed(() => {
+  const palettes = {
+    'cmm-theme-default': { green: '#108460', red: '#d9372d' },
+    'cmm-theme-emerald': { green: '#0f8a68', red: '#c94b36' },
+    'cmm-theme-indigo': { green: '#16806d', red: '#d23a55' },
+    'cmm-theme-brown': { green: '#2f7a55', red: '#c64132' },
+    'cmm-theme-ocean': { green: '#0f7f91', red: '#d45536' },
+    'cmm-theme-cyan': { green: '#109a8f', red: '#cf3d4f' },
+    'cmm-theme-wine': { green: '#2f8a61', red: '#b92d4f' },
+    'cmm-theme-violet': { green: '#2f8374', red: '#c43f6f' },
+    'cmm-theme-olive': { green: '#6f7f2a', red: '#c95a2c' },
+    'cmm-theme-graphite': { green: '#4f7d72', red: '#c7473f' },
+    'cmm-theme-coral': { green: '#23876f', red: '#e05a45' },
+    'cmm-theme-pine': { green: '#17715a', red: '#bd3b2f' },
+  }
+  return palettes[communityMindMapDrawer.theme] || palettes['cmm-theme-default']
+})
 
 function onImageMenuClick({ key }) {
   if (key === 'cover') {
@@ -2713,6 +2902,8 @@ function onImageMenuClick({ key }) {
     noteImageSetVisible.value = true
   } else if (key === 'community_worker_set') {
     openCommunityWorkerImages()
+  } else if (key === 'community_mind_map_set') {
+    openCommunityMindMapImages()
   } else {
     htmlImageInitType.value = key
     htmlImageVisible.value = true
@@ -2776,6 +2967,11 @@ function red(text) {
 function pickCommunityWorkerTheme() {
   const idx = Math.floor(Math.random() * communityWorkerThemes.length)
   return communityWorkerThemes[idx] || 'cw-theme-red'
+}
+
+function pickCommunityMindMapTheme() {
+  const idx = Math.floor(Math.random() * communityMindMapThemes.length)
+  return communityMindMapThemes[idx] || 'cmm-theme-default'
 }
 
 function pickCommunityWorkerTemplate() {
@@ -3102,6 +3298,309 @@ function buildCommunityWorkerPages(meta, seed = 0) {
   })
 }
 
+function pickMindMapLines(seed, key, variants) {
+  return pickCommunityWorkerVariant(seed, `mind-${key}`, variants)
+}
+
+function pickMindMapText(seed, key, variants) {
+  return pickMindMapLines(seed, key, variants)?.[0] || variants?.[0] || ''
+}
+
+function pickMindMapItem(seed, key, variants) {
+  return pickCommunityWorkerVariant(seed, `mind-${key}`, variants) || variants?.[0]
+}
+
+function buildMindMapNode(title, lines, x, y, tone = 'green') {
+  return { title, lines, x, y, tone }
+}
+
+function buildMindMapBranchLines(nodes) {
+  return nodes.map((node, idx) => {
+    const endX = node.x + 150
+    const endY = node.y
+    const sideOffset = endX < 476 ? -90 : 90
+    const lift = 38 + idx * 8
+    return {
+      d: `M476 104 C476 ${150 + lift} ${endX + sideOffset} ${Math.max(136, endY - 56)} ${endX} ${endY}`,
+      tone: node.tone === 'red' ? 'red' : '',
+    }
+  })
+}
+
+function buildCommunityMindMapPages(meta, seed = 0) {
+  const region = meta.region || '本地区'
+  const cityText = `${meta.year}年${region} · 专职化城市社区工作者`
+  const overviewPhases = pickMindMapItem(seed, 'overview-phases', [
+    [
+      { title: '① 基础期', text: '五大模块打框架' },
+      { title: '② 专项期', text: '法律·公文·社区实务' },
+      { title: '③ 冲刺期', text: '时政背诵 + 套题' },
+      { title: '④ 临考', text: '错题回看 + 卷面' },
+    ],
+    [
+      { title: '① 通读', text: '公告科目先拆清' },
+      { title: '② 精刷', text: '社工·法律·党建' },
+      { title: '③ 背诵', text: '时政区情集中记' },
+      { title: '④ 模考', text: '限时训练稳节奏' },
+    ],
+    [
+      { title: '① 建表', text: '知识点分类归档' },
+      { title: '② 补弱', text: '错题模块逐项破' },
+      { title: '③ 写作', text: '公文模板天天练' },
+      { title: '④ 回看', text: '考前只抓高频点' },
+    ],
+  ])
+  const overviewTags = pickMindMapItem(seed, 'overview-tags', [
+    ['城市居民委员会组织法', '三会一课', '网格化管理', '共建共治共享', '五社联动', `${region}概况`, '公文写作'],
+    ['居民自治', '基层党建', '社区服务', '人民调解', '时政热点', '岗位公告', '应用文写作'],
+    ['居委会职责', '党员管理', '社区治理', '民生服务', '区情市情', '网格员职责', '真题复盘'],
+  ])
+  const pageTips = {
+    public: pickMindMapItem(seed, 'tip-public', [
+      { title: '公共基础重在广不在深', lines: ['法律 + 公文是提分重点'], tone: 'gold' },
+      { title: '先抓高频再补细节', lines: ['法律常识、公文格式、区情信息'], tone: 'gold' },
+      { title: '公共基础别平均用力', lines: ['公告科目 + 真题高频优先'], tone: 'gold' },
+    ]),
+    party: pickMindMapItem(seed, 'tip-party', [
+      { title: '党建知识点 + 党章速记', lines: ['基层党组织、三会一课、纪律处分高频'], tone: 'gold' },
+      { title: '党建题看关键词', lines: ['组织生活、党员发展、纪律处分'], tone: 'gold' },
+      { title: '社区党建常结合案例', lines: ['党建引领、网格治理、居民自治'], tone: 'gold' },
+    ]),
+    politics: pickMindMapItem(seed, 'tip-politics', [
+      { title: '时政月报 + 区情市情一页纸', lines: ['近一年热点、地方公告、重要会议'], tone: 'gold' },
+      { title: '时政冲刺别铺太宽', lines: ['会议精神 + 本地区热点'], tone: 'gold' },
+      { title: '地方信息最容易丢分', lines: ['公告、岗位表、官方新闻要核对'], tone: 'gold' },
+    ]),
+    practice: pickMindMapItem(seed, 'tip-practice', [
+      { title: '高频考点提示', lines: ['① 居委会 = 自治组织，非政府机关', '② 街道办与居委会是指导关系'], tone: 'red' },
+      { title: '实务题按流程作答', lines: ['① 识别问题 ② 对接资源 ③ 跟踪反馈'], tone: 'red' },
+      { title: '社区场景要写具体', lines: ['走访、建档、调解、转介、复盘'], tone: 'red' },
+    ]),
+    build: pickMindMapItem(seed, 'tip-build', [
+      { title: '备考三大重点', lines: ['① 党建 + 社区实务是核心', '② 公文写作 = 送分题，背模板', '③ 时政 + 区情考前集中突击'], tone: 'gold' },
+      { title: '上岸复习节奏', lines: ['① 先框架 ② 再专项 ③ 最后真题', '每天留 20 分钟背时政区情'], tone: 'gold' },
+      { title: '临考抓分项', lines: ['公文格式、社工方法、居委会法', '错题和模板比新题更重要'], tone: 'gold' },
+    ]),
+  }
+  const footers = {
+    overview: pickMindMapText(seed, 'footer-overview', ['思维导图 + 考点速记 + 题库', '模块拆解 + 高频考点 + 真题', '导图速记 + 冲刺清单 + 题库']),
+    public: pickMindMapText(seed, 'footer-public', ['公共基础考点手册 + 公文模板', '法律常识 + 公文格式速记', '综合知识手册 + 真题题库']),
+    party: pickMindMapText(seed, 'footer-party', ['党建知识点 + 党章速记', '基层党建速记 + 组织制度', '党务常识 + 高频判断题']),
+    politics: pickMindMapText(seed, 'footer-politics', ['时政月报 + 区情市情一页纸', '近期时政 + 本地热点清单', '时政背诵表 + 区情速记']),
+    practice: pickMindMapText(seed, 'footer-practice', ['社区实务真题 + 案例精讲', '居委会法 + 社区案例题', '实务流程 + 高频场景题']),
+    build: pickMindMapText(seed, 'footer-build', ['全套备考计划表 + 真题模拟', '上岸时间线 + 模考题库', '冲刺计划 + 错题复盘表']),
+  }
+  return [
+    {
+      no: 1,
+      type: 'overview',
+      title: `${region}${meta.jobName}`,
+      subtitle: '一张图看懂考什么 · 6 图拆到底',
+      centerBadge: '5 大模块',
+      summaryTitle: '5 大模块 · 逐项拆解',
+      summaryText: pickMindMapText(seed, 'overview-summary', [
+        '公共基础 ｜ 基层党建 ｜ 时事政治 ｜ 社区实务 ｜ 社区建设',
+        '法律公文 ｜ 党建党务 ｜ 本地时政 ｜ 居民自治 ｜ 网格治理',
+        '综合常识 ｜ 党务知识 ｜ 政策热点 ｜ 社区服务 ｜ 上岸规划',
+      ]),
+      nodes: [
+        { title: '公共基础知识', text: pickMindMapLines(seed, 'ov-public', [['法律·经济·科技·公文'], ['法治常识·公文写作'], ['综合常识·区情市情']])[0], x: 4, y: 92, tone: 'green' },
+        { title: '基层党建', text: pickMindMapLines(seed, 'ov-party', [['党的组织制度·党员管理'], ['基层党组织·党务常识'], ['党建引领·社区治理']])[0], x: 4, y: 248, tone: 'green' },
+        { title: '时事政治', text: pickMindMapLines(seed, 'ov-politics', [['区情市情·时政热点'], ['近期时政·地方发展'], ['会议精神·热点政策']])[0], x: 4, y: 404, tone: 'green' },
+        { title: '社区工作实务', text: pickMindMapLines(seed, 'ov-practice', [['居委会·自治·网格化'], ['服务群众·矛盾调解'], ['社区服务·居民自治']])[0], x: 660, y: 172, tone: 'blue' },
+        { title: '社区建设', text: pickMindMapLines(seed, 'ov-build', [['治理格局·五社联动'], ['共建共治共享'], ['社区治理·协商议事']])[0], x: 660, y: 326, tone: 'blue' },
+      ],
+      phases: overviewPhases,
+      tags: overviewTags,
+      footer: footers.overview,
+    },
+    {
+      no: 2,
+      type: 'branch',
+      title: '模块一 · 公共基础知识',
+      subtitle: '思维导图拆解',
+      root: '公共基础知识',
+      nodes: [
+        buildMindMapNode('法律常识', pickMindMapLines(seed, 'public-law', [
+          ['宪法·民法典·劳动法', '人民调解法·未成年人保护', '居委会组织法必看'],
+          ['民法典社区场景', '治安管理与人民调解', '基层群众自治制度'],
+          ['宪法基础·民事责任', '婚姻家庭·物业纠纷', '居委会法新修订'],
+        ]), 48, 160, 'green'),
+        buildMindMapNode('公文写作', pickMindMapLines(seed, 'public-doc', [
+          ['常用文种：通知·请示·报告·函', '工作总结·简报·活动方案', '格式规范·行文规则'],
+          ['标题·主送·正文·落款', '通知报告请示重点区分', '社区场景材料写作'],
+          ['法定公文与事务文书', '结构清楚·语言规范', '基层常用材料模板'],
+        ]), 610, 255, 'blue'),
+        buildMindMapNode('政治经济常识', pickMindMapLines(seed, 'public-economy', [
+          ['基本经济制度·市场经济', '国情国力·时事经济数据'],
+          ['宏观政策·民生热点', '公共管理与社会治理'],
+          ['经济常识·产业政策', '基层治理相关政策表达'],
+        ]), 48, 410, 'green'),
+        buildMindMapNode('区情市情', pickMindMapLines(seed, 'public-region', [
+          [`地区：${region}`, meta.recruitLine, meta.timeLine],
+          [`关注${region}公告`, '岗位表与报考条件', '本地发展关键词'],
+          [`${region}区情概况`, '官方公告与附件', '报名和笔试时间节点'],
+        ]), 610, 570, 'blue'),
+        buildMindMapNode('科技人文常识', pickMindMapLines(seed, 'public-human', [
+          ['前沿科技·生活科技', '历史文化·地理环境', '安全常识·应急避险'],
+          ['科技生活与公共安全', '人文历史和地理国情', '环保、卫生、应急常识'],
+          ['常识判断高频素材', '科技、人文、生活知识', '地方文化与区域概况'],
+        ]), 48, 670, 'green'),
+      ],
+      tip: pageTips.public,
+      footer: footers.public,
+    },
+    {
+      no: 3,
+      type: 'branch',
+      title: '模块二 · 基层党建',
+      subtitle: '思维导图拆解',
+      root: '基层党建',
+      nodes: [
+        buildMindMapNode('党的组织制度', pickMindMapLines(seed, 'party-org', [
+          ['民主集中制·党的组织体系', '正式党员 3 人以上成立党支部', '党支部职责·支部委员会'],
+          ['基层党组织设置与职责', '支部党员大会·支委会', '党小组和党课制度'],
+          ['组织体系、组织生活、党员管理', '支部建设是高频考点', '社区党组织是领导核心'],
+        ]), 48, 160, 'green'),
+        buildMindMapNode('党建引领基层治理', pickMindMapLines(seed, 'party-govern', [
+          ['社区党组织是领导核心', '区域化党建·联建共建', '网格党建·党员双报到'],
+          ['党组织领导居民自治', '党建带社建、带群建', '红色物业、网格治理'],
+          ['党建引领多方协同', '社区议事协商机制', '服务群众最后一公里'],
+        ]), 610, 245, 'blue'),
+        buildMindMapNode('党内政治生活', pickMindMapLines(seed, 'party-life', [
+          ['三会一课：支部党员大会', '支部委员会·党小组会·党课', '主题党日·组织生活会'],
+          ['民主评议党员', '谈心谈话与组织生活会', '党内政治生活制度化'],
+          ['支部活动、党课学习', '党员教育管理监督', '组织生活要规范记录'],
+        ]), 48, 405, 'green'),
+        buildMindMapNode('党的六项纪律', pickMindMapLines(seed, 'party-discipline', [
+          ['政治纪律·组织纪律·廉洁纪律', '群众纪律·工作纪律·生活纪律', '处分：警告到开除党籍'],
+          ['纪律建设常见考点', '群众纪律和工作纪律易结合社区场景', '处分种类要记牢'],
+          ['严明政治纪律和政治规矩', '廉洁自律、服务群众', '违规违纪处理流程'],
+        ]), 610, 555, 'red'),
+        buildMindMapNode('党员发展与权利', pickMindMapLines(seed, 'party-member', [
+          ['申请→积极分子→发展对象', '预备党员（预备期 1 年）→转正', '党员八项义务·八项权利'],
+          ['入党流程与预备党员管理', '党员权利义务对应记忆', '发展党员坚持标准'],
+          ['党员教育、管理、监督和服务', '发展流程要按阶段记', '权利义务常出判断题'],
+        ]), 48, 670, 'blue'),
+      ],
+      tip: pageTips.party,
+      footer: footers.party,
+    },
+    {
+      no: 4,
+      type: 'branch',
+      title: '模块三 · 时事政治',
+      subtitle: '思维导图拆解',
+      root: '时事政治',
+      nodes: [
+        buildMindMapNode('重要会议与精神', pickMindMapLines(seed, 'politics-meeting', [
+          ['最新重要会议精神', '中央经济工作会议', '两会与政府工作报告'],
+          ['近期重大会议原文', '政策关键词与民生表述', '基层治理相关论述'],
+          ['全国两会、重要讲话', '会议主题和核心表述', '高频金句用于写作'],
+        ]), 48, 160, 'green'),
+        buildMindMapNode(`${region}热点`, pickMindMapLines(seed, 'politics-region', [
+          [`关注${region}官方发布`, '本地新闻和民生工程', '基层治理、公共服务动态'],
+          [`${region}区情市情热点`, '招聘公告中的岗位信息', '近期政策与项目建设'],
+          [`${region}发展关键词`, '社区治理、民生服务', '官方渠道公告为准'],
+        ]), 610, 245, 'blue'),
+        buildMindMapNode('国家与区域战略', pickMindMapLines(seed, 'politics-strategy', [
+          ['国家重大战略部署', '区域协调发展', '新型城镇化和基层治理'],
+          ['现代化治理体系', '城乡社区服务体系建设', '公共服务均等化'],
+          ['民生保障、公共安全', '数字治理、网格治理', '基层治理现代化'],
+        ]), 48, 405, 'blue'),
+        buildMindMapNode('备考冲刺建议', pickMindMapLines(seed, 'politics-sprint', [
+          ['近一年时政要闻滚动复习', '本地新闻重点关注', '考前一周集中突击背诵'],
+          ['按月份整理热点', '按主题归类会议精神', '写作可积累政策表述'],
+          ['重要会议看标题和关键词', '地方时政看官方渠道', '易考热点做成速记卡'],
+        ]), 610, 555, 'red'),
+        buildMindMapNode('重大活动与政策', pickMindMapLines(seed, 'politics-policy', [
+          ['民生工程·公共服务', '社区治理·网格化管理', '应急管理·安全生产'],
+          ['就业、养老、托育、医疗', '城市更新与基层治理', '志愿服务和文明创建'],
+          ['高频政策主题', '群众工作和社区服务', '公共管理案例素材'],
+        ]), 48, 670, 'green'),
+      ],
+      tip: pageTips.politics,
+      footer: footers.politics,
+    },
+    {
+      no: 5,
+      type: 'branch',
+      title: '模块四 · 社区工作实务',
+      subtitle: '思维导图拆解',
+      root: '社区工作实务',
+      nodes: [
+        buildMindMapNode('法律依据（必背）', pickMindMapLines(seed, 'practice-law', [
+          ['《城市居民委员会组织法》', '居委会性质：基层群众性自治组织', '每届任期 5 年·可连选连任'],
+          ['居民会议和居民代表会议', '自治章程、居民公约', '居委会不得提供担保'],
+          ['设立撤销与规模调整', '街道提出、政府批准', '主任为法定代表人'],
+        ]), 48, 160, 'red'),
+        buildMindMapNode('社区服务', pickMindMapLines(seed, 'practice-service', [
+          ['公共服务·便民利民服务', '志愿服务·结对帮扶', '老年人·未成年人·残疾人关爱'],
+          ['政策宣传、就业服务', '矛盾调解、困难帮扶', '资源链接与转介服务'],
+          ['服务需求调查', '分类建档、精准帮扶', '跟进反馈与效果评估'],
+        ]), 610, 245, 'blue'),
+        buildMindMapNode('居民自治', pickMindMapLines(seed, 'practice-autonomy', [
+          ['四个民主：选举·决策·管理·监督', '自我管理·自我教育', '自我服务·自我监督'],
+          ['居民会议、居民代表会议', '议事协商、民主监督', '居民公约和自治章程'],
+          ['群众参与是关键', '社区协商解决公共事务', '依法自治、公开透明'],
+        ]), 48, 405, 'green'),
+        buildMindMapNode('网格化管理', pickMindMapLines(seed, 'practice-grid', [
+          ['网格划分·网格员职责', '信息采集·巡查走访上报', '矛盾纠纷排查·隐患上报'],
+          ['一网统管、多网合一', '事件发现、派单、处置、反馈', '重点人员和重点场所管理'],
+          ['党建引领网格治理', '群众诉求闭环办理', '信息台账动态更新'],
+        ]), 610, 530, 'green'),
+        buildMindMapNode('社区工作者职责', pickMindMapLines(seed, 'practice-duty', [
+          ['宣传党的政策·联系服务群众', '办理公共事务·调解矛盾纠纷', '网格巡查·应急响应处置'],
+          ['协助政府公共服务', '开展群众工作和居民服务', '维护社区秩序和公共安全'],
+          ['政策宣传、民情收集', '服务代办、矛盾调处', '协同治理、应急处置'],
+        ]), 48, 670, 'blue'),
+      ],
+      tip: pageTips.practice,
+      footer: footers.practice,
+    },
+    {
+      no: 6,
+      type: 'branch',
+      title: '模块五 · 社区建设与上岸',
+      subtitle: '思维导图拆解',
+      root: '社区建设',
+      nodes: [
+        buildMindMapNode('治理格局（必背）', pickMindMapLines(seed, 'build-pattern', [
+          ['共建共治共享的社会治理格局', '党委领导·政府负责·民主协商', '社会协同·公众参与·法治保障'],
+          ['党建引领、政府负责', '社会组织和居民共同参与', '法治、德治、自治融合'],
+          ['基层治理现代化', '多元主体协同治理', '公共服务和社区自治结合'],
+        ]), 48, 160, 'green'),
+        buildMindMapNode('报考基本条件', pickMindMapLines(seed, 'build-condition', [
+          ['拥护党的领导·遵纪守法', '年满 18 周岁·中国国籍', '学历要求以招考公告为准'],
+          ['政治素质和服务意识', '年龄、学历、户籍看岗位表', '身体健康、无违法犯罪记录'],
+          ['报考资格以公告为准', '岗位条件逐项核对', '资格复审材料提前准备'],
+        ]), 610, 245, 'green'),
+        buildMindMapNode('五社联动', pickMindMapLines(seed, 'build-five', [
+          ['社区·社会组织·社会工作者', '社区志愿者·社会慈善资源', '由“三社联动”升级而来'],
+          ['社区为平台、社工为支撑', '社会组织和志愿者参与', '慈善资源助力服务项目'],
+          ['整合多方资源', '回应居民多元需求', '提升社区服务专业化'],
+        ]), 48, 405, 'red'),
+        buildMindMapNode('备考时间线', pickMindMapLines(seed, 'build-timeline', [
+          ['基础期：五大模块打框架', '专项期：法律 + 公文 + 社区实务', '冲刺期：时政背诵 + 套题', '临考：错题回看 + 卷面训练'],
+          ['先通读公告和科目', '再刷社工实务与法律题', '最后背时政、练写作模板'],
+          ['第一轮建框架', '第二轮做专项', '第三轮套题冲刺', '考前回看错题和区情'],
+        ]), 610, 520, 'blue'),
+        buildMindMapNode('社会工作三大方法', pickMindMapLines(seed, 'build-methods', [
+          ['个案工作（一对一服务）', '小组工作（互助成长）', '社区工作（介入社区）'],
+          ['个案看个人和家庭', '小组看互动和成长', '社区看资源和居民参与'],
+          ['直接方法高频考', '对象范围要区分', '案例题要能对应方法'],
+        ]), 48, 670, 'blue'),
+      ],
+      tip: pageTips.build,
+      footer: footers.build,
+    },
+  ].map(page => ({
+    ...page,
+    kicker: cityText,
+    lines: page.type === 'branch' ? buildMindMapBranchLines(page.nodes) : page.lines,
+  }))
+}
+
 function revokeCommunityWorkerImages() {
   communityImageDrawer.images.forEach(img => {
     if (img.blobUrl) URL.revokeObjectURL(img.blobUrl)
@@ -3109,7 +3608,15 @@ function revokeCommunityWorkerImages() {
   communityImageDrawer.images = []
 }
 
+function revokeCommunityMindMapImages() {
+  communityMindMapDrawer.images.forEach(img => {
+    if (img.blobUrl) URL.revokeObjectURL(img.blobUrl)
+  })
+  communityMindMapDrawer.images = []
+}
+
 onBeforeUnmount(revokeCommunityWorkerImages)
+onBeforeUnmount(revokeCommunityMindMapImages)
 
 function openCommunityWorkerImages() {
   if (!isCommunityWorkerProduct.value) {
@@ -3176,6 +3683,72 @@ async function downloadCommunityWorkerImages() {
     }
   } finally {
     communityImageDrawer.downloading = false
+  }
+}
+
+function openCommunityMindMapImages() {
+  if (!isCommunityWorkerProduct.value) {
+    message.warning('当前商品类型未识别为社区工作者')
+    return
+  }
+  if (!communityMindMapDrawer.images.length) {
+    communityMindMapDrawer.theme = pickCommunityMindMapTheme()
+    communityMindMapDrawer.contentSeed = Date.now()
+  }
+  communityMindMapDrawer.visible = true
+}
+
+async function generateCommunityMindMapImages() {
+  communityMindMapDrawer.generating = true
+  try {
+    revokeCommunityMindMapImages()
+    communityMindMapDrawer.theme = pickCommunityMindMapTheme()
+    communityMindMapDrawer.contentSeed = Date.now() + Math.floor(Math.random() * 100000)
+    await nextTick()
+    const nodes = Array.from(document.querySelectorAll('[data-community-mind-page]'))
+    if (!nodes.length) throw new Error('未找到社区工作者思维导图模板节点')
+    const results = []
+    for (const node of nodes) {
+      const dataUrl = await toPng(node, {
+        cacheBust: true,
+        pixelRatio: 1,
+        width: 1080,
+        height: 1440,
+        backgroundColor: '#ffffff',
+        style: { transform: 'none' },
+      })
+      const blob = await (await fetch(dataUrl)).blob()
+      results.push({ blob, blobUrl: URL.createObjectURL(blob) })
+    }
+    communityMindMapDrawer.images = results
+    message.success(`已生成 ${results.length} 张社区工作者思维导图图片`)
+  } catch (e) {
+    message.error(e.message || '社区工作者思维导图生成失败')
+  } finally {
+    communityMindMapDrawer.generating = false
+  }
+}
+
+async function downloadCommunityMindMapImage(idx) {
+  const item = communityMindMapDrawer.images[idx]
+  if (!item) return
+  try {
+    const blob = await processImageForDownload(item.blobUrl)
+    triggerBlobDownload(blob, `社区工作者思维导图-${data.value.id || 'item'}-${idx + 1}.jpg`)
+  } catch (e) {
+    message.error(e.message || '下载失败')
+  }
+}
+
+async function downloadCommunityMindMapImages() {
+  communityMindMapDrawer.downloading = true
+  try {
+    for (let i = 0; i < communityMindMapDrawer.images.length; i++) {
+      await downloadCommunityMindMapImage(i)
+      await new Promise(resolve => setTimeout(resolve, 180))
+    }
+  } finally {
+    communityMindMapDrawer.downloading = false
   }
 }
 
@@ -7551,6 +8124,420 @@ async function openCustomDir(item, idx) {
 }
 
 .cw-footer em {
+  font-style: normal;
+}
+
+.community-mind-poster {
+  --cmm-navy: #123f5c;
+  --cmm-green: #108460;
+  --cmm-red: #d9372d;
+  --cmm-gold: #f0a628;
+  --cmm-text: #565b60;
+  position: relative;
+  width: 1080px;
+  height: 1440px;
+  overflow: hidden;
+  background: #fff;
+  color: #123f5c;
+  font-family: "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.community-mind-poster.cmm-theme-emerald {
+  --cmm-navy: #0f4b4f;
+  --cmm-green: #0f8a68;
+  --cmm-red: #c94b36;
+  --cmm-gold: #e4a527;
+}
+
+.community-mind-poster.cmm-theme-indigo {
+  --cmm-navy: #243f75;
+  --cmm-green: #16806d;
+  --cmm-red: #d23a55;
+  --cmm-gold: #e2a12d;
+}
+
+.community-mind-poster.cmm-theme-brown {
+  --cmm-navy: #59432e;
+  --cmm-green: #2f7a55;
+  --cmm-red: #c64132;
+  --cmm-gold: #d89a2d;
+}
+
+.community-mind-poster.cmm-theme-ocean {
+  --cmm-navy: #0d4969;
+  --cmm-green: #0f7f91;
+  --cmm-red: #d45536;
+  --cmm-gold: #e7a62d;
+  --cmm-text: #53606a;
+}
+
+.community-mind-poster.cmm-theme-cyan {
+  --cmm-navy: #10586a;
+  --cmm-green: #109a8f;
+  --cmm-red: #cf3d4f;
+  --cmm-gold: #dba72a;
+  --cmm-text: #526466;
+}
+
+.community-mind-poster.cmm-theme-wine {
+  --cmm-navy: #5a263a;
+  --cmm-green: #2f8a61;
+  --cmm-red: #b92d4f;
+  --cmm-gold: #d7a133;
+  --cmm-text: #5f5459;
+}
+
+.community-mind-poster.cmm-theme-violet {
+  --cmm-navy: #45346f;
+  --cmm-green: #2f8374;
+  --cmm-red: #c43f6f;
+  --cmm-gold: #d8a63c;
+  --cmm-text: #585567;
+}
+
+.community-mind-poster.cmm-theme-olive {
+  --cmm-navy: #4e5b2b;
+  --cmm-green: #6f7f2a;
+  --cmm-red: #c95a2c;
+  --cmm-gold: #d69a28;
+  --cmm-text: #5f6153;
+}
+
+.community-mind-poster.cmm-theme-graphite {
+  --cmm-navy: #2f3f4a;
+  --cmm-green: #4f7d72;
+  --cmm-red: #c7473f;
+  --cmm-gold: #d3a23a;
+  --cmm-text: #555f64;
+}
+
+.community-mind-poster.cmm-theme-coral {
+  --cmm-navy: #5c3b34;
+  --cmm-green: #23876f;
+  --cmm-red: #e05a45;
+  --cmm-gold: #df9e2c;
+  --cmm-text: #625954;
+}
+
+.community-mind-poster.cmm-theme-pine {
+  --cmm-navy: #1d4a3b;
+  --cmm-green: #17715a;
+  --cmm-red: #bd3b2f;
+  --cmm-gold: #d6a33a;
+  --cmm-text: #52605b;
+}
+
+.cmm-header {
+  height: 245px;
+  padding: 34px 60px 0;
+  background: var(--cmm-navy);
+  color: #fff;
+}
+
+.cmm-kicker {
+  font-size: 25px;
+  line-height: 1.2;
+}
+
+.cmm-title {
+  margin-top: 18px;
+  font-size: 54px;
+  line-height: 1.08;
+  white-space: nowrap;
+}
+
+.cmm-line {
+  height: 1px;
+  margin-top: 22px;
+  background: rgba(255, 255, 255, .45);
+}
+
+.cmm-subrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 18px;
+  font-size: 27px;
+}
+
+.cmm-subrow strong {
+  font-size: 34px;
+  letter-spacing: 4px;
+}
+
+.cmm-body {
+  position: absolute;
+  left: 60px;
+  right: 60px;
+  top: 245px;
+  bottom: 90px;
+}
+
+.cmm-body-overview,
+.cmm-body-branch {
+  overflow: hidden;
+}
+
+.cmm-overview-lines,
+.cmm-branch-lines {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 960px;
+  height: 890px;
+  overflow: visible;
+  pointer-events: none;
+  color: var(--cmm-green);
+}
+
+.cmm-overview-lines {
+  top: 0;
+  height: 620px;
+}
+
+.cmm-overview-lines path,
+.cmm-branch-lines path {
+  fill: none;
+  stroke: var(--cmm-green);
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.cmm-branch-lines .cmm-line-red {
+  stroke: var(--cmm-red);
+}
+
+.cmm-root-node,
+.cmm-center-node,
+.cmm-node-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  text-align: center;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, .02);
+}
+
+.cmm-root-node {
+  position: absolute;
+  left: 356px;
+  top: 36px;
+  width: 240px;
+  height: 68px;
+  border-radius: 14px;
+  background: var(--cmm-navy);
+  font-size: 28px;
+  line-height: 1.08;
+}
+
+.cmm-center-node {
+  position: absolute;
+  left: 370px;
+  top: 362px;
+  width: 220px;
+  height: 92px;
+  flex-direction: column;
+  border-radius: 16px;
+  background: var(--cmm-navy);
+}
+
+.cmm-center-node strong {
+  font-size: 31px;
+  line-height: 1.1;
+}
+
+.cmm-center-node span {
+  margin-top: 12px;
+  padding: 7px 18px;
+  border-radius: 999px;
+  background: var(--cmm-red);
+  font-size: 25px;
+  line-height: 1;
+}
+
+.cmm-node {
+  position: absolute;
+  width: 306px;
+}
+
+.cmm-overview-node {
+  width: 292px;
+}
+
+.cmm-branch-node {
+  width: 300px;
+}
+
+.cmm-node-title {
+  min-height: 58px;
+  padding: 0 16px;
+  border-radius: 12px;
+  background: var(--cmm-green);
+  font-size: 25px;
+  line-height: 1.12;
+}
+
+.cmm-node-blue .cmm-node-title,
+.cmm-node-blue {
+  --cmm-node-bg: var(--cmm-navy);
+}
+
+.cmm-node-blue .cmm-node-title {
+  background: var(--cmm-navy);
+}
+
+.cmm-node-red .cmm-node-title {
+  background: var(--cmm-red);
+}
+
+.cmm-node-green .cmm-node-title {
+  background: var(--cmm-green);
+}
+
+.cmm-node-text,
+.cmm-node-lines {
+  margin-top: 14px;
+  color: var(--cmm-text);
+  font-size: 20px;
+  line-height: 1.46;
+  text-align: center;
+}
+
+.cmm-node-lines {
+  text-align: left;
+}
+
+.cmm-node-lines div {
+  margin-bottom: 4px;
+}
+
+.cmm-overview-summary {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 620px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: var(--cmm-navy);
+}
+
+.cmm-overview-summary strong {
+  font-size: 29px;
+}
+
+.cmm-overview-summary span {
+  color: #80858a;
+  font-size: 22px;
+}
+
+.cmm-phase-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 735px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 18px;
+}
+
+.cmm-phase-card {
+  height: 92px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: 3px solid var(--cmm-green);
+  border-radius: 12px;
+  background: rgba(16, 132, 96, .1);
+  color: var(--cmm-green);
+}
+
+.cmm-phase-card strong {
+  font-size: 23px;
+}
+
+.cmm-phase-card span {
+  color: #666;
+  font-size: 18px;
+}
+
+.cmm-tag-row {
+  position: absolute;
+  left: 36px;
+  right: 36px;
+  top: 910px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 14px 16px;
+}
+
+.cmm-tag-row span {
+  min-height: 44px;
+  padding: 8px 20px;
+  border-radius: 999px;
+  background: rgba(16, 132, 96, .12);
+  color: var(--cmm-green);
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.cmm-tip {
+  position: absolute;
+  right: 42px;
+  bottom: 54px;
+  width: 326px;
+  min-height: 130px;
+  padding: 20px 24px;
+  border: 3px solid var(--cmm-gold);
+  border-radius: 14px;
+  background: #fff8e8;
+  color: #a8520a;
+  text-align: center;
+}
+
+.cmm-tip-red {
+  border-color: var(--cmm-red);
+  background: #fff0ee;
+  color: #a7211c;
+}
+
+.cmm-tip strong {
+  display: block;
+  margin-bottom: 12px;
+  font-size: 26px;
+}
+
+.cmm-tip span {
+  display: block;
+  margin-top: 8px;
+  font-size: 20px;
+  line-height: 1.28;
+}
+
+.cmm-footer {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 90px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  border-top: 4px solid var(--cmm-gold);
+  background: #fff3df;
+  color: #b14b08;
+  font-size: 26px;
+}
+
+.cmm-footer em {
   font-style: normal;
 }
 </style>
