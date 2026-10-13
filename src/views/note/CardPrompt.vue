@@ -134,7 +134,7 @@
                 v-model:value="form.content"
                 placeholder="请输入提示词正文"
                 :rows="10"
-                :maxlength="5000"
+                :maxlength="CONTENT_MAX_LENGTH"
                 show-count
               />
             </a-form-item>
@@ -303,6 +303,7 @@ const modalVisible = ref(false)
 const submitting = ref(false)
 const editingId = ref(null)
 const formRef = ref(null)
+const CONTENT_MAX_LENGTH = 20000
 
 const form = reactive({
   job_type_id: undefined,
