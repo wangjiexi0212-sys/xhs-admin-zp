@@ -225,6 +225,7 @@ const saving = ref(false)
 
 const QUANNENG_MODELS = [
   { label: 'gpt-image-2', value: 'gpt-image-2', sub: '默认' },
+  { label: 'gemini-3-pro-image-preview', value: 'gemini-3-pro-image-preview', sub: '高质量 · 图像理解强' },
 ]
 
 const QUANNENG_RATIOS = [
