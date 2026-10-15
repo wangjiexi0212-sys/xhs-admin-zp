@@ -1,3 +1,31 @@
+import { proxyImageForDownload } from '@/api/xhsRewrite'
+
+async function fetchImageBlob(srcUrl) {
+  const isCrossOrigin = !srcUrl.startsWith('blob:') && !srcUrl.startsWith('data:')
+    && new URL(srcUrl, window.location.href).origin !== window.location.origin
+
+  if (isCrossOrigin) {
+    const proxied = await proxyImageForDownload(srcUrl)
+    if (!proxied?.url) throw new Error('图片中转失败')
+    const response = await fetch(proxied.url, { mode: 'cors' })
+    if (!response.ok) throw new Error(`中转图片获取失败 HTTP ${response.status}`)
+    return await response.blob()
+  }
+
+  try {
+    const response = await fetch(srcUrl, srcUrl.startsWith('blob:') ? {} : { mode: 'cors' })
+    if (!response.ok) throw new Error(`图片获取失败 HTTP ${response.status}`)
+    return await response.blob()
+  } catch (error) {
+    if (srcUrl.startsWith('blob:') || srcUrl.startsWith('data:')) throw error
+    const proxied = await proxyImageForDownload(srcUrl)
+    if (!proxied?.url) throw new Error('图片中转失败')
+    const response = await fetch(proxied.url, { mode: 'cors' })
+    if (!response.ok) throw new Error(`中转图片获取失败 HTTP ${response.status}`)
+    return await response.blob()
+  }
+}
+
 /**
  * 封面图展示前处理：随机大幅裁剪 + 随机渐变背景，让每次生成的图片指纹不同。
  *
@@ -9,9 +37,7 @@
  *   5. 输出为 JPEG blob URL（用于展示 & 下载）
  */
 export async function processImageForDisplay(srcUrl) {
-  const resp = await fetch(srcUrl, srcUrl.startsWith('blob:') ? {} : { mode: 'cors' })
-  if (!resp.ok) throw new Error('图片获取失败')
-  const sourceBlob = await resp.blob()
+  const sourceBlob = await fetchImageBlob(srcUrl)
   const objUrl = URL.createObjectURL(sourceBlob)
 
   try {
@@ -105,9 +131,7 @@ export async function processImageForDownload(srcUrl) {
     // data URL 直接使用，无需 fetch
     objUrl = srcUrl
   } else {
-    const resp = await fetch(srcUrl, { mode: 'cors' })
-    if (!resp.ok) throw new Error('图片获取失败')
-    const sourceBlob = await resp.blob()
+    const sourceBlob = await fetchImageBlob(srcUrl)
     objUrl = URL.createObjectURL(sourceBlob)
     needRevoke = true
   }
