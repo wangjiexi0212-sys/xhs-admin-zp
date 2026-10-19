@@ -20,6 +20,10 @@ export const createPasslyLoginCodes = (data) =>
   request('/api/admin/passly/login-codes', { method: 'POST', body: data })
 export const updatePasslyLoginCode = (id, data) =>
   request(`/api/admin/passly/login-codes/${id}`, { method: 'PATCH', body: data })
+export const renewPasslyLoginCode = (id) =>
+  request(`/api/admin/passly/login-codes/${id}/renew`, { method: 'POST' })
+export const deletePasslyLoginCode = (id) =>
+  request(`/api/admin/passly/login-codes/${id}`, { method: 'DELETE' })
 export const getPasslyLoginCodeUsers = (id) => request(`/api/admin/passly/login-codes/${id}/users`)
 
 export const getPasslyCategories = () => request('/api/admin/passly/categories')

@@ -5,13 +5,23 @@
         <a-select-option v-for="c in categories" :key="c.id" :value="c.id">{{ c.name }}</a-select-option>
       </a-select>
       <a-input v-model:value="query.chapter" style="width: 180px" allow-clear placeholder="章节，如 第一章 法理学" @pressEnter="load" />
+      <a-select v-model:value="query.questionType" style="width: 140px" allow-clear placeholder="题型" @change="load">
+        <a-select-option value="single_choice">单选题</a-select-option>
+        <a-select-option value="multiple_choice">多选题</a-select-option>
+        <a-select-option value="judge">判断题</a-select-option>
+        <a-select-option value="short_answer">问答题</a-select-option>
+      </a-select>
+      <a-select v-model:value="query.reviewStatus" style="width: 130px" allow-clear placeholder="复核状态" @change="load">
+        <a-select-option value="pending">待复核</a-select-option>
+        <a-select-option value="reviewed">已复核</a-select-option>
+      </a-select>
       <a-input-search v-model:value="query.keyword" placeholder="搜索题干/答案" allow-clear @search="load" />
     </a-space>
     <a-alert
       style="margin-bottom: 16px"
       type="info"
       show-icon
-      message="当前样本题库来自本地 OCR，已导入公共基础知识 gongji。解析字段暂为空，后续可导入第二册解析或人工补充。"
+      message="题库已支持单选、多选、判断和问答题。社区工作者题库来自 3 份 Word 资料，初始标记为待复核，可在此逐题校对答案与解析。"
     />
     <a-table :data-source="rows" :columns="columns" row-key="id" :loading="loading" :pagination="pagination" @change="onTableChange">
       <template #bodyCell="{ column, record }">
@@ -23,6 +33,9 @@
         </template>
         <template v-else-if="column.key === 'answer'">
           <a-tag color="green">{{ record.answer || '未设置' }}</a-tag>
+        </template>
+        <template v-else-if="column.key === 'type'">
+          <a-tag :color="typeMeta(record.question_type).color">{{ typeMeta(record.question_type).label }}</a-tag>
         </template>
         <template v-else-if="column.key === 'review'">
           <a-tag :color="record.review_status === 'reviewed' ? 'blue' : 'orange'">{{ record.review_status }}</a-tag>
@@ -47,13 +60,14 @@
         <a-form-item label="题干">
           <a-textarea v-model:value="editForm.stem" :rows="4" placeholder="请输入题干内容" />
         </a-form-item>
-        <a-form-item label="选项">
+        <a-form-item v-if="editForm.questionType !== 'short_answer'" label="选项">
           <a-space direction="vertical" style="width: 100%">
             <a-input v-for="key in optionKeys" :key="key" v-model:value="editForm.options[key]" :addon-before="key" />
           </a-space>
         </a-form-item>
-        <a-form-item label="答案">
-          <a-input v-model:value="editForm.answer" placeholder="例如：A" />
+        <a-form-item :label="editForm.questionType === 'short_answer' ? '参考答案' : '答案'">
+          <a-textarea v-if="editForm.questionType === 'short_answer'" v-model:value="editForm.answer" :rows="8" placeholder="请输入参考答案" />
+          <a-input v-else v-model:value="editForm.answer" placeholder="例如：A 或 AC" />
         </a-form-item>
         <a-form-item label="解析">
           <a-textarea v-model:value="editForm.explanation" :rows="4" placeholder="请输入解析，可留空" />
@@ -80,7 +94,7 @@ const loading = ref(false)
 const saving = ref(false)
 const editVisible = ref(false)
 const editingId = ref(null)
-const query = reactive({ keyword: '', categoryId: undefined, chapter: '', page: 1, pageSize: 20 })
+const query = reactive({ keyword: '', categoryId: undefined, chapter: '', questionType: undefined, reviewStatus: undefined, page: 1, pageSize: 20 })
 const pagination = reactive({ current: 1, pageSize: 20, total: 0 })
 const optionKeys = ['A', 'B', 'C', 'D', 'E', 'F']
 const editForm = reactive({
@@ -88,11 +102,14 @@ const editForm = reactive({
   options: {},
   answer: '',
   explanation: '',
+  questionType: 'single_choice',
   reviewStatus: 'pending',
 })
 const columns = [
   { title: '题目', key: 'stem' },
   { title: '分类', dataIndex: 'category_name', width: 120 },
+  { title: '题库', dataIndex: 'book_name', width: 190, ellipsis: true },
+  { title: '题型', key: 'type', width: 90 },
   { title: '章节', dataIndex: 'chapter', width: 150 },
   { title: '模块', dataIndex: 'section', width: 110 },
   { title: '答案', key: 'answer', width: 90 },
@@ -113,6 +130,15 @@ function parseOptions(json) {
 function formatOptions(json) {
   const data = parseOptions(json)
   return Object.entries(data).filter(([, v]) => v !== undefined && v !== null && String(v).trim() !== '').map(([k, v]) => `${k}. ${v}`).join('  ')
+}
+
+function typeMeta(type) {
+  return {
+    single_choice: { label: '单选', color: 'blue' },
+    multiple_choice: { label: '多选', color: 'purple' },
+    judge: { label: '判断', color: 'cyan' },
+    short_answer: { label: '问答', color: 'gold' },
+  }[type] || { label: type || '未知', color: 'default' }
 }
 
 async function load() {
@@ -145,6 +171,7 @@ function openEdit(record) {
   }, {})
   editForm.answer = record.answer || ''
   editForm.explanation = record.explanation || ''
+  editForm.questionType = record.question_type || 'single_choice'
   editForm.reviewStatus = record.review_status || 'pending'
   editVisible.value = true
 }
