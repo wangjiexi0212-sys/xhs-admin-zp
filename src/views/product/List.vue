@@ -1785,6 +1785,12 @@ function drawCoverStreamOnce(params, onProgress) {
   })
 }
 
+const BATCH_COVER_MAX_ATTEMPTS = 5
+
+function waitForBatchCoverRetry(attempt) {
+  return new Promise(resolve => setTimeout(resolve, Math.min(attempt * 3000, 12000)))
+}
+
 async function processCoverUrlToBase64(url) {
   try {
     const blob = await processImageForDownload(url)
@@ -1827,15 +1833,31 @@ async function generateBatchCoverImage(detail, cardText, onProgress) {
     params.llm_model = active.default_model
   }
 
-  const data = await drawCoverStreamOnce(params, onProgress)
-  if (data?.prompt_only) throw new Error('封面接口仅返回提示词，未生成图片')
-  const urls = Array.isArray(data?.urls) ? data.urls.filter(Boolean) : []
-  const rawUrls = urls.length ? urls : (data?.url ? [data.url] : [])
-  if (!rawUrls.length) throw new Error('封面接口未返回图片')
-  return {
-    base64: await processCoverUrlToBase64(rawUrls[0]),
-    prompt: sanitizeCoverPromptText(data?.prompt || params.prompt),
+  let lastError = null
+  for (let attempt = 1; attempt <= BATCH_COVER_MAX_ATTEMPTS; attempt++) {
+    try {
+      const data = await drawCoverStreamOnce(params, onProgress)
+      if (data?.prompt_only) throw new Error('封面接口仅返回提示词，未生成图片')
+      const urls = Array.isArray(data?.urls) ? data.urls.filter(Boolean) : []
+      const rawUrls = urls.length ? urls : (data?.url ? [data.url] : [])
+      if (!rawUrls.length) throw new Error('封面接口未返回图片')
+      return {
+        base64: await processCoverUrlToBase64(rawUrls[0]),
+        prompt: sanitizeCoverPromptText(data?.prompt || params.prompt),
+      }
+    } catch (error) {
+      lastError = error
+      if (attempt >= BATCH_COVER_MAX_ATTEMPTS) break
+      onProgress?.({
+        step: 'retry',
+        attempt: attempt + 1,
+        maxAttempts: BATCH_COVER_MAX_ATTEMPTS,
+        error: error?.message || String(error),
+      })
+      await waitForBatchCoverRetry(attempt)
+    }
   }
+  throw new Error(`已尝试 ${BATCH_COVER_MAX_ATTEMPTS} 次：${lastError?.message || String(lastError)}`)
 }
 
 function shuffleTags(tags) {
@@ -1999,6 +2021,11 @@ async function runBatchDirImages(generationMode = 'complete', useBgImage = false
             dirBatchLogs.value.push({ text: `  └ ${company} 封面提示词适配中...`, type: 'info' })
           } else if (event.step === 'draw') {
             dirBatchLogs.value.push({ text: `  └ ${company} AI绘图中...`, type: 'info' })
+          } else if (event.step === 'retry') {
+            dirBatchLogs.value.push({
+              text: `  └ ${company} 第 ${event.attempt}/${event.maxAttempts} 次重新绘图（上次失败：${event.error}）`,
+              type: 'warn',
+            })
           }
         })
         folder.file('封面图.jpg', cover.base64, { base64: true })
