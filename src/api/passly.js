@@ -25,6 +25,8 @@ export const renewPasslyLoginCode = (id) =>
 export const deletePasslyLoginCode = (id) =>
   request(`/api/admin/passly/login-codes/${id}`, { method: 'DELETE' })
 export const getPasslyLoginCodeUsers = (id) => request(`/api/admin/passly/login-codes/${id}/users`)
+export const deletePasslyLoginCodeDevice = (id, bindingId) =>
+  request(`/api/admin/passly/login-codes/${id}/devices/${bindingId}`, { method: 'DELETE' })
 
 export const getPasslyCategories = () => request('/api/admin/passly/categories')
 export const createPasslyCategory = (data) =>

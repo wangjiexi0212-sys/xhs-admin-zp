@@ -7,7 +7,7 @@
           <a-select-option v-for="c in channels" :key="c.value" :value="c.value">{{ c.label }}</a-select-option>
         </a-select>
       </a-form-item>
-      <a-form-item label="最大绑定"><a-input-number v-model:value="form.maxUsers" :min="1" /></a-form-item>
+      <a-form-item label="设备上限"><a-input-number :value="5" disabled /></a-form-item>
       <a-form-item label="备注"><a-input v-model:value="form.remark" placeholder="备注" /></a-form-item>
       <a-form-item><a-button type="primary" @click="openCategoryModal">生成登录码</a-button></a-form-item>
       <a-form-item><a-button @click="exportCurrent">导出当前页</a-button></a-form-item>
@@ -41,8 +41,20 @@
         </template>
       </template>
     </a-table>
-    <a-modal v-model:open="usersOpen" title="登录码使用记录" :footer="null" width="720px">
-      <a-table :data-source="codeUsers" :columns="userColumns" row-key="id" :pagination="false" size="small" />
+    <a-modal v-model:open="usersOpen" :title="`设备管理${activeCode ? ` · ${activeCode.code}` : ''}`" :footer="null" width="960px">
+      <a-alert type="info" show-icon message="普通登录码最多绑定 5 台设备；删除设备后，该设备当前登录会立即失效，并可重新绑定新设备。" style="margin-bottom: 12px" />
+      <a-table :data-source="codeUsers" :columns="userColumns" row-key="binding_id" :pagination="false" size="small">
+        <template #bodyCell="{ column, record }">
+          <template v-if="column.key === 'device'">
+            <a-typography-text copyable :content="record.device_id">{{ compactDeviceId(record.device_id) }}</a-typography-text>
+          </template>
+          <template v-else-if="column.key === 'boundAt'">{{ formatTime(record.bound_at) }}</template>
+          <template v-else-if="column.key === 'lastUsedAt'">{{ formatTime(record.last_used_at) }}</template>
+          <template v-else-if="column.key === 'deviceAction'">
+            <a-button size="small" danger @click="removeDevice(record)">删除设备</a-button>
+          </template>
+        </template>
+      </a-table>
     </a-modal>
     <a-modal v-model:open="categoryModalOpen" title="选择资料分类" ok-text="提交生成" cancel-text="取消" :confirm-loading="generating" @ok="create">
       <a-alert type="info" show-icon message="可同时选择多个分类，登录后首页仅展示所选分类。" style="margin-bottom: 16px" />
@@ -60,7 +72,7 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
 import { message, Modal } from 'ant-design-vue'
-import { createPasslyLoginCodes, deletePasslyLoginCode, getPasslyCategories, getPasslyLoginCodeUsers, getPasslyLoginCodes, renewPasslyLoginCode, updatePasslyLoginCode } from '@/api/passly'
+import { createPasslyLoginCodes, deletePasslyLoginCode, deletePasslyLoginCodeDevice, getPasslyCategories, getPasslyLoginCodeUsers, getPasslyLoginCodes, renewPasslyLoginCode, updatePasslyLoginCode } from '@/api/passly'
 
 const channels = [
   { label: '小红书', value: 'xiaohongshu' },
@@ -75,18 +87,19 @@ const loading = ref(false)
 const createdCodes = ref([])
 const usersOpen = ref(false)
 const codeUsers = ref([])
+const activeCode = ref(null)
 const categories = ref([])
 const categoryModalOpen = ref(false)
 const selectedCategoryIds = ref([])
 const generating = ref(false)
 const query = reactive({ page: 1, pageSize: 20 })
-const form = reactive({ count: 1, channel: 'xiaohongshu', maxUsers: 1, remark: '' })
+const form = reactive({ count: 1, channel: 'xiaohongshu', maxUsers: 5, remark: '' })
 const pagination = reactive({ current: 1, pageSize: 20, total: 0 })
 const columns = [
   { title: '登录码', dataIndex: 'code' },
   { title: '渠道', dataIndex: 'channel', width: 120 },
   { title: '资料分类', key: 'category', width: 170 },
-  { title: '已用/上限', customRender: ({ record }) => `${record.used_count}/${record.max_users}`, width: 110 },
+  { title: '设备数/上限', customRender: ({ record }) => record.is_admin ? `${record.used_count}/不限` : `${record.used_count}/5`, width: 120 },
   { title: '状态', key: 'status', width: 90 },
   { title: '有效期至', key: 'expires', width: 180 },
   { title: '备注', dataIndex: 'remark' },
@@ -96,9 +109,10 @@ const columns = [
 const userColumns = [
   { title: '用户ID', dataIndex: 'id', width: 90 },
   { title: '昵称', dataIndex: 'nickname' },
-  { title: '渠道', dataIndex: 'source_channel', width: 120 },
-  { title: '首次使用', dataIndex: 'first_used_at', width: 150 },
-  { title: '最近使用', dataIndex: 'last_used_at', width: 150 },
+  { title: '设备标识', key: 'device', width: 190 },
+  { title: '绑定时间', key: 'boundAt', width: 170 },
+  { title: '最近使用', key: 'lastUsedAt', width: 170 },
+  { title: '操作', key: 'deviceAction', width: 100 },
 ]
 
 async function load() {
@@ -167,8 +181,30 @@ async function setStatus(record, checked) {
 }
 
 async function openUsers(record) {
+  activeCode.value = record
   codeUsers.value = await getPasslyLoginCodeUsers(record.id)
   usersOpen.value = true
+}
+
+function compactDeviceId(value) {
+  if (!value) return '未知设备'
+  return value.length > 18 ? `${value.slice(0, 8)}…${value.slice(-8)}` : value
+}
+
+function removeDevice(record) {
+  Modal.confirm({
+    title: '确认删除这台设备？',
+    content: '删除后该设备当前登录立即失效，并释放一个设备名额。',
+    okText: '删除设备',
+    okType: 'danger',
+    cancelText: '取消',
+    async onOk() {
+      await deletePasslyLoginCodeDevice(activeCode.value.id, record.binding_id)
+      codeUsers.value = await getPasslyLoginCodeUsers(activeCode.value.id)
+      message.success('设备已删除')
+      load()
+    },
+  })
 }
 
 async function copyText(text) {
