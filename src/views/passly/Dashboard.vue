@@ -8,6 +8,13 @@
         </a-card>
       </a-col>
     </a-row>
+    <a-card title="Web 端入口">
+      <a-space-compact block>
+        <a-input :value="webAppUrl" readonly />
+        <a-button type="primary" @click="openWebApp">新窗口打开</a-button>
+        <a-button @click="copyWebAppUrl">复制链接</a-button>
+      </a-space-compact>
+    </a-card>
     <a-row :gutter="16" style="margin-top: 16px">
       <a-col :span="12">
         <a-card title="热门PDF">
@@ -29,6 +36,7 @@ import { message } from 'ant-design-vue'
 import { getPasslyDashboard } from '@/api/passly'
 
 const dashboard = ref({})
+const webAppUrl = 'https://pass-ly.pages.dev/#/pages/login/index'
 const hotColumns = [
   { title: '资料', dataIndex: 'name' },
   { title: '浏览', dataIndex: 'view_count', width: 90 },
@@ -53,6 +61,19 @@ async function load() {
     dashboard.value = await getPasslyDashboard()
   } catch (e) {
     message.error(e.message || '加载失败')
+  }
+}
+
+function openWebApp() {
+  window.open(webAppUrl, '_blank', 'noopener,noreferrer')
+}
+
+async function copyWebAppUrl() {
+  try {
+    await navigator.clipboard.writeText(webAppUrl)
+    message.success('Web 端链接已复制')
+  } catch {
+    message.error('复制失败，请手动复制链接')
   }
 }
 
