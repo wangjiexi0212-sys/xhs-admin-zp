@@ -33,7 +33,7 @@
         </template>
         <template v-else-if="column.key === 'action'">
           <a-space>
-            <a-button size="small" @click="copyText(record.code)">复制</a-button>
+            <a-button size="small" @click="copyLoginInfo(record)">复制</a-button>
             <a-button size="small" @click="openUsers(record)">设备管理</a-button>
             <a-button v-if="!record.is_admin" size="small" @click="renew(record)">续期一个月</a-button>
             <a-button v-if="!record.is_admin" size="small" danger @click="remove(record)">删除</a-button>
@@ -82,6 +82,7 @@ const channels = [
   { label: '内部测试', value: 'internal_test' },
   { label: '其他', value: 'other' },
 ]
+const webAppUrl = 'https://pass-ly.pages.dev/#/pages/login/index'
 const rows = ref([])
 const loading = ref(false)
 const createdCodes = ref([])
@@ -210,6 +211,10 @@ function removeDevice(record) {
 async function copyText(text) {
   await navigator.clipboard.writeText(text)
   message.success('已复制')
+}
+
+async function copyLoginInfo(record) {
+  await copyText(`链接：${webAppUrl}\n登录码：${record.code}`)
 }
 
 function exportCurrent() {
