@@ -34,7 +34,7 @@
         <template v-else-if="column.key === 'action'">
           <a-space>
             <a-button size="small" @click="copyText(record.code)">复制</a-button>
-            <a-button size="small" @click="openUsers(record)">使用记录</a-button>
+            <a-button size="small" @click="openUsers(record)">设备管理</a-button>
             <a-button v-if="!record.is_admin" size="small" @click="renew(record)">续期一个月</a-button>
             <a-button v-if="!record.is_admin" size="small" danger @click="remove(record)">删除</a-button>
           </a-space>
