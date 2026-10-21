@@ -53,3 +53,11 @@ export const updatePasslyQuestion = (id, data) =>
   request(`/api/admin/passly/questions/${id}`, { method: 'PATCH', body: data })
 export const updatePasslyQuestionStatus = (id, status) =>
   request(`/api/admin/passly/questions/${id}/status`, { method: 'PATCH', body: { status } })
+
+export const getPasslyPosters = (params) => request(`/api/admin/passly/posters${qs(params)}`)
+export const createPasslyPoster = (data) =>
+  request('/api/admin/passly/posters', { method: 'POST', body: data })
+export const updatePasslyPoster = (id, data) =>
+  request(`/api/admin/passly/posters/${id}`, { method: 'PUT', body: data })
+export const deletePasslyPoster = (id) =>
+  request(`/api/admin/passly/posters/${id}`, { method: 'DELETE' })

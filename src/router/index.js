@@ -206,6 +206,11 @@ const router = createRouter({
           component: () => import('../views/passly/Questions.vue'),
         },
         {
+          path: 'passly/posters',
+          name: 'passly-posters',
+          component: () => import('../views/passly/Posters.vue'),
+        },
+        {
           path: 'passly/settings',
           name: 'passly-settings',
           component: () => import('../views/passly/Settings.vue'),
