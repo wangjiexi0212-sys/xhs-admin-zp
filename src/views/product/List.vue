@@ -2007,9 +2007,9 @@ async function runBatchDirImages(generationMode = 'complete', useBgImage = false
   })
 
   // ── 5. Worker 完成后：生成笔记内容 + docx + 飞书（主线程处理）──
-  for (const company of Object.keys(productImageMap)) {
+  const processProduct = async (company, scheduleTime, recordIndex) => {
     const { detail, folder, images, cardText } = productImageMap[company]
-    if (!detail) continue
+    if (!detail) return
     const shuffledTags = shuffleTags(detail.xhs_tags)
     const noteTitle = cardText || buildProductCardText(detail, useCardTitleTemplates)
 
@@ -2075,19 +2075,40 @@ async function runBatchDirImages(generationMode = 'complete', useBgImage = false
           dirBatchLogs.value.push({ text: `  └ 图片上传飞书失败（${label}）：${e.message}`, type: 'warn' })
         }
       }
-      feishuRecords.push({
+      feishuRecords[recordIndex] = {
         title: noteResult.title,
         body: noteResult.body,
         tags: Array.isArray(shuffledTags) ? shuffledTags.join('，') : (shuffledTags || ''),
         status: '待制作',
         error_info: '',
-        scheduled_publish_time: nextFeishuScheduleTime(),
+        scheduled_publish_time: scheduleTime,
         created_at: nowTs,
         updated_at: nowTs,
         file_tokens: fileTokens,
-      })
+      }
     }
   }
+
+  const activeProducts = new Set()
+  let lastProductStartedAt = 0
+  let recordIndex = 0
+  for (const company of Object.keys(productImageMap)) {
+    if (activeProducts.size >= 3) await Promise.race(activeProducts)
+    // 所有商品共享启动间隔，补位任务也至少距上次启动 10 秒。
+    while (lastProductStartedAt && Date.now() - lastProductStartedAt < 10000) {
+      await new Promise(resolve => setTimeout(resolve, 10000 - (Date.now() - lastProductStartedAt)))
+    }
+    const scheduleTime = nextFeishuScheduleTime()
+    const index = recordIndex++
+    lastProductStartedAt = Date.now()
+    const task = processProduct(company, scheduleTime, index)
+      .catch(error => {
+        dirBatchLogs.value.push({ text: `  └ ${company} 生成失败：${error.message}`, type: 'error' })
+      })
+      .finally(() => activeProducts.delete(task))
+    activeProducts.add(task)
+  }
+  await Promise.all(activeProducts)
 
   // ── 6. 下载 ZIP ─────────────────────────────────────────────────
   if (totalImages > 0 || totalNotes > 0) {
@@ -2104,11 +2125,12 @@ async function runBatchDirImages(generationMode = 'complete', useBgImage = false
   }
 
   // ── 7. 飞书多维表格同步 ──────────────────────────────────────────
-  if (feishuEnabled.value && feishuRecords.length) {
-    dirBatchLogs.value.push({ text: `同步飞书多维表格（${feishuRecords.length} 条）...`, type: 'info' })
+  const completedFeishuRecords = feishuRecords.filter(Boolean)
+  if (feishuEnabled.value && completedFeishuRecords.length) {
+    dirBatchLogs.value.push({ text: `同步飞书多维表格（${completedFeishuRecords.length} 条）...`, type: 'info' })
     try {
-      await writeFeishuBitableRecords(feishuRecords)
-      dirBatchLogs.value.push({ text: `✓ 飞书多维表格写入成功，共 ${feishuRecords.length} 条`, type: 'success' })
+      await writeFeishuBitableRecords(completedFeishuRecords)
+      dirBatchLogs.value.push({ text: `✓ 飞书多维表格写入成功，共 ${completedFeishuRecords.length} 条`, type: 'success' })
     } catch (e) {
       dirBatchLogs.value.push({ text: `飞书写入失败：${e.message}`, type: 'error' })
     }
