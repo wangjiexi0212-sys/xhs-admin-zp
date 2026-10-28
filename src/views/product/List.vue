@@ -296,6 +296,7 @@ import { Document, Packer, Paragraph, TextRun, HeadingLevel } from 'docx'
 import { saveAs } from 'file-saver'
 import { writeFeishuBitableRecords, uploadFeishuBitableImage } from '@/api/feishuConfig'
 import { getBgImageList } from '@/api/bgImages'
+import { EXTRA_TITLE_TEMPLATES } from '@/utils/extraTitleTemplates'
 
 const router = useRouter()
 const llmStore = useLlmStore()
@@ -1101,6 +1102,7 @@ const TITLE_POOL = [
   '笔试高分稳稳拿捏',
   '拒绝盲目裸考',
   '吃透考题侧重点稳进面',
+  ...EXTRA_TITLE_TEMPLATES,
 ]
 
 const CARD_TITLE_TEMPLATE_POOL = [

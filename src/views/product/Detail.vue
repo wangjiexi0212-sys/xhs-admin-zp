@@ -1595,6 +1595,7 @@ import { getBgImageList } from '@/api/bgImages'
 import { Document, Packer, Paragraph, TextRun, HeadingLevel } from 'docx'
 import { saveAs } from 'file-saver'
 import { BODY_TEMPLATES } from '@/utils/bodyTemplates'
+import { EXTRA_TITLE_TEMPLATES } from '@/utils/extraTitleTemplates'
 import { toPng } from 'html-to-image'
 
 const route = useRoute()
@@ -2799,11 +2800,27 @@ const TITLE_POOL = [
   '笔试高分稳稳拿捏',
   '拒绝盲目裸考',
   '吃透考题侧重点稳进面',
+  ...EXTRA_TITLE_TEMPLATES,
 ]
+
+let titleTemplateBag = []
+
+function refillTitleTemplateBag() {
+  titleTemplateBag = [...TITLE_POOL]
+  for (let i = titleTemplateBag.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[titleTemplateBag[i], titleTemplateBag[j]] = [titleTemplateBag[j], titleTemplateBag[i]]
+  }
+}
+
+function takeTitleTemplate() {
+  if (!titleTemplateBag.length) refillTitleTemplateBag()
+  return titleTemplateBag.pop() || ''
+}
 
 function generateTitle() {
   const companyName = data.value.company_name || ''
-  const randomTitle = TITLE_POOL[Math.floor(Math.random() * TITLE_POOL.length)]
+  const randomTitle = takeTitleTemplate()
   const out = `${companyName}笔试，${randomTitle}`
   generatedTitle.value = out
   cardText.value = out

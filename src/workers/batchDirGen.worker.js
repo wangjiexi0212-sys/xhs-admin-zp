@@ -26,6 +26,7 @@ let _HISTORY_TITLE_POOL = []
 let _MOCK_TITLE_POOL = []
 let _CARD_TITLE_TEMPLATE_POOL = []
 let _USE_CARD_TITLE_TEMPLATES = false
+let _CARD_TEXT_TITLE_BAG = []
 let _CARD_SCHEMES = []
 let _CARD_TEMPLATE_STYLE_BAG = []
 let _CARD_SCHEME_BAG = []
@@ -57,8 +58,11 @@ function shuffledCopy(arr) {
 }
 
 function buildCardText(detail) {
-  const pool = _USE_CARD_TITLE_TEMPLATES ? _CARD_TITLE_TEMPLATE_POOL : _TITLE_POOL
-  const suffix = rndPick(pool) || ''
+  if (!_CARD_TEXT_TITLE_BAG.length) {
+    const pool = _USE_CARD_TITLE_TEMPLATES ? _CARD_TITLE_TEMPLATE_POOL : _TITLE_POOL
+    _CARD_TEXT_TITLE_BAG = shuffledCopy(pool)
+  }
+  const suffix = _CARD_TEXT_TITLE_BAG.pop() || ''
   return `${detail?.company_name || ''}笔试，${suffix}`
 }
 
@@ -1614,6 +1618,8 @@ const CARD_TEMPLATE_STYLES = [
   'orangeburst','blueprint_card','receipt_card','neon','vertical','filetab','calendar_card','folderwall_card','outline_card','cream_card','stamp2','marker',
   'ref_dark_border','ref_plaid','ref_arch','ref_ticket','ref_purple_sidebar','ref_clipboard','ref_minimal_red','ref_green_wave','ref_green_bands','ref_envelope','ref_purple_wave','ref_blue_sidebar','ref_brown_banner',
   'ref_tea_dark_border','ref_tea_plaid','ref_tea_arch','ref_tea_ticket','ref_tea_purple_sidebar','ref_tea_clipboard','ref_tea_minimal_red','ref_tea_green_wave','ref_tea_green_bands','ref_tea_envelope','ref_tea_purple_wave','ref_tea_blue_sidebar','ref_tea_brown_banner',
+  'concept_metro','concept_dashboard','concept_answer','concept_track','concept_tree','concept_countdown','concept_radar','concept_stairs','concept_puzzle','concept_compare',
+  'concept_matrix','concept_compass','concept_ranking','concept_orbit','concept_elements','concept_funnel','concept_timeline','concept_target','concept_circuit','concept_bars',
 ]
 
 const CARD_TEMPLATE_STYLE_NAMES = {
@@ -1675,6 +1681,26 @@ const CARD_TEMPLATE_STYLE_NAMES = {
   ref_tea_purple_wave: '茶金青墨·紫色波浪',
   ref_tea_blue_sidebar: '茶金青墨·蓝灰侧栏',
   ref_tea_brown_banner: '茶金青墨·棕色横幅',
+  concept_metro: '地铁备考线',
+  concept_dashboard: '能力仪表盘',
+  concept_answer: '标准答题卡',
+  concept_track: '进阶赛道',
+  concept_tree: '知识生长树',
+  concept_countdown: '七日倒计时',
+  concept_radar: '五维雷达',
+  concept_stairs: '四阶通关',
+  concept_puzzle: '四块拼图',
+  concept_compare: '效率对照组',
+  concept_matrix: '备考坐标系',
+  concept_compass: '备考指南针',
+  concept_ranking: '提分排行榜',
+  concept_orbit: '知识轨道',
+  concept_elements: '考点元素表',
+  concept_funnel: '复习漏斗',
+  concept_timeline: '冲刺时间轴',
+  concept_target: '靶心提分',
+  concept_circuit: '解题电路',
+  concept_bars: '得分柱状图',
 }
 
 const CARD_BOTTOM_HINTS = [
@@ -2446,12 +2472,243 @@ function drawRefCardImage(ctx, W, H, style, text) {
   }
 }
 
+const CONCEPT_CARD_STYLES = new Set([
+  'concept_metro','concept_dashboard','concept_answer','concept_track','concept_tree','concept_countdown','concept_radar','concept_stairs','concept_puzzle','concept_compare',
+  'concept_matrix','concept_compass','concept_ranking','concept_orbit','concept_elements','concept_funnel','concept_timeline','concept_target','concept_circuit','concept_bars',
+])
+
+function drawConceptHeader(ctx, left, right, color, accent) {
+  ctx.textBaseline = 'top'
+  ctx.fillStyle = color
+  ctx.font = '800 27px "PingFang SC", sans-serif'
+  ctx.fillText(left, 82, 72)
+  ctx.textAlign = 'right'
+  ctx.fillStyle = accent
+  ctx.fillText(right, 998, 72)
+  ctx.textAlign = 'left'
+}
+
+function drawConceptTitle(ctx, text, color, subColor, top = 180) {
+  const { main, sub } = splitCardText(text || '')
+  const title = main || 'XX集团笔试'
+  const subtitle = sub || '真题至少完整刷两轮'
+  const titleBottom = drawRefTextBlock(ctx, title, 82, top, 916, 72, color, { align: 'left', maxLines: 2, minSize: 54, lineHeight: 1.12 })
+  drawRefTextBlock(ctx, subtitle, 82, titleBottom + 24, 916, 39, subColor, { align: 'left', maxLines: 2, minSize: 30, lineHeight: 1.2 })
+}
+
+function drawConceptFooter(ctx, color, lineColor, bottomHint) {
+  const hint = bottomHint || '左滑查看更多笔试资料 →'
+  ctx.strokeStyle = lineColor
+  ctx.lineWidth = 2
+  ctx.beginPath(); ctx.moveTo(82, 1334); ctx.lineTo(998, 1334); ctx.stroke()
+  ctx.fillStyle = color
+  ctx.font = '700 25px "PingFang SC", sans-serif'
+  ctx.fillText('企业招聘考试 · 备考资料', 82, 1360)
+  ctx.textAlign = 'right'
+  ctx.fillText(hint, 998, 1360)
+  ctx.textAlign = 'left'
+}
+
+function drawConceptCardImage(ctx, W, H, style, text, bottomHint) {
+  const dark = '#253a33'
+  const orange = '#cf6347'
+  const cream = '#f3f0e8'
+  ctx.clearRect(0, 0, W, H)
+  ctx.textBaseline = 'top'
+
+  if (style === 'concept_dashboard' || style === 'concept_countdown' || style === 'concept_ranking' || style === 'concept_circuit') {
+    ctx.fillStyle = style === 'concept_dashboard' ? '#101b3a' : style === 'concept_circuit' ? '#12322c' : '#181a1d'
+  } else if (style === 'concept_radar') ctx.fillStyle = '#eaf2fa'
+  else if (style === 'concept_answer') ctx.fillStyle = '#f7f8f4'
+  else if (style === 'concept_stairs') ctx.fillStyle = '#f3dfca'
+  else if (style === 'concept_compare') {
+    ctx.fillStyle = '#eeece7'; ctx.fillRect(0, 0, W / 2, H)
+    ctx.fillStyle = '#17201d'; ctx.fillRect(W / 2, 0, W / 2, H)
+    ctx.fillStyle = '#ffffff'; ctx.globalCompositeOperation = 'difference'
+  } else if (style === 'concept_tree') ctx.fillStyle = '#f6f0df'
+  else if (style === 'concept_orbit') ctx.fillStyle = '#f1e9df'
+  else if (style === 'concept_elements') ctx.fillStyle = '#eef1e9'
+  else if (style === 'concept_funnel') ctx.fillStyle = '#faf3e7'
+  else if (style === 'concept_timeline') ctx.fillStyle = '#edf0f5'
+  else if (style === 'concept_target') ctx.fillStyle = '#f2f1eb'
+  else ctx.fillStyle = cream
+  if (style !== 'concept_compare') ctx.fillRect(0, 0, W, H)
+
+  if (style === 'concept_metro') {
+    drawConceptHeader(ctx, '2026 招聘考试', '备考路线图', '#153b34', orange)
+    drawConceptTitle(ctx, text, '#153b34', '#45665e')
+    const ys = 780, xs = [150, 410, 670, 930]
+    ctx.strokeStyle = '#178a78'; ctx.lineWidth = 18; ctx.beginPath(); ctx.moveTo(xs[0], ys); ctx.lineTo(xs[3], ys); ctx.stroke()
+    ;['考情','考点','真题','冲刺'].forEach((label, i) => {
+      ctx.fillStyle = cream; ctx.strokeStyle = i % 2 ? orange : '#178a78'; ctx.lineWidth = 20
+      ctx.beginPath(); ctx.arc(xs[i], ys, 47, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
+      ctx.fillStyle = '#153b34'; ctx.font = '900 31px "PingFang SC", sans-serif'; ctx.textAlign = 'center'; ctx.fillText(label, xs[i], ys + 82)
+      ctx.font = '700 20px sans-serif'; ctx.fillText(`0${i + 1}`, xs[i], ys - 14)
+    })
+    ctx.textAlign = 'left'; drawConceptFooter(ctx, '#153b34', '#b8c9c2', bottomHint)
+    return
+  }
+
+  if (style === 'concept_dashboard') {
+    drawConceptHeader(ctx, 'WRITTEN TEST', '备考数据看板', '#6ee7d0', '#f5d467')
+    drawConceptTitle(ctx, text, '#f7f4e9', '#aebcdb', 160)
+    ctx.strokeStyle = '#26365e'; ctx.lineWidth = 50; ctx.beginPath(); ctx.arc(540, 800, 205, 0, Math.PI * 2); ctx.stroke()
+    ctx.strokeStyle = '#6ee7d0'; ctx.lineCap = 'round'; ctx.beginPath(); ctx.arc(540, 800, 205, -Math.PI / 2, Math.PI * 1.14); ctx.stroke(); ctx.lineCap = 'butt'
+    ctx.fillStyle = '#f7f4e9'; ctx.font = '900 130px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('82', 540, 716)
+    ctx.fillStyle = '#8fa0c8'; ctx.font = '700 25px "PingFang SC", sans-serif'; ctx.fillText('备考进度', 540, 876)
+    const metrics = [['5','核心模块'],['2轮','真题计划'],['7天','冲刺周期']]
+    metrics.forEach((item, i) => { const x = 95 + i * 305; ctx.fillStyle = '#19284f'; ctx.beginPath(); ctx.roundRect(x, 1080, 270, 125, 22); ctx.fill(); ctx.fillStyle = '#f5d467'; ctx.font = '900 40px sans-serif'; ctx.fillText(item[0], x + 135, 1100); ctx.fillStyle = '#c9d3eb'; ctx.font = '700 22px "PingFang SC", sans-serif'; ctx.fillText(item[1], x + 135, 1152) })
+    ctx.textAlign = 'left'; drawConceptFooter(ctx, '#6ee7d0', '#33436c', bottomHint); return
+  }
+
+  if (style === 'concept_answer') {
+    ctx.strokeStyle = '#b7c7de'; ctx.lineWidth = 3; ctx.strokeRect(42, 42, W - 84, H - 84)
+    drawConceptHeader(ctx, '企业招聘考试', 'ANSWER SHEET', '#173d6c', '#2c6eb4')
+    ctx.fillStyle = '#2c6eb4'; ctx.fillRect(82, 120, 916, 12)
+    drawConceptTitle(ctx, text, '#173d6c', '#56708f', 170)
+    const rows = 3, cols = 2
+    ctx.font = '700 29px monospace'; ctx.textAlign = 'left'
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+      const n = r * cols + c + 1, x = 105 + c * 455, y = 650 + r * 115
+      ctx.strokeStyle = '#9eb0c5'; ctx.lineWidth = 2; ctx.strokeRect(x, y, 405, 78)
+      ctx.fillStyle = '#173d6c'; ctx.fillText(String(n).padStart(2, '0'), x + 20, y + 20)
+      ;['A','B','C','D'].forEach((v, i) => { ctx.beginPath(); ctx.arc(x + 125 + i * 70, y + 39, 18, 0, Math.PI * 2); if (i === (n - 1) % 4) ctx.fill(); else ctx.stroke(); ctx.fillStyle = i === (n - 1) % 4 ? '#fff' : '#173d6c'; ctx.font = '700 15px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(v, x + 125 + i * 70, y + 29); ctx.textAlign = 'left'; ctx.font = '700 29px monospace' })
+    }
+    for (let x = 82; x < 998; x += 18) { ctx.fillStyle = x % 36 ? '#173d6c' : '#8194ab'; ctx.fillRect(x, 1080, x % 54 ? 6 : 11, 65) }
+    drawConceptFooter(ctx, '#173d6c', '#b7c7de', bottomHint); return
+  }
+
+  if (style === 'concept_track') {
+    drawConceptHeader(ctx, 'STEP BY STEP', '笔试进阶路线', dark, orange); drawConceptTitle(ctx, text, dark, '#61756d')
+    ctx.strokeStyle = dark; ctx.lineWidth = 78; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(150, 1120); ctx.bezierCurveTo(210, 880, 400, 1010, 500, 790); ctx.bezierCurveTo(600, 580, 790, 700, 930, 500); ctx.stroke(); ctx.lineCap = 'butt'
+    const pts = [[150,1120],[388,905],[630,710],[930,500]], labels = ['基础','专项','真题','冲刺']
+    pts.forEach((p, i) => { ctx.fillStyle = i === 3 ? dark : orange; ctx.beginPath(); ctx.arc(p[0], p[1], 52, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#fff'; ctx.font = '900 25px "PingFang SC", sans-serif'; ctx.textAlign = 'center'; ctx.fillText(labels[i], p[0], p[1] - 14) })
+    ctx.textAlign = 'left'; drawConceptFooter(ctx, dark, '#b9c4bd', bottomHint); return
+  }
+
+  if (style === 'concept_tree') {
+    drawConceptHeader(ctx, 'KNOWLEDGE MAP', '企业招聘考试', '#173d2f', '#a77b31'); drawConceptTitle(ctx, text, '#173d2f', '#607166')
+    ctx.fillStyle = '#7e6232'; ctx.beginPath(); ctx.moveTo(500, 1180); ctx.lineTo(580, 1180); ctx.lineTo(558, 665); ctx.lineTo(520, 665); ctx.closePath(); ctx.fill()
+    ctx.strokeStyle = '#7e6232'; ctx.lineWidth = 30; ctx.beginPath(); ctx.moveTo(540, 825); ctx.lineTo(320, 650); ctx.moveTo(540, 760); ctx.lineTo(760, 580); ctx.stroke()
+    const leaves = [[220,590,'考情'],[390,520,'行测'],[585,490,'专业'],[790,610,'真题'],[690,790,'模拟']]
+    leaves.forEach((p, i) => { ctx.fillStyle = i === 4 ? '#d1b15f' : '#cadbb4'; ctx.beginPath(); ctx.ellipse(p[0], p[1], 100, 66, i % 2 ? .2 : -.2, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#173d2f'; ctx.font = '900 27px "PingFang SC", sans-serif'; ctx.textAlign = 'center'; ctx.fillText(p[2], p[0], p[1] - 14) })
+    ctx.textAlign = 'left'; drawConceptFooter(ctx, '#173d2f', '#c9c2ac', bottomHint); return
+  }
+
+  if (style === 'concept_countdown') {
+    drawConceptHeader(ctx, '考前冲刺计划', 'COUNTDOWN', '#f5f0df', '#ef7839')
+    ;['0','7'].forEach((n, i) => { const x = 250 + i * 310; const grad = ctx.createLinearGradient(0, 390, 0, 680); grad.addColorStop(0, '#353535'); grad.addColorStop(.49, '#353535'); grad.addColorStop(.5, '#222'); grad.addColorStop(1, '#222'); ctx.fillStyle = grad; ctx.beginPath(); ctx.roundRect(x, 330, 270, 350, 25); ctx.fill(); ctx.fillStyle = '#f5f0df'; ctx.font = '900 260px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(n, x + 135, 354) })
+    ctx.fillStyle = '#ef7839'; ctx.font = '800 27px sans-serif'; ctx.fillText('DAYS', 822, 628)
+    ctx.textAlign = 'left'; drawConceptTitle(ctx, text, '#f5f0df', '#b9b6aa', 780)
+    drawConceptFooter(ctx, '#ef7839', '#424242', bottomHint); return
+  }
+
+  if (style === 'concept_radar') {
+    drawConceptHeader(ctx, '笔试能力模型', '企业招聘考试', '#183a63', '#e46755'); drawConceptTitle(ctx, text, '#183a63', '#58708a')
+    const cx = 540, cy = 840, radius = 280, angles = [-Math.PI/2,-Math.PI/10,3*Math.PI/10,7*Math.PI/10,11*Math.PI/10]
+    const point = (r, a) => [cx + Math.cos(a) * r, cy + Math.sin(a) * r]
+    ctx.strokeStyle = '#91a9c1'; ctx.lineWidth = 3
+    ;[1,.65].forEach(k => { ctx.beginPath(); angles.forEach((a,i) => { const p=point(radius*k,a); i?ctx.lineTo(...p):ctx.moveTo(...p) }); ctx.closePath(); ctx.stroke() })
+    angles.forEach(a => { const p=point(radius,a); ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(...p); ctx.stroke() })
+    const values=[.92,.77,.72,.88,.64]; ctx.fillStyle='rgba(228,103,85,.25)'; ctx.strokeStyle='#e46755'; ctx.lineWidth=7; ctx.beginPath(); angles.forEach((a,i)=>{const p=point(radius*values[i],a);i?ctx.lineTo(...p):ctx.moveTo(...p)});ctx.closePath();ctx.fill();ctx.stroke()
+    ;['言语','判断','数量','资料','常识'].forEach((v,i)=>{const p=point(radius+62,angles[i]);ctx.fillStyle='#183a63';ctx.font='900 26px "PingFang SC", sans-serif';ctx.textAlign='center';ctx.fillText(v,p[0],p[1]-14)})
+    ctx.textAlign='left';drawConceptFooter(ctx,'#183a63','#b9c8d8',bottomHint);return
+  }
+
+  if (style === 'concept_stairs') {
+    drawConceptHeader(ctx,'4 STEPS','笔试通关路径',dark,'#b94e35');drawConceptTitle(ctx,text,dark,'#687970')
+    const colors=['#d2a778','#b97e5d','#6b8168',dark], labels=['基础','专项','真题','冲刺']
+    colors.forEach((c,i)=>{const x=90+i*230,h=170+i*120,y=1190-h;ctx.fillStyle=c;ctx.fillRect(x,y,230,h);ctx.fillStyle=i>1?'#fff':dark;ctx.font='900 28px "PingFang SC", sans-serif';ctx.fillText(`0${i+1}`,x+28,y+30);ctx.font='900 38px "PingFang SC", sans-serif';ctx.fillText(labels[i],x+28,y+78)})
+    drawConceptFooter(ctx,dark,'#bcae9d',bottomHint);return
+  }
+
+  if (style === 'concept_puzzle') {
+    drawConceptHeader(ctx,'完整备考拼图','企业招聘考试','#252c3a','#7657c8');drawConceptTitle(ctx,text,'#252c3a','#5d6470')
+    const blocks=[['考情','明确方向','#cbe1d4'],['考点','夯实基础','#efd28a'],['真题','掌握规律','#bdcbed'],['模拟','检验成果','#e3bbd0']]
+    blocks.forEach((b,i)=>{const x=90+(i%2)*455,y=600+Math.floor(i/2)*260;ctx.fillStyle=b[2];ctx.beginPath();ctx.roundRect(x,y,415,220,i%2?[55,18,55,18]:[18,55,18,55]);ctx.fill();ctx.fillStyle='#252c3a';ctx.font='900 48px "PingFang SC",sans-serif';ctx.fillText(b[0],x+42,y+46);ctx.font='700 25px "PingFang SC",sans-serif';ctx.fillText(b[1],x+42,y+120)})
+    drawConceptFooter(ctx,'#252c3a','#c7c4bd',bottomHint);return
+  }
+
+  if (style === 'concept_compare') {
+    ctx.globalCompositeOperation='source-over';drawConceptHeader(ctx,'备考方式对照','EFFICIENCY','#303532','#ef6b49')
+    const {main,sub}=splitCardText(text||'');ctx.fillStyle='#fff';ctx.globalCompositeOperation='difference';drawRefTextBlock(ctx,main||'XX集团笔试',82,180,916,72,'#fff',{align:'left',maxLines:2,minSize:54});drawRefTextBlock(ctx,sub||'真题至少完整刷两轮',82,300,916,39,'#fff',{align:'left',maxLines:2,minSize:30});ctx.globalCompositeOperation='source-over'
+    const cols=[{x:80,color:'#343936',title:'盲目刷题',items:['资料混乱','没有复盘','进度失控']},{x:580,color:'#fff',title:'高效备考',items:['重点清晰','真题两轮','按时冲刺']}]
+    cols.forEach((col,ci)=>{ctx.fillStyle=ci?'#ef6b49':'#343936';ctx.font='900 42px "PingFang SC",sans-serif';ctx.fillText(col.title,col.x,620);col.items.forEach((v,i)=>{ctx.fillStyle=col.color;ctx.font='700 29px "PingFang SC",sans-serif';ctx.fillText(v,col.x,730+i*115);ctx.strokeStyle=ci?'#52615b':'#b8b5ae';ctx.beginPath();ctx.moveTo(col.x,780+i*115);ctx.lineTo(col.x+390,780+i*115);ctx.stroke()})})
+    ctx.fillStyle='#fff';ctx.globalCompositeOperation='difference';drawConceptFooter(ctx,'#fff','#fff',bottomHint);ctx.globalCompositeOperation='source-over';return
+  }
+
+  if (style === 'concept_matrix') {
+    drawConceptHeader(ctx,'复习优先级矩阵','企业招聘考试',dark,orange);drawConceptTitle(ctx,text,dark,'#65736c')
+    const cells=[['高频易错','优先突破',dark,'#fff'],['高频基础','稳定拿分','#ddb85d',dark],['低频难题','适当取舍','#e6dfce',dark],['低频基础','快速扫清','#d6e2db',dark]]
+    cells.forEach((c,i)=>{const x=90+(i%2)*450,y=610+Math.floor(i/2)*240;ctx.fillStyle=c[2];ctx.fillRect(x,y,430,220);ctx.fillStyle=c[3];ctx.font='700 28px "PingFang SC",sans-serif';ctx.fillText(c[0],x+38,y+45);ctx.font='900 39px "PingFang SC",sans-serif';ctx.fillText(c[1],x+38,y+105)})
+    drawConceptFooter(ctx,dark,'#beb8a9',bottomHint);return
+  }
+
+  if (style === 'concept_compass') {
+    ctx.fillStyle='#e8eee8';ctx.fillRect(0,0,W,H);drawConceptHeader(ctx,'STUDY COMPASS','找准复习方向','#173c35',orange);drawConceptTitle(ctx,text,'#173c35','#60736c')
+    const cx=540,cy=870;ctx.strokeStyle='#173c35';ctx.lineWidth=5;ctx.beginPath();ctx.arc(cx,cy,280,0,Math.PI*2);ctx.stroke();ctx.strokeStyle='#93a69f';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(cx,cy-280);ctx.lineTo(cx,cy+280);ctx.moveTo(cx-280,cy);ctx.lineTo(cx+280,cy);ctx.stroke()
+    ctx.fillStyle=orange;ctx.beginPath();ctx.moveTo(cx+115,cy-220);ctx.lineTo(cx+26,cy+20);ctx.lineTo(cx-28,cy-25);ctx.closePath();ctx.fill();ctx.fillStyle='#173c35';ctx.beginPath();ctx.moveTo(cx-115,cy+220);ctx.lineTo(cx-26,cy-20);ctx.lineTo(cx+28,cy+25);ctx.closePath();ctx.fill();ctx.font='900 34px sans-serif';ctx.textAlign='center';ctx.fillText('N',cx,cy-258);ctx.font='900 39px "PingFang SC",sans-serif';ctx.fillText('高频考点',cx,cy-22);ctx.font='700 24px "PingFang SC",sans-serif';ctx.fillText('真题 → 复盘 → 冲刺',cx,cy+45);ctx.textAlign='left';drawConceptFooter(ctx,'#173c35','#b9c8c1',bottomHint);return
+  }
+
+  if (style === 'concept_ranking') {
+    drawConceptHeader(ctx,'高频模块排行','企业招聘考试','#f0f2f3','#f3bd58');drawConceptTitle(ctx,text,'#f0f2f3','#adb7c5')
+    const rows=[['01','判断推理','重点突破'],['02','资料分析','速度训练'],['03','言语理解','稳定正确率']]
+    rows.forEach((r,i)=>{const y=625+i*180;ctx.fillStyle='#263247';ctx.beginPath();ctx.roundRect(90,y,900,140,22);ctx.fill();ctx.fillStyle='#f3bd58';ctx.font='900 54px sans-serif';ctx.fillText(r[0],125,y+39);ctx.fillStyle='#fff';ctx.font='900 36px "PingFang SC",sans-serif';ctx.fillText(r[1],270,y+35);ctx.fillStyle='#aeb8c8';ctx.font='700 24px "PingFang SC",sans-serif';ctx.fillText(r[2],270,y+86)})
+    drawConceptFooter(ctx,'#f3bd58','#3a4557',bottomHint);return
+  }
+
+  if (style === 'concept_orbit') {
+    drawConceptHeader(ctx,'CORE SYSTEM','核心知识轨道',dark,orange);drawConceptTitle(ctx,text,dark,'#6d756f')
+    const cx=540,cy=850;ctx.strokeStyle='#9ea69f';ctx.lineWidth=3;ctx.beginPath();ctx.arc(cx,cy,285,0,Math.PI*2);ctx.stroke();ctx.beginPath();ctx.arc(cx,cy,185,0,Math.PI*2);ctx.stroke();ctx.fillStyle=dark;ctx.beginPath();ctx.arc(cx,cy,120,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fff';ctx.font='900 37px "PingFang SC",sans-serif';ctx.textAlign='center';ctx.fillText('笔试核心',cx,cy-20)
+    const points=[[cx,cy-285,'考情'],[cx+285,cy,'题型'],[cx,cy+285,'真题'],[cx-285,cy,'复盘']];points.forEach(p=>{ctx.fillStyle=orange;ctx.beginPath();ctx.arc(p[0],p[1],50,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fff';ctx.font='900 24px "PingFang SC",sans-serif';ctx.fillText(p[2],p[0],p[1]-13)});ctx.textAlign='left';drawConceptFooter(ctx,dark,'#c8beb2',bottomHint);return
+  }
+
+  if (style === 'concept_elements') {
+    drawConceptHeader(ctx,'笔试考点元素表','企业招聘考试',dark,'#ad5a45');drawConceptTitle(ctx,text,dark,'#68766f')
+    const items=[['Yy','言语'],['Tl','推理'],['Sl','数量'],['Zl','资料'],['Cs','常识'],['Zy','专业']]
+    items.forEach((it,i)=>{const x=90+(i%3)*305,y=600+Math.floor(i/3)*260,darkCell=i%2===1;ctx.fillStyle=darkCell?dark:'#f6f7f1';ctx.strokeStyle='#9faa9f';ctx.lineWidth=3;ctx.fillRect(x,y,270,220);ctx.strokeRect(x,y,270,220);ctx.fillStyle=darkCell?'#e5bd6a':'#ad5a45';ctx.font='900 72px sans-serif';ctx.fillText(it[0],x+30,y+30);ctx.fillStyle=darkCell?'#fff':dark;ctx.font='700 28px "PingFang SC",sans-serif';ctx.fillText(it[1],x+32,y+140)})
+    drawConceptFooter(ctx,dark,'#b9c2ba',bottomHint);return
+  }
+
+  if (style === 'concept_funnel') {
+    drawConceptHeader(ctx,'FOCUS','复习范围逐步收紧',dark,orange);drawConceptTitle(ctx,text,dark,'#6c756f')
+    const levels=[['完整考纲',850,dark],['高频模块',700,'#486158'],['历年真题',560,'#788b74'],['易错考点',420,'#b98b5c'],['考前重点',300,orange]]
+    levels.forEach((l,i)=>{const x=(W-l[1])/2,y=590+i*125;ctx.fillStyle=l[2];ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+l[1],y);ctx.lineTo(x+l[1]-55,y+100);ctx.lineTo(x+55,y+100);ctx.closePath();ctx.fill();ctx.fillStyle='#fff';ctx.font='900 28px "PingFang SC",sans-serif';ctx.textAlign='center';ctx.fillText(l[0],W/2,y+32)});ctx.textAlign='left';drawConceptFooter(ctx,dark,'#c8bfae',bottomHint);return
+  }
+
+  if (style === 'concept_timeline') {
+    drawConceptHeader(ctx,'14天冲刺时间轴','企业招聘考试','#243655',orange);drawConceptTitle(ctx,text,'#243655','#66758c')
+    ctx.strokeStyle='#243655';ctx.lineWidth=10;ctx.beginPath();ctx.moveTo(180,590);ctx.lineTo(180,1180);ctx.stroke();const rows=[['D-14','基础扫盲'],['D-10','专项突破'],['D-05','真题复盘'],['D-01','考前巩固']]
+    rows.forEach((r,i)=>{const y=610+i*170;ctx.fillStyle=orange;ctx.beginPath();ctx.arc(180,y,24,0,Math.PI*2);ctx.fill();ctx.fillStyle='#243655';ctx.font='900 35px sans-serif';ctx.fillText(r[0],245,y-35);ctx.font='900 40px "PingFang SC",sans-serif';ctx.fillText(r[1],430,y-37);ctx.strokeStyle='#b8c2d0';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(245,y+35);ctx.lineTo(940,y+35);ctx.stroke()});drawConceptFooter(ctx,'#243655','#bdc7d4',bottomHint);return
+  }
+
+  if (style === 'concept_target') {
+    drawConceptHeader(ctx,'FOCUS PLAN','精准锁定得分点',dark,'#6b8177');drawConceptTitle(ctx,text,dark,'#687970')
+    ctx.fillStyle='#dfe7e1';ctx.beginPath();ctx.arc(540,835,290,0,Math.PI*2);ctx.fill();ctx.fillStyle='#c5d4cc';ctx.beginPath();ctx.arc(540,835,205,0,Math.PI*2);ctx.fill();ctx.fillStyle='#91aa9d';ctx.beginPath();ctx.arc(540,835,125,0,Math.PI*2);ctx.fill();ctx.fillStyle=dark;ctx.beginPath();ctx.arc(540,835,80,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fff';ctx.font='700 21px "PingFang SC",sans-serif';ctx.textAlign='center';ctx.fillText('核心目标',540,796);ctx.font='900 29px "PingFang SC",sans-serif';ctx.fillText('高频考点',540,835)
+    ;['方向明确','训练集中','复盘到位'].forEach((v,i)=>{const x=250+i*220;ctx.fillStyle=i===1?'#d5dfd9':'#e2e7e2';ctx.beginPath();ctx.roundRect(x,1160,180,58,29);ctx.fill();ctx.fillStyle='#41574f';ctx.font='700 22px "PingFang SC",sans-serif';ctx.fillText(v,x+90,1175)});ctx.textAlign='left';drawConceptFooter(ctx,'#687970','#c5cec8',bottomHint);return
+  }
+
+  if (style === 'concept_circuit') {
+    drawConceptHeader(ctx,'解题思路电路图','企业招聘考试','#eef4eb','#70deb0');drawConceptTitle(ctx,text,'#eef4eb','#b8cbc3')
+    const labels=['读题','定位','排除','复核'];labels.forEach((v,i)=>{const x=90+i*245,y=720;ctx.strokeStyle='#70deb0';ctx.lineWidth=5;ctx.strokeRect(x,y,150,150);ctx.fillStyle='#eef4eb';ctx.font='900 31px "PingFang SC",sans-serif';ctx.textAlign='center';ctx.fillText(v,x+75,y+55);if(i<3){ctx.strokeStyle='#70deb0';ctx.beginPath();ctx.moveTo(x+150,y+75);ctx.lineTo(x+245,y+75);ctx.stroke();ctx.fillStyle='#70deb0';ctx.beginPath();ctx.moveTo(x+245,y+75);ctx.lineTo(x+220,y+60);ctx.lineTo(x+220,y+90);ctx.closePath();ctx.fill()}});ctx.fillStyle='#70deb0';ctx.font='700 22px monospace';ctx.textAlign='left';ctx.fillText('INPUT',90,980);ctx.textAlign='right';ctx.fillText('OUTPUT',990,980);ctx.setLineDash([15,12]);ctx.strokeStyle='#70deb0';ctx.beginPath();ctx.moveTo(90,1040);ctx.lineTo(990,1040);ctx.stroke();ctx.setLineDash([]);ctx.textAlign='left';drawConceptFooter(ctx,'#70deb0','#35584f',bottomHint);return
+  }
+
+  if (style === 'concept_bars') {
+    drawConceptHeader(ctx,'SCORE PLAN','分模块提分计划',dark,orange);drawConceptTitle(ctx,text,dark,'#68756f')
+    const values=[.52,.70,.43,.82,.60],labels=['言语','判断','数量','资料','常识'];ctx.strokeStyle=dark;ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(100,1120);ctx.lineTo(980,1120);ctx.stroke();values.forEach((v,i)=>{const x=130+i*175,h=500*v;ctx.fillStyle=i%2?dark:orange;ctx.fillRect(x,1120-h,105,h);ctx.fillStyle=dark;ctx.font='800 24px "PingFang SC",sans-serif';ctx.textAlign='center';ctx.fillText(labels[i],x+52,1147);ctx.font='700 21px sans-serif';ctx.fillText(`${Math.round(v*100)}%`,x+52,1080-h)});ctx.textAlign='left';drawConceptFooter(ctx,dark,'#c1baac',bottomHint);return
+  }
+}
+
 async function renderTemplateCardImage(text, templateStyle, bottomHint) {
   const SCALE = 3
   const W = 360 * SCALE, H = 480 * SCALE
   const canvas = new OffscreenCanvas(W, H)
   const ctx = canvas.getContext('2d')
   const style = templateStyle || rndPick(CARD_TEMPLATE_STYLES)
+  if (CONCEPT_CARD_STYLES.has(style)) {
+    drawConceptCardImage(ctx, W, H, style, text, bottomHint)
+    return offscreenToDataUrl(canvas)
+  }
   if (REFERENCE_TEA_THEME_MAP[style]) {
     drawRefCardImage(ctx, W, H, REFERENCE_TEA_THEME_MAP[style], text)
     applyTeaReferenceTheme(ctx, W, H, REFERENCE_TEA_THEME_PALETTES[style])
@@ -2660,6 +2917,7 @@ async function runBatch({ productDetails, onlyDirImages, generationMode = 'compl
   _TITLE_POOL                = titlePool             || []
   _CARD_TITLE_TEMPLATE_POOL  = cardTitleTemplatePool || []
   _USE_CARD_TITLE_TEMPLATES  = !!useCardTitleTemplates
+  _CARD_TEXT_TITLE_BAG       = []
   _HISTORY_TITLE_POOL        = historyTitlePool      || []
   _MOCK_TITLE_POOL           = mockTitlePool         || []
   _CARD_SCHEMES              = cardSchemes           || []
