@@ -706,7 +706,18 @@
               :disabled="!cardText"
               style="flex-shrink:0; margin-top:20px"
               @click="generateCardImage"
-            >生图</a-button>
+            >AI 生图</a-button>
+            <a-button
+              :loading="batchCardGenerating"
+              :disabled="!cardText"
+              style="flex-shrink:0; margin-top:20px"
+              @click="() => generateBatchStyleCardImage()"
+            >批量同款卡片图</a-button>
+            <a-button
+              :disabled="!cardText"
+              style="flex-shrink:0; margin-top:20px"
+              @click="openCardTemplatePicker"
+            >选择模板</a-button>
           </div>
           <div v-if="cardGeneratedImgUrl" style="margin-bottom:12px; display:flex; flex-direction:column; align-items:center; gap:8px">
             <a-image
@@ -715,6 +726,23 @@
               style="max-height:200px; max-width:100%; border-radius:8px; box-shadow:0 2px 12px rgba(0,0,0,0.12); display:block; cursor:pointer"
             />
             <a-button size="small" :loading="cardDownloading" @click="downloadCardImage">下载图片</a-button>
+          </div>
+          <div v-if="batchCardImageUrl" class="batch-card-result">
+            <a-image
+              :src="batchCardImageUrl"
+              :preview="{ src: batchCardImageUrl }"
+              :width="210"
+              :height="280"
+              class="batch-card-result__image"
+            />
+            <a-space>
+              <a-button size="small" :loading="batchCardDownloading" @click="downloadBatchCardImage">
+                下载卡片图
+              </a-button>
+              <a-button size="small" :loading="batchCardGenerating" @click="() => generateBatchStyleCardImage()">
+                换一个模板
+              </a-button>
+            </a-space>
           </div>
           <CardEditor :text="cardText" placeholder="生成标题后将以标题作为卡片文字"
             :file-name-prefix="`xhs-card-${data.id || 'item'}`" />
@@ -796,12 +824,57 @@
                 <a-button v-if="coverImageUrls.length === 1 && coverImageUrl" type="link" size="small" @click="downloadCoverImage()">
                   <DownloadOutlined /> 下载
                 </a-button>
-                <a-button type="link" size="small" :loading="coverGenerating" @click="() => generateCoverImage()">
+                <a-button
+                  type="link"
+                  size="small"
+                  :loading="coverGenerating"
+                  :disabled="coverPromptMode === 'specified' && !selectedCoverPromptId"
+                  @click="() => generateCoverImage()"
+                >
                   {{ coverImageUrls.length ? '重新生成' : '生成封面图' }}
                 </a-button>
               </a-space>
             </div>
           </template>
+          <div class="cover-prompt-picker">
+            <div class="cover-prompt-picker__header">
+              <span class="cover-prompt-picker__label">提示词方式</span>
+              <a-radio-group v-model:value="coverPromptMode" button-style="solid" size="small">
+                <a-radio-button value="random">随机提示词</a-radio-button>
+                <a-radio-button value="specified">指定提示词</a-radio-button>
+              </a-radio-group>
+              <a-button
+                v-if="coverPromptMode === 'specified'"
+                type="link"
+                size="small"
+                :loading="coverPromptOptionsLoading"
+                @click="loadCoverCardPrompts"
+              >刷新</a-button>
+            </div>
+            <div v-if="coverPromptMode === 'specified'" class="cover-prompt-options">
+              <a-spin v-if="coverPromptOptionsLoading" />
+              <a-empty v-else-if="!coverPromptOptions.length" description="暂无可用的卡片提示词" />
+              <button
+                v-for="item in coverPromptOptions"
+                v-else
+                :key="item.id"
+                type="button"
+                class="cover-prompt-option"
+                :class="{ 'cover-prompt-option--active': selectedCoverPromptId === item.id }"
+                @click="selectedCoverPromptId = item.id"
+              >
+                <div class="cover-prompt-option__image">
+                  <img v-if="item.sample_image" :src="item.sample_image" :alt="`${item.name}示例图`" />
+                  <PictureOutlined v-else />
+                </div>
+                <div class="cover-prompt-option__meta">
+                  <strong>{{ item.name }}</strong>
+                  <span>{{ item.job_type_name || '通用提示词' }}</span>
+                </div>
+                <CheckCircleOutlined v-if="selectedCoverPromptId === item.id" class="cover-prompt-option__check" />
+              </button>
+            </div>
+          </div>
           <div v-if="coverGenerating" class="field-placeholder cover-placeholder loading-box">
             <a-spin /> <span style="margin-left: 8px; color: #999">{{ coverStatusMsg }}</span>
           </div>
@@ -835,6 +908,44 @@
         </a-form-item>
       </a-form>
     </a-drawer>
+
+    <a-modal
+      v-model:open="cardTemplatePickerVisible"
+      title="选择卡片图模板"
+      width="980px"
+      ok-text="使用此模板生成"
+      cancel-text="取消"
+      :confirm-loading="batchCardGenerating"
+      :ok-button-props="{ disabled: !selectedCardTemplateId }"
+      @ok="generateSelectedCardTemplate"
+    >
+      <div class="card-template-picker__toolbar">
+        <span>卡片文字：{{ cardText }}</span>
+        <a-button size="small" :loading="cardTemplatePickerLoading" @click="loadCardTemplatePickerPreviews">
+          刷新预览
+        </a-button>
+      </div>
+      <a-spin :spinning="cardTemplatePickerLoading">
+        <div class="card-template-picker__grid">
+          <button
+            v-for="item in cardTemplatePickerPreviews"
+            :key="item.id"
+            type="button"
+            class="card-template-picker__item"
+            :class="{ 'card-template-picker__item--active': selectedCardTemplateId === item.id }"
+            @click="selectedCardTemplateId = item.id"
+          >
+            <img :src="`data:image/png;base64,${item.base64}`" :alt="item.name" />
+            <span>{{ item.name }}</span>
+            <CheckCircleOutlined v-if="selectedCardTemplateId === item.id" />
+          </button>
+        </div>
+        <a-empty
+          v-if="!cardTemplatePickerPreviews.length && !cardTemplatePickerLoading"
+          description="暂无模板预览"
+        />
+      </a-spin>
+    </a-modal>
 
     <!-- 模版生成正文 选择弹窗 -->
     <a-modal
@@ -1500,6 +1611,13 @@ const cardText = ref('')
 const cardImgGenerating = ref(false)
 const cardDownloading = ref(false)
 const cardGeneratedImgUrl = ref('')
+const batchCardGenerating = ref(false)
+const batchCardDownloading = ref(false)
+const batchCardImageUrl = ref('')
+const cardTemplatePickerVisible = ref(false)
+const cardTemplatePickerLoading = ref(false)
+const cardTemplatePickerPreviews = ref([])
+const selectedCardTemplateId = ref('')
 const bodyGenerating = ref(false)
 const noteDownloading = ref(false)
 const generatedBody = ref('')
@@ -1511,6 +1629,13 @@ const coverStatusMsg = ref('正在生成封面图...')
 const coverImageUrl = ref('')
 const coverImageUrls = ref([])
 const coverPromptUsed = ref('')
+const coverPromptMode = ref('random')
+const coverPromptOptions = ref([])
+const coverPromptOptionsLoading = ref(false)
+const selectedCoverPromptId = ref(null)
+const selectedCoverPrompt = computed(() =>
+  coverPromptOptions.value.find(item => item.id === selectedCoverPromptId.value) || null
+)
 const templateModalVisible = ref(false)
 const communityImageDrawer = reactive({
   visible: false,
@@ -1968,6 +2093,7 @@ function openGenerate() {
   }
   generatedTags.value = tags
   generateVisible.value = true
+  loadCoverCardPrompts()
 }
 
 // ─── 备考海报一键生图 ──────────────────────────────────────
@@ -2180,10 +2306,16 @@ async function generateCoverImage(useEditedPrompt = false) {
     params.prompt = sanitizeCoverPromptText(appendWrittenExamConstraintToPrompt(coverPromptUsed.value))
   } else {
     try {
-      coverStatusMsg.value = '正在随机抽取卡片提示词...'
-      const cardPrompt = await pickRandomCardPrompt()
+      coverStatusMsg.value = coverPromptMode.value === 'specified'
+        ? '正在读取指定提示词...'
+        : '正在随机抽取卡片提示词...'
+      const cardPrompt = coverPromptMode.value === 'specified'
+        ? selectedCoverPrompt.value
+        : await pickRandomCardPrompt()
       if (!cardPrompt) {
-        message.error(data.value.job_type_name ? `未找到「${data.value.job_type_name}」可用的卡片提示词` : '未找到可用的卡片提示词')
+        message.error(coverPromptMode.value === 'specified'
+          ? '请先选择一个提示词模板'
+          : (data.value.job_type_name ? `未找到「${data.value.job_type_name}」可用的卡片提示词` : '未找到可用的卡片提示词'))
         coverGenerating.value = false
         return
       }
@@ -2329,6 +2461,104 @@ async function generateCardImage() {
     message.error(e.message || '生图失败')
   } finally {
     cardImgGenerating.value = false
+  }
+}
+
+function generateBatchStyleCardImage(templateStyle = '') {
+  const text = (cardText.value || '').trim()
+  if (!text) {
+    message.warning('请先填写卡片文字')
+    return
+  }
+  if (batchCardGenerating.value) return
+
+  batchCardGenerating.value = true
+  const worker = new Worker(
+    new URL('../../workers/batchDirGen.worker.js', import.meta.url),
+  )
+  const finish = () => {
+    batchCardGenerating.value = false
+    worker.terminate()
+  }
+  worker.onmessage = (event) => {
+    const result = event.data || {}
+    if (result.type === 'single-card-image') {
+      batchCardImageUrl.value = `data:image/png;base64,${result.base64}`
+      if (templateStyle) cardTemplatePickerVisible.value = false
+      finish()
+    } else if (result.type === 'single-card-image-error') {
+      message.error(result.message || '卡片图生成失败')
+      finish()
+    }
+  }
+  worker.onerror = (error) => {
+    message.error(error?.message || '卡片图生成失败')
+    finish()
+  }
+  worker.postMessage({ type: 'generate-card-image', text, templateStyle })
+}
+
+function openCardTemplatePicker() {
+  if (!(cardText.value || '').trim()) {
+    message.warning('请先填写卡片文字')
+    return
+  }
+  cardTemplatePickerVisible.value = true
+  loadCardTemplatePickerPreviews()
+}
+
+function loadCardTemplatePickerPreviews() {
+  if (cardTemplatePickerLoading.value) return
+  cardTemplatePickerLoading.value = true
+  const worker = new Worker(
+    new URL('../../workers/batchDirGen.worker.js', import.meta.url),
+  )
+  const finish = () => {
+    cardTemplatePickerLoading.value = false
+    worker.terminate()
+  }
+  worker.onmessage = (event) => {
+    const result = event.data || {}
+    if (result.type === 'card-template-previews') {
+      cardTemplatePickerPreviews.value = result.previews || []
+      if (selectedCardTemplateId.value && !cardTemplatePickerPreviews.value.some(item => item.id === selectedCardTemplateId.value)) {
+        selectedCardTemplateId.value = ''
+      }
+      finish()
+    } else if (result.type === 'card-template-preview-error') {
+      message.error(result.message || '模板预览生成失败')
+      finish()
+    }
+  }
+  worker.onerror = (error) => {
+    message.error(error?.message || '模板预览生成失败')
+    finish()
+  }
+  worker.postMessage({
+    type: 'preview-card-templates',
+    sampleText: (cardText.value || '').trim(),
+  })
+}
+
+function generateSelectedCardTemplate() {
+  if (!selectedCardTemplateId.value) {
+    message.warning('请选择一个卡片模板')
+    return
+  }
+  generateBatchStyleCardImage(selectedCardTemplateId.value)
+}
+
+async function downloadBatchCardImage() {
+  if (!batchCardImageUrl.value || batchCardDownloading.value) return
+  batchCardDownloading.value = true
+  try {
+    const response = await fetch(batchCardImageUrl.value)
+    const blob = await response.blob()
+    triggerBlobDownload(blob, `card-${data.value.id || 'item'}.png`)
+  } catch (e) {
+    message.error(e.message || '下载失败')
+  } finally {
+    batchCardDownloading.value = false
   }
 }
 
@@ -2625,6 +2855,11 @@ function sanitizeCoverPromptText(text) {
 }
 
 async function pickRandomCardPrompt() {
+  const activeList = await fetchAvailableCardPrompts()
+  return pickRandom(activeList)
+}
+
+async function fetchAvailableCardPrompts() {
   const pageSize = 100
   const fetchByJobType = async (jobTypeId) => {
     if (!jobTypeId) return []
@@ -2638,8 +2873,23 @@ async function pickRandomCardPrompt() {
     list = Array.isArray(res?.list) ? res.list : []
   }
 
-  const activeList = list.filter(item => item && item.status !== 0 && String(item.content || '').trim())
-  return pickRandom(activeList)
+  return list.filter(item => item && item.status !== 0 && String(item.content || '').trim())
+}
+
+async function loadCoverCardPrompts() {
+  if (coverPromptOptionsLoading.value) return
+  coverPromptOptionsLoading.value = true
+  try {
+    coverPromptOptions.value = await fetchAvailableCardPrompts()
+    if (selectedCoverPromptId.value && !selectedCoverPrompt.value) {
+      selectedCoverPromptId.value = null
+    }
+  } catch (e) {
+    coverPromptOptions.value = []
+    message.error(e.message || '提示词列表加载失败')
+  } finally {
+    coverPromptOptionsLoading.value = false
+  }
 }
 
 function buildCoverPromptFromCardPrompt(cardPrompt) {
@@ -2653,10 +2903,10 @@ function buildCoverPromptFromCardPrompt(cardPrompt) {
     `封面核心主题：${cardTextForCover}`,
     companyName ? `封面中必须突出单位名称：${companyName}` : '',
     '',
-    '【随机抽取的卡片提示词】',
+    '【选用的卡片提示词】',
     promptContent,
     '',
-    '要求：直接按随机抽取的卡片提示词风格出图，画面适合作为小红书封面，文字清晰醒目，竖版比例。',
+    '要求：直接按选用的卡片提示词风格出图，画面适合作为小红书封面，文字清晰醒目，竖版比例。',
   ].filter(Boolean).join('\n')
 }
 
@@ -5672,11 +5922,19 @@ let mosaicBaseDataUrl = ''  // 原始图（无马赛克），用于"清除"还�
 const SENSITIVE_WORD_LIST = [
   '习近平', '毛泽东', '邓小平', '江泽民', '胡锦涛', '李克强',
   '赵乐际', '王沪宁', '丁薛祥', '李希',
-  '中国共产党', '中共中央', '党中央', '中央', '共产党', '政治局', '总书记',
-  '国家主席', '国家副主席', '中央军委', '人民解放军', '武警部队',
-  '国务院', '全国人大', '全国政协', '人民代表大会', '人民代表',
+  '中国共产党', '中共中央', '党中央', '中央', '共产党', '政治局', '政治局常委', '总书记',
+  '中央委员会', '中央纪委', '中央组织部', '中央宣传部', '中央统战部', '中央政法委',
+  '国家主席', '国家副主席', '中央军委', '人民解放军', '解放军', '武警部队',
+  '国务院', '全国人大', '全国政协', '人大常委会', '人民代表大会', '代表大会', '人民代表',
+  '最高人民法院', '最高人民检察院', '人民法院', '人民检察院', '公安部', '国防部', '外交部',
+  '党委', '党组', '纪委', '监委', '省委', '市委', '县委', '区委', '政府工作报告',
   '中华人民共和国', '共和国', '中国', '中华民族', '中华', '政府', '党', '宪法',
-  '社会主义', '全会', '国家', '法律', '法规', '政治',
+  '社会主义', '共产主义', '马克思主义', '毛泽东思想', '中国特色社会主义',
+  '全会', '二十大', '三中', '三中全会', '两会', '党代会', '国家', '法律', '法规', '政治',
+  '战争', '反法西斯', '解放', '民主', '三权', '三权分立', '分权', '强国',
+  '美国', '俄罗斯', '俄国', '日本', '英国', '法国', '德国', '韩国', '朝鲜', '印度',
+  '加拿大', '澳大利亚', '乌克兰', '以色列', '巴勒斯坦', '伊朗', '台湾', '香港', '澳门',
+  '国民党', '民进党', '民主党', '共和党', '工党', '保守党', '政党', '在野党', '执政党',
   '党员', '党建', '时事政资', '时事政治', '时政',
 ]
 const autoMosaicEnabled = ref(true)  // 生图时自动遮盖敏感词开关
@@ -7429,6 +7687,106 @@ async function openCustomDir(item, idx) {
   min-height: 180px;
 }
 
+.cover-prompt-picker {
+  margin-bottom: 14px;
+  padding: 12px;
+  background: #fafafa;
+  border: 1px solid #f0f0f0;
+  border-radius: 6px;
+}
+
+.cover-prompt-picker__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cover-prompt-picker__label {
+  color: #555;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.cover-prompt-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+  max-height: 420px;
+  margin-top: 12px;
+  overflow-y: auto;
+}
+
+.cover-prompt-option {
+  position: relative;
+  min-width: 0;
+  padding: 8px;
+  color: inherit;
+  text-align: left;
+  background: #fff;
+  border: 1px solid #d9d9d9;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.cover-prompt-option:hover,
+.cover-prompt-option--active {
+  border-color: #1677ff;
+  box-shadow: 0 0 0 2px rgba(22, 119, 255, 0.12);
+}
+
+.cover-prompt-option__image {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 150px;
+  margin-bottom: 8px;
+  overflow: hidden;
+  color: #aaa;
+  font-size: 12px;
+  background: #f5f5f5;
+  border-radius: 4px;
+}
+
+.cover-prompt-option__image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.cover-prompt-option__meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+
+.cover-prompt-option__meta strong,
+.cover-prompt-option__meta span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cover-prompt-option__meta strong {
+  padding-right: 20px;
+  color: #222;
+  font-size: 13px;
+}
+
+.cover-prompt-option__meta span {
+  color: #999;
+  font-size: 12px;
+}
+
+.cover-prompt-option__check {
+  position: absolute;
+  right: 10px;
+  bottom: 28px;
+  color: #1677ff;
+}
+
 .cover-result {
   display: flex;
   flex-direction: column;
@@ -7468,6 +7826,86 @@ async function openCustomDir(item, idx) {
   font-size: 13px;
   color: #555;
   font-weight: 500;
+}
+
+.batch-card-result {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.batch-card-result__image {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  max-height: 280px;
+  border-radius: 6px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
+}
+
+.card-template-picker__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  color: #555;
+  font-size: 13px;
+}
+
+.card-template-picker__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  max-height: 620px;
+  overflow-y: auto;
+}
+
+.card-template-picker__item {
+  position: relative;
+  min-width: 0;
+  padding: 8px;
+  color: #333;
+  background: #fff;
+  border: 1px solid #e5e5e5;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.card-template-picker__item:hover,
+.card-template-picker__item--active {
+  border-color: #1677ff;
+  box-shadow: 0 0 0 2px rgba(22, 119, 255, 0.12);
+}
+
+.card-template-picker__item img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  border-radius: 4px;
+}
+
+.card-template-picker__item span {
+  display: block;
+  margin-top: 6px;
+  overflow: hidden;
+  font-size: 13px;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-template-picker__item > .anticon {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  padding: 4px;
+  color: #fff;
+  background: #1677ff;
+  border-radius: 50%;
 }
 .gen-image-grid {
   display: flex;

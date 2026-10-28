@@ -121,11 +121,19 @@ async function loadBitmap(url) {
 const SENSITIVE_WORD_LIST = [
   '习近平','毛泽东','邓小平','江泽民','胡锦涛','李克强',
   '赵乐际','王沪宁','丁薛祥','李希',
-  '中国共产党','中共中央','党中央','中央','共产党','政治局','总书记',
-  '国家主席','国家副主席','中央军委','人民解放军','武警部队',
-  '国务院','全国人大','全国政协','人民代表大会','人民代表',
+  '中国共产党','中共中央','党中央','中央','共产党','政治局','政治局常委','总书记',
+  '中央委员会','中央纪委','中央组织部','中央宣传部','中央统战部','中央政法委',
+  '国家主席','国家副主席','中央军委','人民解放军','解放军','武警部队',
+  '国务院','全国人大','全国政协','人大常委会','人民代表大会','代表大会','人民代表',
+  '最高人民法院','最高人民检察院','人民法院','人民检察院','公安部','国防部','外交部',
+  '党委','党组','纪委','监委','省委','市委','县委','区委','政府工作报告',
   '中华人民共和国','共和国','中国','中华民族','中华','政府','党','宪法',
-  '社会主义','全会','国家','法律','法规','政治',
+  '社会主义','共产主义','马克思主义','毛泽东思想','中国特色社会主义',
+  '全会','二十大','三中','三中全会','两会','党代会','国家','法律','法规','政治',
+  '战争','反法西斯','解放','民主','三权','三权分立','分权','强国',
+  '美国','俄罗斯','俄国','日本','英国','法国','德国','韩国','朝鲜','印度',
+  '加拿大','澳大利亚','乌克兰','以色列','巴勒斯坦','伊朗','台湾','香港','澳门',
+  '国民党','民进党','民主党','共和党','工党','保守党','政党','在野党','执政党',
   '党员','党建','时事政资','时事政治','时政',
 ]
 
@@ -2774,6 +2782,26 @@ async function buildCardTemplatePreviews({ sampleText, cardSchemes }) {
 
 // ── Worker 入口 ──────────────────────────────────────────────────────
 self.onmessage = async (e) => {
+  if (e.data.type === 'generate-card-image') {
+    try {
+      _CARD_SCHEMES = e.data.cardSchemes || []
+      _CARD_SCHEME_BAG = []
+      _CARD_TEMPLATE_STYLE_BAG = []
+      const text = String(e.data.text || '').trim()
+      const templateStyle = String(e.data.templateStyle || '').trim()
+      const scheme = pickCardScheme() || { bg: '#d4f7d4', text: '#2d4a2d', accent: '#52c07a' }
+      const dataUrl = templateStyle
+        ? await renderTemplateCardImage(text, templateStyle, pickCardBottomHint())
+        : await renderCardImage(text, scheme)
+      post({
+        type: 'single-card-image',
+        base64: dataUrl.replace(/^data:image\/png;base64,/, ''),
+      })
+    } catch (err) {
+      post({ type: 'single-card-image-error', message: err.message || '卡片图生成失败' })
+    }
+    return
+  }
   if (e.data.type === 'preview-card-templates') {
     try {
       const previews = await buildCardTemplatePreviews(e.data)
