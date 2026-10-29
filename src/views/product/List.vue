@@ -53,8 +53,38 @@
       v-model:open="dirBatchSettingsVisible"
       title="批量生成目录图"
       :footer="null"
-      width="520px"
+      width="620px"
     >
+      <div class="dir-batch-order-section">
+        <div class="dir-batch-order-header">
+          <div>
+            <div class="dir-batch-order-title">生成顺序</div>
+            <div class="dir-batch-order-tip">拖动商品，或使用右侧按钮调整；生成任务会严格按此顺序发起</div>
+          </div>
+          <span class="dir-batch-order-count">共 {{ dirBatchOrderedProducts.length }} 个</span>
+        </div>
+        <div class="dir-batch-order-list">
+          <div
+            v-for="(item, index) in dirBatchOrderedProducts"
+            :key="item.id"
+            class="dir-batch-order-item"
+            draggable="true"
+            @dragstart="onDirBatchOrderDragStart(item.id)"
+            @dragend="onDirBatchOrderDragEnd"
+            @dragover.prevent
+            @drop="onDirBatchOrderDrop(item.id)"
+          >
+            <span class="dir-batch-order-handle" aria-hidden="true">⋮⋮</span>
+            <span class="dir-batch-order-index">{{ index + 1 }}</span>
+            <span class="dir-batch-order-name" :title="item.name">{{ item.name }}</span>
+            <a-space :size="4">
+              <a-button size="small" type="text" :disabled="index === 0" @click="moveDirBatchOrder(index, -1)">↑</a-button>
+              <a-button size="small" type="text" :disabled="index === dirBatchOrderedProducts.length - 1" @click="moveDirBatchOrder(index, 1)">↓</a-button>
+            </a-space>
+          </div>
+        </div>
+      </div>
+      <a-divider style="margin: 12px 0" />
       <div style="margin-bottom: 16px">
         <div style="font-size: 13px; font-weight: 500; color: #555; margin-bottom: 8px">生成方式</div>
         <a-radio-group v-model:value="dirBatchMode" style="display: flex; flex-direction: column; gap: 6px">
@@ -309,13 +339,32 @@ const loading = ref(false)
 const list = ref([])
 const pagination = reactive({ current: 1, pageSize: 20, total: 0, showTotal: t => `共 ${t} 条` })
 const selectedRowKeys = ref([])
+const dirBatchOrderKeys = ref([])
+const dirBatchDraggedKey = ref(null)
+
+function hasSameRowKey(keys, target) {
+  return keys.some(key => String(key) === String(target))
+}
+
+function syncDirBatchOrder(keys = selectedRowKeys.value) {
+  const selectedKeys = [...keys]
+  const keptKeys = dirBatchOrderKeys.value.filter(key => hasSameRowKey(selectedKeys, key))
+  const appendedKeys = selectedKeys.filter(key => !hasSameRowKey(keptKeys, key))
+  dirBatchOrderKeys.value = [...keptKeys, ...appendedKeys]
+}
+
 const rowSelection = {
   selectedRowKeys,
-  onChange: keys => { selectedRowKeys.value = keys },
+  preserveSelectedRowKeys: true,
+  onChange: keys => {
+    selectedRowKeys.value = keys
+    syncDirBatchOrder(keys)
+  },
 }
 
 function clearSelection() {
   selectedRowKeys.value = []
+  dirBatchOrderKeys.value = []
 }
 
 const batchVisible = ref(false)
@@ -1585,6 +1634,43 @@ const CARD_TEMPLATE_PREVIEW_TEXT = '示例单位笔试，考前冲刺就背这�
 const cardTemplatePreviewVisible = ref(false)
 const cardTemplatePreviewLoading = ref(false)
 const cardTemplatePreviews = ref([])
+const dirBatchOrderedProducts = computed(() => dirBatchOrderKeys.value.map((id) => {
+  const product = list.value.find(item => String(item.id) === String(id))
+  return {
+    id,
+    name: product?.company_name || product?.title || `商品 #${id}`,
+  }
+}))
+
+function moveDirBatchOrder(index, offset) {
+  const targetIndex = index + offset
+  if (targetIndex < 0 || targetIndex >= dirBatchOrderKeys.value.length) return
+  const next = [...dirBatchOrderKeys.value]
+  ;[next[index], next[targetIndex]] = [next[targetIndex], next[index]]
+  dirBatchOrderKeys.value = next
+}
+
+function onDirBatchOrderDragStart(id) {
+  dirBatchDraggedKey.value = id
+}
+
+function onDirBatchOrderDragEnd() {
+  dirBatchDraggedKey.value = null
+}
+
+function onDirBatchOrderDrop(targetId) {
+  const sourceId = dirBatchDraggedKey.value
+  dirBatchDraggedKey.value = null
+  if (sourceId == null || String(sourceId) === String(targetId)) return
+  const next = [...dirBatchOrderKeys.value]
+  const sourceIndex = next.findIndex(id => String(id) === String(sourceId))
+  if (sourceIndex < 0) return
+  const [moved] = next.splice(sourceIndex, 1)
+  const targetIndex = next.findIndex(id => String(id) === String(targetId))
+  if (targetIndex < 0) return
+  next.splice(targetIndex, 0, moved)
+  dirBatchOrderKeys.value = next
+}
 
 const DIR_BATCH_BORDER_COLORS = [
   '#F9863B', '#FF6B6B', '#F59E0B', '#10B981', '#14B8A6',
@@ -1651,6 +1737,7 @@ async function onBatchGenerateDirImages() {
   }
   randomizeDirBatchBorderColor()
   resetFeishuFirstScheduleTime()
+  syncDirBatchOrder()
   dirBatchSettingsVisible.value = true
 }
 
@@ -1913,9 +2000,11 @@ async function runBatchDirImages(generationMode = 'complete', useBgImage = false
     }
   }
 
+  syncDirBatchOrder()
+  const orderedProductKeys = [...dirBatchOrderKeys.value]
   dirBatchLogs.value = []
   dirBatchDone.value = 0
-  dirBatchTotal.value = selectedRowKeys.value.length
+  dirBatchTotal.value = orderedProductKeys.length
   dirBatchVisible.value = true
   dirBatchGenerating.value = true
 
@@ -1932,7 +2021,7 @@ async function runBatchDirImages(generationMode = 'complete', useBgImage = false
   // ── 2. 预加载所有商品详情（主线程，有 token / cookie）────────────
   dirBatchLogs.value.push({ text: '加载商品详情中...', type: 'info' })
   const productDetails = []
-  for (const id of selectedRowKeys.value) {
+  for (const id of orderedProductKeys) {
     const product = list.value.find(p => p.id === id)
     const company = product?.company_name || `product-${id}`
     try {
@@ -1947,6 +2036,7 @@ async function runBatchDirImages(generationMode = 'complete', useBgImage = false
     dirBatchGenerating.value = false
     return
   }
+  dirBatchLogs.value.push({ text: `生成顺序：${productDetails.map(item => item.company).join(' → ')}`, type: 'info' })
 
   // ── 3. 加载背景图池（仅开启背景图时加载）──────────────────────
   if (useBgImage) await ensureBgImagePool()
@@ -2102,7 +2192,8 @@ async function runBatchDirImages(generationMode = 'complete', useBgImage = false
   const activeProducts = new Set()
   let lastProductStartedAt = 0
   let recordIndex = 0
-  for (const company of Object.keys(productImageMap)) {
+  const orderedCompanies = productDetails.map(item => item.company).filter(company => productImageMap[company])
+  for (const company of orderedCompanies) {
     if (activeProducts.size >= 3) await Promise.race(activeProducts)
     // 所有商品共享启动间隔，补位任务也至少距上次启动 10 秒。
     while (lastProductStartedAt && Date.now() - lastProductStartedAt < 10000) {
@@ -2330,6 +2421,7 @@ async function onBatchDelete() {
       }
       batchDeleting.value = false
       selectedRowKeys.value = []
+      dirBatchOrderKeys.value = []
       pagination.current = 1
       if (errors.length === 0) {
         message.success(`已成功删除 ${successCount} 条商品`)
@@ -2429,6 +2521,84 @@ onMounted(() => {
   border-radius: 4px;
   font-size: 13px;
   color: #1677ff;
+}
+.dir-batch-order-section {
+  padding: 12px;
+  background: #f8fbff;
+  border: 1px solid #d6e8ff;
+  border-radius: 8px;
+}
+.dir-batch-order-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.dir-batch-order-title {
+  color: #1f1f1f;
+  font-size: 13px;
+  font-weight: 600;
+}
+.dir-batch-order-tip {
+  margin-top: 3px;
+  color: #7a8796;
+  font-size: 12px;
+}
+.dir-batch-order-count {
+  flex-shrink: 0;
+  color: #1677ff;
+  font-size: 12px;
+}
+.dir-batch-order-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding-right: 3px;
+}
+.dir-batch-order-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 4px 6px 4px 8px;
+  background: #fff;
+  border: 1px solid #e8eef5;
+  border-radius: 6px;
+  cursor: grab;
+  user-select: none;
+}
+.dir-batch-order-item:active {
+  cursor: grabbing;
+}
+.dir-batch-order-handle {
+  color: #aab4c0;
+  font-size: 15px;
+  letter-spacing: -3px;
+}
+.dir-batch-order-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  color: #1677ff;
+  font-size: 12px;
+  font-weight: 600;
+  background: #e6f4ff;
+  border-radius: 50%;
+}
+.dir-batch-order-name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: #333;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .card-preview-toolbar {
   display: flex;
