@@ -3248,7 +3248,52 @@ function drawKraftDecoration(ctx, W, H, scheme, scale) {
 }
 
 // Real source fragments are contained without cropping questions or options.
-async function renderRealMaterialCard(detail, text) {
+const REAL_CARD_LAYOUTS = [
+  ['real_reading','内页导读'],['real_exhibit','深绿展签'],['real_zoom','整页与放大'],['real_editorial','杂志内页'],
+  ['real_sticky','练习便签'],['real_frame','单页阅读框'],['real_review','复盘工作台'],['real_archive','留白资料馆'],
+]
+let realLayoutBag = []
+function nextRealLayout() {
+  if (!realLayoutBag.length) realLayoutBag = shuffledCopy(REAL_CARD_LAYOUTS.map(([id]) => id))
+  return realLayoutBag.pop()
+}
+
+async function drawRealLayout(material, text, layout) {
+  const canvas = new OffscreenCanvas(1242,1656), ctx=canvas.getContext('2d')
+  ctx.scale(3,3);ctx.textBaseline='top'
+  const dark=layout==='real_exhibit', ink=dark?'#faf4e6':'#203b32'
+  const bg={real_reading:'#f7f4ec',real_exhibit:'#1d3a34',real_zoom:'#eaf0f8',real_editorial:'#fffdf8',real_sticky:'#e7e4da',real_frame:'#fbf5eb',real_review:'#edf0ed',real_archive:'#e9e0d2'}[layout]||'#f7f4ec'
+  vRound(ctx,0,0,414,552,0,bg)
+  const captions={real_reading:'先看一页，认识内容呈现方式',real_exhibit:'资料长什么样',real_zoom:'整页看结构，局部看细节',real_editorial:'先读题，再落笔',real_sticky:'做一组题，也留一份记录',real_frame:'这一页，认真做完',real_review:'做完这一页，检查什么？',real_archive:'看得见的内容，再开始练习'}
+  vText(ctx,material.source+' / 实际内容节选',27,28,11,ink,600)
+  const end=drawRefTextBlock(ctx,splitCardText(text).main,27,60,360,36,ink,{align:'left',maxLines:3,minSize:23,lineHeight:1.12})
+  drawRefTextBlock(ctx,captions[layout],27,end+16,360,17,ink,{align:'left',maxLines:2,minSize:15})
+  const top=Math.max(180,end+70), height=492-top
+  const image=material.canvas
+  const sheet=(x,y,w,h)=>{vRound(ctx,x,y,w,h,0,'#fff');const scale=Math.min((w-12)/image.width,(h-12)/image.height);ctx.drawImage(image,x+(w-image.width*scale)/2,y+6,image.width*scale,image.height*scale)}
+  if(layout==='real_exhibit'){
+    sheet(27,top,250,height);vText(ctx,'保留原页',291,top+52,13,ink);vText(ctx,'看清内容',291,top+85,13,ink);vText(ctx,'分步练习',291,top+118,13,ink)
+  }else if(layout==='real_zoom'){
+    sheet(27,top,135,height);vText(ctx,'同页上部放大',180,top,12,ink)
+    const cropH=Math.min(image.height,image.width*.85)
+    ctx.drawImage(image,0,0,image.width,cropH,180,top+27,207,207*cropH/image.width)
+    drawRefTextBlock(ctx,'局部用于看细节，完整内容见左侧。',180,top+230,207,13,ink,{align:'left',maxLines:3,minSize:13})
+  }else if(layout==='real_editorial'){
+    ctx.fillStyle='#bd6045';ctx.fillRect(0,0,414,9);vText(ctx,'先阅读',27,top+22,17,ink,800);vText(ctx,'再练习',27,top+55,17,ink,800);sheet(125,top,262,height)
+  }else if(layout==='real_sticky'){
+    sheet(27,top,240,height);vRound(ctx,280,top+100,107,185,0,'#f8e5a2');['本轮记下','不懂的词','犹豫选项','错误原因'].forEach((s,i)=>vText(ctx,s,290,top+119+i*36,13,ink,i?500:800))
+  }else if(layout==='real_frame'){
+    vRound(ctx,27,top,360,height,0,'#eee2d2','#af8d72');sheet(40,top+13,334,height-26)
+  }else if(layout==='real_review'){
+    sheet(27,top,240,height);['复盘清单','□ 没看懂','□ 有犹豫','□ 需查找','□ 再练习'].forEach((s,i)=>vText(ctx,s,284,top+25+i*45,13,ink,i?500:800))
+  }else if(layout==='real_archive'){
+    sheet(65,top,284,height);ctx.strokeStyle='#aa9982';ctx.lineWidth=1;ctx.strokeRect(57,top-8,300,height+16)
+  }else sheet(27,top,360,height)
+  vText(ctx,material.source+' · 按自己的进度学习与复盘',27,520,11,ink)
+  return offscreenToDataUrl(canvas)
+}
+
+async function renderRealMaterialCard(detail, text, layout = nextRealLayout(), sourceOnly = false) {
   const sources = shuffledCopy([
     { path: detail?.baidu_path_exam, type: 'exam', label: '学习资料目录' },
     { path: detail?.baidu_path_history, type: 'history', label: '历年回忆题' },
@@ -3295,7 +3340,16 @@ async function renderRealMaterialCard(detail, text) {
         }
       }
       vText(ctx,'内容节选 · 请按自己的学习进度配合使用',90,1560,25,ink)
-      return { dataUrl: await offscreenToDataUrl(canvas), source: source.label, file: selected?.name || '' }
+      // Build a neutral source image for directory rows; PDF pages retain their original pixels.
+      let sourceCanvas = pageCanvas
+      if (!sourceCanvas) {
+        sourceCanvas = new OffscreenCanvas(1000, Math.max(200,Math.min(files.length,7)*110+70))
+        const sourceCtx=sourceCanvas.getContext('2d');sourceCtx.fillStyle='#fff';sourceCtx.fillRect(0,0,sourceCanvas.width,sourceCanvas.height)
+        files.slice(0,7).forEach((file,i)=>drawRefTextBlock(sourceCtx,file.name||'目录项目',35,35+i*110,930,29,'#203b32',{align:'left',maxLines:2,minSize:25}))
+      }
+      const material={canvas:sourceCanvas,source:source.label,file:selected?.name||''}
+      if(sourceOnly)return material
+      return { dataUrl: await drawRealLayout(material,text,layout), source: material.source, file: material.file }
     } catch (error) { log(`  └ ${source.label}融合读取失败：${error.message}，尝试其他资料`, 'warn') }
   }
   return null
@@ -3441,8 +3495,13 @@ async function buildCardTemplatePreviews({ sampleText, cardSchemes, productDetai
     for (const [field, label] of [['baidu_path_exam','真实学习资料目录'],['baidu_path_history','真实回忆题融合'],['baidu_path_mock','真实模拟题融合']]) {
       if (!productDetail[field]) continue
       const sourceDetail = { company_name: productDetail.company_name, [field]: productDetail[field] }
-      const real = await renderRealMaterialCard(sourceDetail, realText)
-      if (real) previews.push({ id: `real_${field}`, name: label, goal: '真实资料融合', viewpoint: real.file || real.source, base64: real.dataUrl.replace(/^data:image\/png;base64,/, '') })
+      const material = await renderRealMaterialCard(sourceDetail, realText, 'real_reading', true)
+      if (material) {
+        for (const [layout, name] of REAL_CARD_LAYOUTS) {
+          const dataUrl = await drawRealLayout(material, realText, layout)
+          previews.push({ id: `${layout}_${field}`, name: `${name} · ${label}`, goal: '真实资料融合', viewpoint: material.file || material.source, base64: dataUrl.replace(/^data:image\/png;base64,/, '') })
+        }
+      }
     }
   }
   for (let index = 0; index < CARD_TEMPLATE_STYLES.length; index++) {
@@ -3473,7 +3532,9 @@ self.onmessage = async (e) => {
       const text = String(e.data.text || '').trim()
       const templateStyle = String(e.data.templateStyle || '').trim()
       const scheme = pickCardScheme() || { bg: '#d4f7d4', text: '#2d4a2d', accent: '#52c07a' }
-      const realCard = e.data.useRealMaterial ? await renderRealMaterialCard(e.data.productDetail, text) : null
+      const specifiedReal = REAL_CARD_LAYOUTS.some(([id]) => id === templateStyle)
+      const realCard = (e.data.useRealMaterial || specifiedReal) ? await renderRealMaterialCard(e.data.productDetail, text, specifiedReal ? templateStyle : nextRealLayout()) : null
+      if (specifiedReal && !realCard) throw new Error('未读取到真实资料，请检查网盘目录配置')
       const dataUrl = realCard?.dataUrl || (templateStyle
         ? await renderTemplateCardImage(text, templateStyle, pickCardBottomHint(), drawerCardPlan(templateStyle, e.data.contentPlan, e.data.productDetail))
         : await renderCardImage(text, scheme))
