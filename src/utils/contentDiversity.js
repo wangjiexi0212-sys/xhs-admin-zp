@@ -6,7 +6,7 @@ const CONTENT_ANGLES = [
   { id: 'directory_guide', name: '资料目录解读', main: '资料目录', question: '资料目录应该怎么看？', need: 'exam' },
   { id: 'material_purpose', name: '资料用途说明', main: '资料怎么用', question: '不同资料分别怎么用？', need: 'exam' },
   { id: 'confirmed_scope', name: '已确认内容梳理', main: '已确认内容', question: '目前能确认哪些考试内容？', need: 'content' },
-  { id: 'information_boundary', name: '信息边界说明', main: '备考信息边界', question: '哪些信息需要以公告为准？', need: 'any' },
+  { id: 'information_boundary', name: '资料配合方法', main: '资料配合使用', question: '怎样用不同资料建立复习框架？', need: 'any' },
   { id: 'beginner_start', name: '新手开始路径', main: '从哪里开始', question: '第一次准备应该先做什么？', need: 'any' },
   { id: 'scope_check', name: '复习范围确认', main: '复习范围', question: '怎么先把复习范围理清？', need: 'any' },
   { id: 'baseline_check', name: '基础摸底方法', main: '基础摸底', question: '开始复习前怎么做摸底？', need: 'any' },
@@ -57,7 +57,7 @@ const BODY_STRUCTURES = [
   { id: 'three_steps', name: '三步骤流程', instruction: '写成三个连续步骤，每一步说明做什么、为什么以及完成标志。' },
   { id: 'four_steps', name: '四步骤流程', instruction: '写成四步骤操作流程，步骤标题短，解释具体，避免口号。' },
   { id: 'three_qa', name: '三组问答', instruction: '使用三组Q/A，每个问题必须不同，每个回答控制在两三句话。' },
-  { id: 'positive_negative', name: '正反对照', instruction: '对比一种低效做法和一种更合适的做法，说明差异，不夸大效果。' },
+  { id: 'positive_negative', name: '正反对照', instruction: '只对比两种学习动作或复习顺序，不得把学习资料目录、回忆题目录、模拟题目录中的任何一种写成低效、无效、不可靠或与考试无关。' },
   { id: 'single_deep_dive', name: '单点深度解释', instruction: '全文只解释一个问题，不延伸成完整备考攻略。' },
   { id: 'usage_manual', name: '使用说明', instruction: '像使用说明一样写清适用场景、操作方法和限制，语气客观。' },
 ]
@@ -78,7 +78,7 @@ const ENDINGS = [
   { id: 'next_action', name: '下一步行动', instruction: '最后给出一个明确且可执行的下一步动作。' },
   { id: 'self_check', name: '自查收尾', instruction: '最后留下一个复习自查问题，不使用互动引流话术。' },
   { id: 'usage_notice', name: '使用提醒', instruction: '最后提醒资料应结合实际公告和个人基础使用。' },
-  { id: 'information_boundary', name: '信息边界', instruction: '最后说明不确定信息应以官方公告为准。' },
+  { id: 'information_boundary', name: '资料配合提醒', instruction: '最后用积极语气说明可以结合资料目录、回忆题和模拟题安排后续复习，不讨论资料是否可靠。' },
   { id: 'review', name: '复盘提醒', instruction: '最后提醒记录错误原因或复盘结果。' },
   { id: 'none', name: '自然结束', instruction: '讲完核心内容后直接结束，不添加总结、祝福或资料推荐。' },
 ]
@@ -302,16 +302,39 @@ export function buildDiversityPrompt(plan, detail, previousDraft = '') {
     '',
     '【事实约束】',
     '不能虚构考试时间、倒计时、招聘岗位、题量、分值、难度、通过率、高分、必考内容或亲身上岸经历。',
-    '未确认的科目不得自行补充；回忆题不得描述成官方真题；不承诺提分、进面或通过。',
+    '未确认的科目不得自行补充；商品标注为回忆题时统一写“历年回忆题”；不承诺提分、进面或通过。',
+    '',
+    '【商品价值保护要求】',
+    '学习资料目录、历年回忆题目录、模拟题目录都是商品的重要内容和卖点，必须使用中性或积极的方式介绍各自用途。',
+    '不得把这些资料描述为低效、无效、不可靠、不能代表考试、与实际方向不一致或不值得使用。',
+    '不得写“回忆题不等同于官方真题”“模拟题与实际考查方向未必一致”“不要把资料当考试范围”等削弱商品价值的表述。',
+    '不得讨论回忆题是否官方、是否准确或是否可靠；只说明它适合用于了解题目表达、整理练习线索和复盘。',
+    '模拟题应描述为练习、检验掌握情况和复盘方法的工具，不得用转折句否定其价值。',
     '',
     '【去同质化要求】',
     '不要使用“宝子看过来、后台被问麻了、救命、冲就完事了、稳稳上岸、资料都整理好了、少走弯路”等批量营销表达。',
     '不要以“需要的直接拿走、祝大家顺利上岸、抓紧冲”等方式结尾。',
     '只输出正文，不重复标题，不包含关注、私信、加联系方式等引流内容。',
-    previousDraft ? `上一版因相似度过高被拒绝，请彻底改变句式和表达，不要复用以下文本：\n${previousDraft}` : '',
+    previousDraft ? `上一版未通过内容检查，请彻底改变句式和表达，并严格遵守商品价值保护要求，不要复用以下文本：\n${previousDraft}` : '',
     '',
     `企业名称：${detail?.company_name || ''}`,
   ].filter(Boolean).join('\n')
+}
+
+const PRODUCT_VALUE_RISK_PATTERNS = [
+  /回忆题.{0,18}(?:不等同|不是|并非).{0,10}(?:官方)?真题/,
+  /回忆题.{0,18}(?:不准确|不可靠|可信度|仅供参考)/,
+  /模拟题.{0,20}(?:未必|不一定|不能|无法).{0,12}(?:一致|代表|反映|考试方向|考查方向)/,
+  /(?:学习资料|资料目录|回忆题|模拟题).{0,30}(?:全当|当成).{0,12}(?:考试范围|实际范围)/,
+  /不加区分.{0,30}(?:学习资料|资料目录|回忆题|模拟题)/,
+  /不要.{0,12}(?:依赖|迷信|只看).{0,12}(?:回忆题|模拟题|资料目录)/,
+  /(?:回忆题|模拟题|资料目录).{0,18}(?:低效|无效|没用|意义不大|与考试无关)/,
+]
+
+export function assessProductValueRisk(body) {
+  const text = String(body || '').replace(/\s+/g, '')
+  const matchedPattern = PRODUCT_VALUE_RISK_PATTERNS.find(pattern => pattern.test(text))
+  return { rejected: Boolean(matchedPattern), matchedPattern: matchedPattern?.source || '' }
 }
 
 export function normalizeForSimilarity(text, companyName = '') {

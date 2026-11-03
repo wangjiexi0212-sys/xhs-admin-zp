@@ -333,6 +333,7 @@ import { proxyImageForDownload } from '@/api/xhsRewrite'
 import {
   DIVERSITY_LEVEL_OPTIONS,
   appendDiversityHistory,
+  assessProductValueRisk,
   assessDiversityRisk,
   buildDiversityPrompt,
   createDiversityPlans,
@@ -1316,6 +1317,14 @@ async function generateNoteForProduct(detail, presetTitle = null, contentPlan = 
         continue
       }
       throw new Error(`正文篇幅不符合规划（当前约 ${bodyLength} 字，目标 ${plan.minLength}-${plan.maxLength} 字）`)
+    }
+    const productValueRisk = assessProductValueRisk(body)
+    if (productValueRisk.rejected) {
+      if (attempt < 3) {
+        previousDraft = body
+        continue
+      }
+      throw new Error('正文包含弱化学习资料、回忆题或模拟题价值的表述，已自动重写 3 次')
     }
     const risk = assessDiversityRisk({
       title,
