@@ -196,13 +196,19 @@
         <span class="card-preview-tip">重新生成会轮换布局；正式生成时按内容目标读取商品真实资料配置</span>
       </div>
       <a-spin :spinning="cardTemplatePreviewLoading">
-        <div class="card-preview-grid">
-          <div v-for="item in cardTemplatePreviews" :key="item.id" class="card-preview-item">
-            <img :src="`data:image/png;base64,${item.base64}`" :alt="item.name" />
-            <div class="card-preview-name">{{ item.name }}</div>
-            <div class="card-preview-meta">{{ item.goal }} · {{ item.viewpoint }}</div>
+        <a-image-preview-group>
+          <div class="card-preview-grid">
+            <div v-for="item in cardTemplatePreviews" :key="item.id" class="card-preview-item">
+              <a-image
+                :src="`data:image/png;base64,${item.base64}`"
+                :alt="item.name"
+                :preview="{ mask: '点击全屏预览' }"
+              />
+              <div class="card-preview-name">{{ item.name }}</div>
+              <div class="card-preview-meta">{{ item.goal }} · {{ item.viewpoint }}</div>
+            </div>
           </div>
-        </div>
+        </a-image-preview-group>
         <a-empty v-if="!cardTemplatePreviews.length && !cardTemplatePreviewLoading" description="暂无预览" />
       </a-spin>
     </a-modal>
@@ -2793,7 +2799,11 @@ onMounted(() => {
   padding: 8px;
   background: #fff;
 }
-.card-preview-item img {
+.card-preview-item :deep(.ant-image) {
+  display: block;
+  width: 100%;
+}
+.card-preview-item :deep(.ant-image-img) {
   display: block;
   width: 100%;
   aspect-ratio: 3 / 4;
