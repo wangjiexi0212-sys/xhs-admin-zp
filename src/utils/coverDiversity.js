@@ -177,7 +177,8 @@ export function assignCoverPrompts(productDetails, promptPools, level = 'extreme
 
   return productDetails.map(item => {
     const jobTypeId = Number(item?.detail?.job_type_id)
-    const pool = (promptPools.get(jobTypeId) || []).filter(prompt => prompt?.status !== 0 && String(prompt?.content || '').trim())
+    const pool = (promptPools.get('all') || promptPools.get(0) || promptPools.get(jobTypeId) || [])
+      .filter(prompt => prompt?.status !== 0 && String(prompt?.content || '').trim())
     if (!pool.length) return null
 
     const ranked = pool.map(prompt => {

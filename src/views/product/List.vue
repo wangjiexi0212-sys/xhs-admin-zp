@@ -2101,14 +2101,11 @@ async function runBatchDirImages(generationMode = 'complete', useBgImage = false
   const coverAssignmentByProductId = new Map()
   if (useCoverImage && aiImageStore.activeProvider !== 'md2card') {
     const promptPools = new Map()
-    const jobTypeIds = [...new Set(productDetails.map(item => Number(item.detail?.job_type_id)).filter(Boolean))]
-    for (const jobTypeId of jobTypeIds) {
-      try {
-        const res = await getCardPromptList({ job_type_id: jobTypeId, page: 1, pageSize: 100 })
-        promptPools.set(jobTypeId, Array.isArray(res?.list) ? res.list : [])
-      } catch (error) {
-        dirBatchLogs.value.push({ text: `封面模板加载失败（商品类型 ${jobTypeId}）：${error.message}`, type: 'warn' })
-      }
+    try {
+      const res = await getCardPromptList({ page: 1, pageSize: 100 })
+      promptPools.set('all', Array.isArray(res?.list) ? res.list : [])
+    } catch (error) {
+      dirBatchLogs.value.push({ text: `公共封面模板池加载失败：${error.message}`, type: 'warn' })
     }
     const coverAssignments = assignCoverPrompts(
       productDetails,
@@ -2124,7 +2121,7 @@ async function runBatchDirImages(generationMode = 'complete', useBgImage = false
         type: assignment ? 'info' : 'warn',
       })
     })
-    dirBatchLogs.value.push({ text: '封面模板已按视觉家族、构图、配色和插画元素完成避重分配', type: 'success' })
+    dirBatchLogs.value.push({ text: '全部已上架封面模板已统一按视觉家族、构图、配色和插画元素完成避重分配', type: 'success' })
   }
   dirBatchLogs.value.push({ text: `生成顺序：${productDetails.map(item => item.company).join(' → ')}`, type: 'info' })
 
