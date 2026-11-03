@@ -149,7 +149,7 @@
       <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; margin-bottom: 12px; background: #f6ffed; border: 1px solid #b7eb8f; border-radius: 6px">
         <div>
           <div style="font-size: 13px; font-weight: 500; color: #31511b">卡片图静态模板预览</div>
-          <div style="font-size: 12px; color: #6b8f45; margin-top: 2px">查看全部模板在不同内容目标、视角和资料标签下的效果</div>
+          <div style="font-size: 12px; color: #6b8f45; margin-top: 2px">查看118套模板；新增40套均提供3种洗牌布局</div>
         </div>
         <a-button size="small" :loading="cardTemplatePreviewLoading" @click="openCardTemplatePreview">查看效果图</a-button>
       </div>
@@ -193,7 +193,7 @@
       <div class="card-preview-toolbar">
         <span class="card-preview-sample">预览标题：{{ CARD_TEMPLATE_PREVIEW_TEXT }}</span>
         <a-button :loading="cardTemplatePreviewLoading" @click="loadCardTemplatePreviews">重新生成一组</a-button>
-        <span class="card-preview-tip">每套模板按适合的内容目标展示，正式生成时会读取商品真实资料配置</span>
+        <span class="card-preview-tip">重新生成会轮换布局；正式生成时按内容目标读取商品真实资料配置</span>
       </div>
       <a-spin :spinning="cardTemplatePreviewLoading">
         <div class="card-preview-grid">

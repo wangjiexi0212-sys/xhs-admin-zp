@@ -30,6 +30,7 @@ let _CARD_TEXT_TITLE_BAG = []
 let _CARD_SCHEMES = []
 let _CARD_TEMPLATE_STYLE_BAG = []
 let _CARD_SCHEME_BAG = []
+let _CARD_LAYOUT_VARIANT_BAGS = new Map()
 
 // ── 消息工具 ────────────────────────────────────────────────────────
 const post = (payload) => self.postMessage(payload)
@@ -1620,6 +1621,11 @@ const CARD_TEMPLATE_STYLES = [
   'ref_tea_dark_border','ref_tea_plaid','ref_tea_arch','ref_tea_ticket','ref_tea_purple_sidebar','ref_tea_clipboard','ref_tea_minimal_red','ref_tea_green_wave','ref_tea_green_bands','ref_tea_envelope','ref_tea_purple_wave','ref_tea_blue_sidebar','ref_tea_brown_banner',
   'concept_metro','concept_dashboard','concept_answer','concept_track','concept_tree','concept_countdown','concept_radar','concept_stairs','concept_puzzle','concept_compare',
   'concept_matrix','concept_compass','concept_ranking','concept_orbit','concept_elements','concept_funnel','concept_timeline','concept_target','concept_circuit','concept_bars',
+  'virtual_file_drawer','virtual_download_window','virtual_cloud_drive','virtual_pdf_stack','virtual_archive_seal','virtual_course_pack','virtual_ring_binder','virtual_material_kit',
+  'virtual_content_index','virtual_az_index','virtual_file_tree','virtual_split_catalog','virtual_book_toc','virtual_folder_tabs','virtual_search_panel','virtual_module_map',
+  'virtual_breadcrumb_path','virtual_study_signpost','virtual_bus_route','virtual_mountain_route','virtual_circular_route','virtual_task_flow','virtual_assembly_steps','virtual_workflow_pipeline',
+  'virtual_review_diagnosis','virtual_sticky_wall','virtual_error_report','virtual_review_log','virtual_status_board','virtual_round_compare','virtual_checklist_sheet','virtual_progress_journal',
+  'virtual_qa_dialogue','virtual_proofread_note','virtual_user_manual','virtual_magnifier_focus','virtual_highlighter_page','virtual_teacher_board','virtual_memo_note','virtual_question_cards',
 ]
 
 const CARD_TEMPLATE_STYLE_NAMES = {
@@ -1701,6 +1707,46 @@ const CARD_TEMPLATE_STYLE_NAMES = {
   concept_target: '单点聚焦',
   concept_circuit: '解题电路',
   concept_bars: '学习状态图',
+  virtual_file_drawer: '档案抽屉',
+  virtual_download_window: '下载窗口',
+  virtual_cloud_drive: '云盘资料',
+  virtual_pdf_stack: 'PDF资料堆',
+  virtual_archive_seal: '档案封签',
+  virtual_course_pack: '课程资料包',
+  virtual_ring_binder: '活页资料册',
+  virtual_material_kit: '资料拼装包',
+  virtual_content_index: '资料索引卡',
+  virtual_az_index: '字母索引页',
+  virtual_file_tree: '文件树结构',
+  virtual_split_catalog: '分栏目录',
+  virtual_book_toc: '书籍目录页',
+  virtual_folder_tabs: '文件标签页',
+  virtual_search_panel: '资料检索面板',
+  virtual_module_map: '资料模块图',
+  virtual_breadcrumb_path: '文件路径',
+  virtual_study_signpost: '学习路标',
+  virtual_bus_route: '学习公交线',
+  virtual_mountain_route: '登山学习路径',
+  virtual_circular_route: '环形学习路线',
+  virtual_task_flow: '四格任务流',
+  virtual_assembly_steps: '资料拼装步骤',
+  virtual_workflow_pipeline: '学习流水线',
+  virtual_review_diagnosis: '复盘诊断单',
+  virtual_sticky_wall: '问题便签墙',
+  virtual_error_report: '错误分析报告',
+  virtual_review_log: '练习复盘日志',
+  virtual_status_board: '学习状态看板',
+  virtual_round_compare: '两轮练习对照',
+  virtual_checklist_sheet: '完成度检查表',
+  virtual_progress_journal: '学习进度手账',
+  virtual_qa_dialogue: '问答对话',
+  virtual_proofread_note: '编辑批注页',
+  virtual_user_manual: '资料操作说明书',
+  virtual_magnifier_focus: '放大镜聚焦',
+  virtual_highlighter_page: '荧光笔重点页',
+  virtual_teacher_board: '板书讲解',
+  virtual_memo_note: '手写备忘录',
+  virtual_question_cards: '问题卡片组',
 }
 
 const CARD_BOTTOM_HINTS = [
@@ -1729,6 +1775,12 @@ const CARD_ROUTE_STYLE_IDS = new Set(['concept_metro','concept_track','concept_s
 const CARD_REVIEW_STYLE_IDS = new Set(['concept_dashboard','concept_answer','concept_radar','concept_matrix','concept_bars','concept_compare'])
 const CARD_MAP_STYLE_IDS = new Set(['concept_tree','concept_puzzle','concept_orbit','concept_elements','concept_funnel'])
 const CARD_FOCUS_STYLE_IDS = new Set(['concept_target','concept_ranking'])
+const VIRTUAL_MATERIAL_STYLE_IDS = new Set(['virtual_file_drawer','virtual_download_window','virtual_cloud_drive','virtual_pdf_stack','virtual_archive_seal','virtual_course_pack','virtual_ring_binder','virtual_material_kit'])
+const VIRTUAL_INDEX_STYLE_IDS = new Set(['virtual_content_index','virtual_az_index','virtual_file_tree','virtual_split_catalog','virtual_book_toc','virtual_folder_tabs','virtual_search_panel','virtual_module_map'])
+const VIRTUAL_ROUTE_STYLE_IDS = new Set(['virtual_breadcrumb_path','virtual_study_signpost','virtual_bus_route','virtual_mountain_route','virtual_circular_route','virtual_task_flow','virtual_assembly_steps','virtual_workflow_pipeline'])
+const VIRTUAL_REVIEW_STYLE_IDS = new Set(['virtual_review_diagnosis','virtual_sticky_wall','virtual_error_report','virtual_review_log','virtual_status_board','virtual_round_compare','virtual_checklist_sheet','virtual_progress_journal'])
+const VIRTUAL_FOCUS_STYLE_IDS = new Set(['virtual_qa_dialogue','virtual_proofread_note','virtual_user_manual','virtual_magnifier_focus','virtual_highlighter_page','virtual_teacher_board','virtual_memo_note','virtual_question_cards'])
+const VIRTUAL_CARD_STYLE_IDS = new Set([...VIRTUAL_MATERIAL_STYLE_IDS, ...VIRTUAL_INDEX_STYLE_IDS, ...VIRTUAL_ROUTE_STYLE_IDS, ...VIRTUAL_REVIEW_STYLE_IDS, ...VIRTUAL_FOCUS_STYLE_IDS])
 
 function buildTemplateDemoPlan(style, index = 0) {
   let preferredGoal = ''
@@ -1736,6 +1788,10 @@ function buildTemplateDemoPlan(style, index = 0) {
   else if (CARD_REVIEW_STYLE_IDS.has(style)) preferredGoal = 'review_check'
   else if (CARD_MAP_STYLE_IDS.has(style)) preferredGoal = 'material_display'
   else if (CARD_FOCUS_STYLE_IDS.has(style)) preferredGoal = 'single_focus'
+  else if (VIRTUAL_MATERIAL_STYLE_IDS.has(style) || VIRTUAL_INDEX_STYLE_IDS.has(style)) preferredGoal = 'material_display'
+  else if (VIRTUAL_ROUTE_STYLE_IDS.has(style)) preferredGoal = 'usage_path'
+  else if (VIRTUAL_REVIEW_STYLE_IDS.has(style)) preferredGoal = 'review_check'
+  else if (VIRTUAL_FOCUS_STYLE_IDS.has(style)) preferredGoal = 'single_focus'
   const eligible = preferredGoal
     ? CARD_TEMPLATE_DEMO_GOALS.filter(goal => goal.id === preferredGoal)
     : CARD_TEMPLATE_DEMO_GOALS
@@ -2705,6 +2761,173 @@ function drawConceptCardImage(ctx, W, H, style, text, bottomHint, cardPlan = nul
   }
 }
 
+const VIRTUAL_STYLE_GROUPS = {
+  material: [...VIRTUAL_MATERIAL_STYLE_IDS],
+  index: [...VIRTUAL_INDEX_STYLE_IDS],
+  route: [...VIRTUAL_ROUTE_STYLE_IDS],
+  review: [...VIRTUAL_REVIEW_STYLE_IDS],
+  focus: [...VIRTUAL_FOCUS_STYLE_IDS],
+}
+
+const VIRTUAL_STYLE_PALETTES = [
+  { bg: '#f1eadb', paper: '#fffaf0', ink: '#24382f', accent: '#2f6f55', soft: '#d9e6dc' },
+  { bg: '#e8eef2', paper: '#fbfdff', ink: '#17324d', accent: '#3976a8', soft: '#dce9f4' },
+  { bg: '#f5eee6', paper: '#fffaf5', ink: '#4b3227', accent: '#b65f45', soft: '#efd9cc' },
+  { bg: '#ece9f2', paper: '#fdfbff', ink: '#342e4d', accent: '#735ca7', soft: '#e1daef' },
+  { bg: '#edf1e8', paper: '#fbfdf7', ink: '#30402f', accent: '#718b58', soft: '#dfe8d5' },
+  { bg: '#f4ecec', paper: '#fffafa', ink: '#4c2e32', accent: '#b4515a', soft: '#efd7da' },
+  { bg: '#e8f1ef', paper: '#f9fdfc', ink: '#183f3a', accent: '#248278', soft: '#d4e9e5' },
+  { bg: '#f3efe5', paper: '#fffdf8', ink: '#403724', accent: '#c08a36', soft: '#eee0bd' },
+]
+
+function getVirtualStyleMeta(style) {
+  for (const [group, styles] of Object.entries(VIRTUAL_STYLE_GROUPS)) {
+    const index = styles.indexOf(style)
+    if (index >= 0) return { group, index, palette: VIRTUAL_STYLE_PALETTES[index % VIRTUAL_STYLE_PALETTES.length] }
+  }
+  return { group: 'material', index: 0, palette: VIRTUAL_STYLE_PALETTES[0] }
+}
+
+function pickVirtualLayoutVariant(style) {
+  let bag = _CARD_LAYOUT_VARIANT_BAGS.get(style) || []
+  if (!bag.length) bag = shuffledCopy([0, 1, 2])
+  const variant = bag.pop()
+  _CARD_LAYOUT_VARIANT_BAGS.set(style, bag)
+  return variant
+}
+
+function drawVirtualHeader(ctx, W, text, plan, palette, variant) {
+  const { main, sub } = splitCardText(text || '')
+  const title = main || '企业名称笔试'
+  const topic = sub || plan?.cardViewpoint || plan?.cardGoalName || '资料使用说明'
+  const centered = variant === 1
+  const left = variant === 2 ? 145 : 76
+  const width = variant === 2 ? W - 220 : W - 152
+  if (variant === 2) {
+    ctx.fillStyle = palette.accent
+    ctx.fillRect(0, 0, 92, 560)
+    ctx.save(); ctx.translate(29, 470); ctx.rotate(-Math.PI / 2)
+    ctx.fillStyle = '#fff'; ctx.font = '800 25px "PingFang SC", sans-serif'; ctx.fillText(plan?.cardGoalName || '企业笔试', 0, 0); ctx.restore()
+  }
+  ctx.fillStyle = palette.ink
+  ctx.font = '800 24px "PingFang SC", sans-serif'
+  ctx.textAlign = centered ? 'center' : 'left'
+  ctx.fillText((plan?.cardGoalName || '企业笔试').toUpperCase(), centered ? W / 2 : left, 68)
+  const bottom = drawRefTextBlock(ctx, title, left, 118, width, variant === 1 ? 82 : 76, palette.ink, {
+    align: centered ? 'center' : 'left', maxLines: 3, minSize: 54, lineHeight: 1.08,
+  })
+  drawRefTextBlock(ctx, topic, left, bottom + 22, width, 35, palette.accent, {
+    align: centered ? 'center' : 'left', maxLines: 2, minSize: 27, lineHeight: 1.18,
+  })
+  ctx.textAlign = 'left'
+  return Math.max(bottom + 92, variant === 1 ? 470 : 430)
+}
+
+function drawVirtualFooter(ctx, W, H, palette, plan) {
+  ctx.strokeStyle = palette.ink; ctx.globalAlpha = .2; ctx.lineWidth = 2
+  ctx.beginPath(); ctx.moveTo(76, H - 108); ctx.lineTo(W - 76, H - 108); ctx.stroke(); ctx.globalAlpha = 1
+  ctx.fillStyle = palette.ink; ctx.font = '700 24px "PingFang SC", sans-serif'
+  ctx.fillText('企业笔试 · 学习资料', 76, H - 78)
+  ctx.textAlign = 'right'; ctx.fillText(plan?.cardFooter || '先看目录，再安排学习顺序', W - 76, H - 78); ctx.textAlign = 'left'
+}
+
+function drawVirtualMaterial(ctx, W, H, meta, top, plan, variant) {
+  const { palette, index } = meta
+  const items = (plan?.cardItems?.length ? plan.cardItems : ['学习资料','历年回忆题','模拟练习','使用说明']).slice(0, variant === 1 ? 3 : 4)
+  const x = variant === 2 ? 150 : 86, width = W - x - 86
+  if (index === 1) { ctx.fillStyle = palette.ink; ctx.beginPath(); ctx.roundRect(x, top, width, 48, [18,18,0,0]); ctx.fill(); ['#ef7b65','#e8b74f','#5fa77e'].forEach((c,i)=>{ctx.fillStyle=c;ctx.beginPath();ctx.arc(x+30+i*30,top+24,8,0,Math.PI*2);ctx.fill()}); top += 70 }
+  if (index === 2) { ctx.fillStyle = palette.soft; ctx.beginPath(); ctx.arc(W/2,top+80,78,Math.PI,0);ctx.arc(W/2+78,top+80,60,Math.PI,0);ctx.arc(W/2-74,top+84,52,Math.PI,0);ctx.fill(); top += 100 }
+  if (index === 4) { ctx.strokeStyle = palette.accent; ctx.lineWidth = 8; ctx.beginPath(); ctx.arc(W-165,top+70,68,0,Math.PI*2);ctx.stroke();ctx.font='800 23px "PingFang SC"';ctx.fillStyle=palette.accent;ctx.textAlign='center';ctx.fillText('资料归档',W-165,top+55);ctx.textAlign='left' }
+  if (index === 6) { for(let y=top+10;y<top+520;y+=72){ctx.strokeStyle='#aaa59b';ctx.lineWidth=8;ctx.beginPath();ctx.arc(x-12,y,22,-Math.PI/2,Math.PI/2);ctx.stroke()} }
+  const stacked = index === 3 || index === 5
+  items.forEach((label, i) => {
+    const yy = top + i * (stacked ? 102 : 124) + (stacked ? i * 8 : 0)
+    const xx = x + (stacked ? i * 18 : 0)
+    ctx.fillStyle = i % 2 ? palette.paper : palette.soft
+    ctx.beginPath(); ctx.roundRect(xx, yy, width - (stacked ? i * 36 : 0), stacked ? 112 : 102, 16); ctx.fill()
+    ctx.strokeStyle = palette.ink; ctx.globalAlpha=.18;ctx.lineWidth=2;ctx.stroke();ctx.globalAlpha=1
+    if (index === 0) { ctx.strokeStyle=palette.accent;ctx.lineWidth=5;ctx.beginPath();ctx.roundRect(xx+28,yy+31,74,24,12);ctx.stroke() }
+    if (index === 7) { ctx.fillStyle=palette.accent;ctx.beginPath();ctx.arc(xx+54,yy+51,25,0,Math.PI*2);ctx.fill() }
+    ctx.fillStyle = palette.ink; ctx.font = '800 31px "PingFang SC", sans-serif'; ctx.fillText(label, xx + (index===0?130:100), yy + 30)
+    ctx.font='600 20px "PingFang SC", sans-serif';ctx.fillStyle=palette.accent;ctx.fillText(`0${i+1}`,xx+32,yy+35)
+  })
+}
+
+function drawVirtualIndex(ctx, W, H, meta, top, plan, variant) {
+  const { palette, index } = meta
+  const items = (plan?.cardItems?.length ? plan.cardItems : ['学习资料','历年回忆题','模拟练习','复盘整理']).slice(0, variant === 0 ? 4 : 3)
+  const x = variant === 2 ? 150 : 82, width = W - x - 82
+  ctx.fillStyle=palette.paper;ctx.beginPath();ctx.roundRect(x,top,width,640,18);ctx.fill()
+  if ([1,5].includes(index)) { ['A','B','C'].forEach((v,i)=>{ctx.fillStyle=[palette.soft,palette.accent,palette.ink][i];ctx.fillRect(x+38+i*86,top-24,70,28);ctx.fillStyle=i?palette.paper:palette.ink;ctx.font='700 17px sans-serif';ctx.fillText(v,x+65+i*86,top-20)}) }
+  if (index === 6) { ctx.strokeStyle=palette.ink;ctx.lineWidth=3;ctx.beginPath();ctx.roundRect(x+42,top+34,width-84,70,35);ctx.stroke();ctx.beginPath();ctx.arc(x+82,top+69,18,0,Math.PI*2);ctx.stroke();ctx.moveTo(x+95,top+82);ctx.lineTo(x+112,top+99);ctx.stroke();top+=100 }
+  items.forEach((label,i)=>{
+    const columns = variant === 1 || index === 3 || index === 7
+    const cw = columns ? (width-72)/2 : width-72
+    const xx=x+36+(columns?(i%2)*(cw+16):0), yy=top+40+(columns?Math.floor(i/2)*190:i*128)
+    ctx.fillStyle=i%2?palette.soft:palette.bg;ctx.beginPath();ctx.roundRect(xx,yy,cw,columns?160:102,14);ctx.fill()
+    ctx.fillStyle=palette.accent;ctx.font='800 25px monospace';ctx.fillText(String(i+1).padStart(2,'0'),xx+22,yy+20)
+    ctx.fillStyle=palette.ink;ctx.font='800 29px "PingFang SC",sans-serif';ctx.fillText(label,xx+72,yy+20)
+    if(index===2){ctx.strokeStyle=palette.accent;ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(xx+35,yy+62);ctx.lineTo(xx+35,yy+92);ctx.lineTo(xx+65,yy+92);ctx.stroke()}
+  })
+}
+
+function drawVirtualRoute(ctx, W, H, meta, top, plan, variant) {
+  const { palette, index } = meta
+  const items = (plan?.cardItems?.length ? plan.cardItems : ['先看目录','开始练习','分类整理','完成复盘']).slice(0,4)
+  const left = variant===2?170:120, right=W-110
+  if (variant === 1 || index === 4) {
+    const cx=W/2,cy=top+300,r=235;ctx.strokeStyle=palette.accent;ctx.lineWidth=18;ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.stroke()
+    items.forEach((label,i)=>{const a=-Math.PI/2+i*Math.PI/2,x=cx+Math.cos(a)*r,y=cy+Math.sin(a)*r;ctx.fillStyle=palette.paper;ctx.strokeStyle=palette.accent;ctx.lineWidth=10;ctx.beginPath();ctx.arc(x,y,55,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.fillStyle=palette.ink;ctx.font='800 25px "PingFang SC"';ctx.textAlign='center';ctx.fillText(label,x,y+75)});ctx.textAlign='left'
+  } else if (variant === 2 || [0,1,3].includes(index)) {
+    ctx.strokeStyle=palette.accent;ctx.lineWidth=index===1?14:8;ctx.beginPath();ctx.moveTo(left,top+30);ctx.lineTo(left,top+560);ctx.stroke()
+    items.forEach((label,i)=>{const y=top+40+i*150;ctx.fillStyle=palette.accent;ctx.beginPath();ctx.arc(left,y,30,0,Math.PI*2);ctx.fill();ctx.fillStyle=palette.paper;ctx.font='800 20px monospace';ctx.textAlign='center';ctx.fillText(i+1,left,y-11);ctx.textAlign='left';ctx.fillStyle=i%2?palette.soft:palette.paper;ctx.beginPath();ctx.roundRect(left+62,y-48,right-left-62,96,14);ctx.fill();ctx.fillStyle=palette.ink;ctx.font='800 30px "PingFang SC"';ctx.fillText(label,left+90,y-18)});ctx.textAlign='left'
+  } else {
+    const y=top+280;ctx.strokeStyle=palette.accent;ctx.lineWidth=index===7?22:10;ctx.beginPath();ctx.moveTo(left,y);ctx.lineTo(right,y);ctx.stroke()
+    items.forEach((label,i)=>{const x=left+i*(right-left)/3;ctx.fillStyle=palette.paper;ctx.strokeStyle=palette.accent;ctx.lineWidth=10;ctx.beginPath();ctx.arc(x,y,43,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.fillStyle=palette.ink;ctx.font='800 25px "PingFang SC"';ctx.textAlign='center';ctx.fillText(label,x,y+72)});ctx.textAlign='left'
+  }
+}
+
+function drawVirtualReview(ctx, W, H, meta, top, plan, variant) {
+  const { palette, index } = meta
+  const items = (plan?.cardItems?.length ? plan.cardItems : ['完成情况','错误原因','薄弱内容','下一轮重点']).slice(0,variant===1?3:4)
+  const x=variant===2?150:82,width=W-x-82
+  if(index===1){
+    items.forEach((label,i)=>{const cols=variant!==2,ww=cols?(width-20)/2:width,xx=x+(cols?(i%2)*(ww+20):0),yy=top+(cols?Math.floor(i/2)*230:i*135);ctx.save();ctx.translate(xx,yy);ctx.rotate((i%2?1:-1)*.025);ctx.fillStyle=[palette.soft,'#f2ddb0','#dbe3f0','#efcfca'][i];ctx.fillRect(0,0,ww,cols?200:112);ctx.fillStyle=palette.ink;ctx.font='800 29px "PingFang SC"';ctx.fillText(label,28,55);ctx.restore()})
+  } else if(index===4 || index===5){
+    const cols=variant===1?3:2,ww=(width-(cols-1)*16)/cols;items.forEach((label,i)=>{const xx=x+(i%cols)*(ww+16),yy=top+Math.floor(i/cols)*210;ctx.fillStyle=i%2?palette.soft:palette.paper;ctx.beginPath();ctx.roundRect(xx,yy,ww,180,18);ctx.fill();ctx.fillStyle=palette.accent;ctx.font='800 40px monospace';ctx.fillText(`0${i+1}`,xx+24,yy+24);ctx.fillStyle=palette.ink;ctx.font='800 25px "PingFang SC"';ctx.fillText(label,xx+24,yy+100)})
+  } else {
+    items.forEach((label,i)=>{const y=top+i*126;ctx.fillStyle=palette.paper;ctx.beginPath();ctx.roundRect(x,y,width,102,12);ctx.fill();ctx.strokeStyle=palette.accent;ctx.lineWidth=4;ctx.strokeRect(x+26,y+34,28,28);if(index===0||index===6){ctx.beginPath();ctx.moveTo(x+31,y+46);ctx.lineTo(x+39,y+56);ctx.lineTo(x+56,y+34);ctx.stroke()}ctx.fillStyle=palette.ink;ctx.font='800 29px "PingFang SC"';ctx.fillText(label,x+82,y+28);ctx.font='600 20px "PingFang SC"';ctx.fillStyle=palette.accent;ctx.fillText(index===2?'记录原因':index===3?'本轮复盘':'逐项检查',x+82,y+64)})
+  }
+}
+
+function drawVirtualFocus(ctx, W, H, meta, top, plan, variant) {
+  const { palette, index } = meta
+  const items = (plan?.cardItems?.length ? plan.cardItems : ['明确问题','查找内容','完成练习','记录结果']).slice(0,4)
+  const x=variant===2?150:82,width=W-x-82
+  if(index===0 || index===7){
+    const count=variant===1?3:4;items.slice(0,count).forEach((label,i)=>{const right=i%2===0,ww=width*(i===0?.76:.64),xx=right?x+width-ww:x,yy=top+i*130;ctx.fillStyle=right?palette.accent:palette.paper;ctx.beginPath();ctx.roundRect(xx,yy,ww,104,[22,22,right?4:22,right?22:4]);ctx.fill();ctx.fillStyle=right?palette.paper:palette.ink;ctx.font='800 27px "PingFang SC"';ctx.fillText(label,xx+26,yy+33)})
+  } else if(index===3){
+    ctx.strokeStyle=palette.accent;ctx.lineWidth=18;ctx.beginPath();ctx.arc(x+width/2,top+220,150,0,Math.PI*2);ctx.stroke();ctx.beginPath();ctx.moveTo(x+width/2+105,top+325);ctx.lineTo(x+width/2+220,top+440);ctx.stroke();ctx.fillStyle=palette.ink;ctx.font='800 38px "PingFang SC"';ctx.textAlign='center';ctx.fillText(items[0],x+width/2,top+195);ctx.textAlign='left';items.slice(1).forEach((v,i)=>{ctx.fillStyle=palette.soft;ctx.beginPath();ctx.roundRect(x+i*245,top+520,220,72,36);ctx.fill();ctx.fillStyle=palette.ink;ctx.font='700 22px "PingFang SC"';ctx.textAlign='center';ctx.fillText(v,x+i*245+110,top+540)});ctx.textAlign='left'
+  } else if(index===5){
+    ctx.fillStyle='#25463b';ctx.fillRect(x,top,width,580);ctx.strokeStyle='rgba(255,255,255,.14)';ctx.lineWidth=2;for(let y=top+80;y<top+560;y+=80){ctx.beginPath();ctx.moveTo(x+35,y);ctx.lineTo(x+width-35,y);ctx.stroke()}items.forEach((v,i)=>{ctx.fillStyle=i===0?'#f2d16e':'#fff';ctx.font=`${i===0?'800 42':'700 28'}px "PingFang SC"`;ctx.fillText(`${i+1}. ${v}`,x+50,top+55+i*112)})
+  } else {
+    ctx.fillStyle=palette.paper;ctx.beginPath();ctx.roundRect(x,top,width,590,18);ctx.fill();if(index===1||index===4){ctx.fillStyle=index===4?'#f2d16e':palette.soft;ctx.fillRect(x+38,top+80,width-76,52)}items.forEach((v,i)=>{const y=top+65+i*116;ctx.fillStyle=palette.accent;ctx.font='800 24px monospace';ctx.fillText(`0${i+1}`,x+34,y);ctx.fillStyle=palette.ink;ctx.font='800 29px "PingFang SC"';ctx.fillText(v,x+98,y);ctx.strokeStyle=palette.ink;ctx.globalAlpha=.16;ctx.beginPath();ctx.moveTo(x+34,y+54);ctx.lineTo(x+width-34,y+54);ctx.stroke();ctx.globalAlpha=1})
+  }
+}
+
+function drawVirtualCardImage(ctx, W, H, style, text, cardPlan = null) {
+  const meta=getVirtualStyleMeta(style), { palette, group }=meta, variant=pickVirtualLayoutVariant(style)
+  ctx.clearRect(0,0,W,H);ctx.fillStyle=palette.bg;ctx.fillRect(0,0,W,H);ctx.textBaseline='top'
+  if(variant===1){ctx.fillStyle=palette.soft;ctx.beginPath();ctx.arc(W-95,95,180,0,Math.PI*2);ctx.fill()}
+  const top=drawVirtualHeader(ctx,W,text,cardPlan,palette,variant)
+  if(group==='material')drawVirtualMaterial(ctx,W,H,meta,top,cardPlan,variant)
+  else if(group==='index')drawVirtualIndex(ctx,W,H,meta,top,cardPlan,variant)
+  else if(group==='route')drawVirtualRoute(ctx,W,H,meta,top,cardPlan,variant)
+  else if(group==='review')drawVirtualReview(ctx,W,H,meta,top,cardPlan,variant)
+  else drawVirtualFocus(ctx,W,H,meta,top,cardPlan,variant)
+  drawVirtualFooter(ctx,W,H,palette,cardPlan)
+}
+
 async function renderTemplateCardImage(text, templateStyle, bottomHint, cardPlan = null) {
   const SCALE = 3
   const W = 360 * SCALE, H = 480 * SCALE
@@ -2713,6 +2936,10 @@ async function renderTemplateCardImage(text, templateStyle, bottomHint, cardPlan
   const style = templateStyle || rndPick(CARD_TEMPLATE_STYLES)
   const effectivePlan = cardPlan || buildTemplateDemoPlan(style, CARD_TEMPLATE_STYLES.indexOf(style))
   const effectiveBottomHint = effectivePlan.cardFooter || bottomHint
+  if (VIRTUAL_CARD_STYLE_IDS.has(style)) {
+    drawVirtualCardImage(ctx, W, H, style, text, effectivePlan)
+    return offscreenToDataUrl(canvas)
+  }
   if (CONCEPT_CARD_STYLES.has(style)) {
     drawConceptCardImage(ctx, W, H, style, text, effectiveBottomHint, effectivePlan)
     return offscreenToDataUrl(canvas)
@@ -2931,6 +3158,7 @@ async function runBatch({ productDetails, onlyDirImages, generationMode = 'compl
   _CARD_SCHEMES              = cardSchemes           || []
   _CARD_TEMPLATE_STYLE_BAG = []
   _CARD_SCHEME_BAG = []
+  _CARD_LAYOUT_VARIANT_BAGS = new Map()
   _borderColor        = borderColor      || '#F9863B'
   const bgImagePool   = bgPool           || []
 
@@ -3037,6 +3265,7 @@ async function buildCardTemplatePreviews({ sampleText, cardSchemes }) {
   _CARD_SCHEMES = cardSchemes || []
   _CARD_SCHEME_BAG = []
   _CARD_TEMPLATE_STYLE_BAG = []
+  _CARD_LAYOUT_VARIANT_BAGS = new Map()
   const text = sampleText || '示例企业笔试，资料怎么分步使用'
   const previews = []
   for (let index = 0; index < CARD_TEMPLATE_STYLES.length; index++) {
@@ -3061,6 +3290,7 @@ self.onmessage = async (e) => {
       _CARD_SCHEMES = e.data.cardSchemes || []
       _CARD_SCHEME_BAG = []
       _CARD_TEMPLATE_STYLE_BAG = []
+      _CARD_LAYOUT_VARIANT_BAGS = new Map()
       const text = String(e.data.text || '').trim()
       const templateStyle = String(e.data.templateStyle || '').trim()
       const scheme = pickCardScheme() || { bg: '#d4f7d4', text: '#2d4a2d', accent: '#52c07a' }

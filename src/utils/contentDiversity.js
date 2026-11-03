@@ -126,6 +126,11 @@ const ROUTE_STYLES = ['concept_metro','concept_track','concept_stairs','concept_
 const REVIEW_STYLES = ['concept_dashboard','concept_answer','concept_radar','concept_matrix','concept_bars','concept_compare']
 const MAP_STYLES = ['concept_tree','concept_puzzle','concept_orbit','concept_elements','concept_funnel']
 const FOCUS_STYLES = ['concept_target','concept_ranking']
+const VIRTUAL_MATERIAL_STYLES = ['virtual_file_drawer','virtual_download_window','virtual_cloud_drive','virtual_pdf_stack','virtual_archive_seal','virtual_course_pack','virtual_ring_binder','virtual_material_kit']
+const VIRTUAL_INDEX_STYLES = ['virtual_content_index','virtual_az_index','virtual_file_tree','virtual_split_catalog','virtual_book_toc','virtual_folder_tabs','virtual_search_panel','virtual_module_map']
+const VIRTUAL_ROUTE_STYLES = ['virtual_breadcrumb_path','virtual_study_signpost','virtual_bus_route','virtual_mountain_route','virtual_circular_route','virtual_task_flow','virtual_assembly_steps','virtual_workflow_pipeline']
+const VIRTUAL_REVIEW_STYLES = ['virtual_review_diagnosis','virtual_sticky_wall','virtual_error_report','virtual_review_log','virtual_status_board','virtual_round_compare','virtual_checklist_sheet','virtual_progress_journal']
+const VIRTUAL_FOCUS_STYLES = ['virtual_qa_dialogue','virtual_proofread_note','virtual_user_manual','virtual_magnifier_focus','virtual_highlighter_page','virtual_teacher_board','virtual_memo_note','virtual_question_cards']
 
 const CARD_STYLE_DEFINITIONS = [
   ...DOCUMENT_STYLES.map(id => ({ id, family: `document:${id}`, goals: ['material_display','question_answer','single_focus','scene_action','review_check'] })),
@@ -135,6 +140,11 @@ const CARD_STYLE_DEFINITIONS = [
   ...REVIEW_STYLES.map(id => ({ id, family: `review:${id}`, goals: ['review_check','question_answer'] })),
   ...MAP_STYLES.map(id => ({ id, family: `map:${id}`, goals: ['material_display','usage_path'] })),
   ...FOCUS_STYLES.map(id => ({ id, family: `focus:${id}`, goals: ['single_focus','review_check'] })),
+  ...VIRTUAL_MATERIAL_STYLES.map(id => ({ id, family: `virtual-material:${id}`, goals: ['material_display','scene_action'] })),
+  ...VIRTUAL_INDEX_STYLES.map(id => ({ id, family: `virtual-index:${id}`, goals: ['material_display','question_answer'] })),
+  ...VIRTUAL_ROUTE_STYLES.map(id => ({ id, family: `virtual-route:${id}`, goals: ['usage_path','scene_action'] })),
+  ...VIRTUAL_REVIEW_STYLES.map(id => ({ id, family: `virtual-review:${id}`, goals: ['review_check','question_answer'] })),
+  ...VIRTUAL_FOCUS_STYLES.map(id => ({ id, family: `virtual-focus:${id}`, goals: ['single_focus','question_answer'] })),
 ]
 
 function randomIndex(max) {

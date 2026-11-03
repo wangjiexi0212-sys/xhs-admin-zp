@@ -920,7 +920,7 @@
       @ok="generateSelectedCardTemplate"
     >
       <div class="card-template-picker__toolbar">
-        <span>卡片文字：{{ cardText }}</span>
+        <span>卡片文字：{{ cardText }}（新增40套模板均含3种布局）</span>
         <a-button size="small" :loading="cardTemplatePickerLoading" @click="loadCardTemplatePickerPreviews">
           刷新预览
         </a-button>
