@@ -1,3 +1,5 @@
+import { EDITORIAL_CARD_STYLES } from './editorialCardStyles.js'
+
 const HISTORY_KEY = 'xhs-content-diversity-history-v1'
 const HISTORY_LIMIT = 200
 
@@ -133,6 +135,7 @@ const VIRTUAL_REVIEW_STYLES = ['virtual_review_diagnosis','virtual_sticky_wall',
 const VIRTUAL_FOCUS_STYLES = ['virtual_qa_dialogue','virtual_proofread_note','virtual_user_manual','virtual_magnifier_focus','virtual_highlighter_page','virtual_teacher_board','virtual_memo_note','virtual_question_cards']
 
 const CARD_STYLE_DEFINITIONS = [
+  ...EDITORIAL_CARD_STYLES,
   ...DOCUMENT_STYLES.map(id => ({ id, family: `document:${id}`, goals: ['material_display','question_answer','single_focus','scene_action','review_check'] })),
   ...REFERENCE_STYLES.map(id => ({ id, family: `reference:${id}`, goals: ['material_display','question_answer','single_focus','scene_action'] })),
   ...TEA_STYLES.map(id => ({ id, family: `reference:${id.replace('ref_tea_', 'ref_')}`, goals: ['material_display','question_answer','single_focus','scene_action'] })),

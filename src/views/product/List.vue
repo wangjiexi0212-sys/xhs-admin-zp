@@ -149,7 +149,7 @@
       <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; margin-bottom: 12px; background: #f6ffed; border: 1px solid #b7eb8f; border-radius: 6px">
         <div>
           <div style="font-size: 13px; font-weight: 500; color: #31511b">卡片图静态模板预览</div>
-          <div style="font-size: 12px; color: #6b8f45; margin-top: 2px">查看118套模板；新增40套均提供3种洗牌布局</div>
+          <div style="font-size: 12px; color: #6b8f45; margin-top: 2px">查看133套模板，包含新增15套独立设计；点击图片可全屏查看</div>
         </div>
         <a-button size="small" :loading="cardTemplatePreviewLoading" @click="openCardTemplatePreview">查看效果图</a-button>
       </div>

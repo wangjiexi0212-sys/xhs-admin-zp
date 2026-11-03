@@ -1613,7 +1613,18 @@ function normalizeCardStyle(input) {
   return { id: 'basic', scheme: input || { bg: '#d4f7d4', text: '#2d4a2d', accent: '#52c07a' } }
 }
 
+const EDITORIAL_CARDS = [
+  ['editorial_edition','备考专刊','material_display'], ['editorial_cobalt','钴蓝宣言','single_focus'],
+  ['editorial_spine','书脊藏本','usage_path'], ['editorial_receipt','学习收据','review_check'],
+  ['editorial_orange','暖橙单点','single_focus'], ['editorial_gallery','留白展签','material_display'],
+  ['editorial_ribbon','斜切书腰','review_check'], ['editorial_split','上下双章','usage_path'],
+  ['editorial_letter','给备考者的信','scene_action'], ['editorial_architect','建筑留白','usage_path'],
+  ['editorial_ticket','学习通行票','usage_path'], ['editorial_night','深夜阅读灯','question_answer'],
+  ['editorial_accordion','折页使用指南','usage_path'], ['editorial_annotation','观点摘录','review_check'],
+  ['editorial_museum','档案展览','material_display'],
+]
 const CARD_TEMPLATE_STYLES = [
+  ...EDITORIAL_CARDS.map(([id]) => id),
   'poster','check','tags','folder','note2','mono','exam','stamp','dark2','app',
   'course','wrong','side','gridnote','paperclip','blue','photo','cutout','softpink','greenfile',
   'orangeburst','blueprint_card','receipt_card','neon','vertical','filetab','calendar_card','folderwall_card','outline_card','cream_card','stamp2','marker',
@@ -1629,6 +1640,7 @@ const CARD_TEMPLATE_STYLES = [
 ]
 
 const CARD_TEMPLATE_STYLE_NAMES = {
+  ...Object.fromEntries(EDITORIAL_CARDS.map(([id,name]) => [id,name])),
   poster: '竖条海报',
   check: '勾选清单',
   tags: '标签气泡',
@@ -1783,7 +1795,7 @@ const VIRTUAL_FOCUS_STYLE_IDS = new Set(['virtual_qa_dialogue','virtual_proofrea
 const VIRTUAL_CARD_STYLE_IDS = new Set([...VIRTUAL_MATERIAL_STYLE_IDS, ...VIRTUAL_INDEX_STYLE_IDS, ...VIRTUAL_ROUTE_STYLE_IDS, ...VIRTUAL_REVIEW_STYLE_IDS, ...VIRTUAL_FOCUS_STYLE_IDS])
 
 function buildTemplateDemoPlan(style, index = 0) {
-  let preferredGoal = ''
+  let preferredGoal = EDITORIAL_CARDS.find(([id]) => id === style)?.[2] || ''
   if (CARD_ROUTE_STYLE_IDS.has(style)) preferredGoal = 'usage_path'
   else if (CARD_REVIEW_STYLE_IDS.has(style)) preferredGoal = 'review_check'
   else if (CARD_MAP_STYLE_IDS.has(style)) preferredGoal = 'material_display'
@@ -2965,6 +2977,53 @@ function drawVirtualCardImage(ctx, W, H, style, text, cardPlan = null) {
   drawVirtualFooter(ctx,W,H,palette,cardPlan)
 }
 
+// Editorial cards use a 360 × 480 design coordinate system, matching the reviewed HTML.
+function drawEditorialCard(ctx, style, text, plan) {
+  ctx.save(); ctx.scale(3,3); ctx.textBaseline='top'
+  const { main }=splitCardText(text)
+  const ink='#20392f', cream='#faf7ef'
+  const box=(x,y,w,h,c,r=0)=>vRound(ctx,x,y,w,h,r,c)
+  const line=(y,x=30,w=300,c=ink)=>{ctx.strokeStyle=c;ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+w,y);ctx.stroke()}
+  const txt=(s,x,y,size=14,c=ink,weight=500,align='left')=>vText(ctx,s,x,y,size,c,weight,align)
+  const paragraph=(s,x,y,w=300,size=14,c=ink,family='"PingFang SC",sans-serif')=>drawRefTextBlock(ctx,s,x,y,w,size,c,{align:'left',maxLines:8,minSize:size,weight:500,lineHeight:1.7,family})
+  const title=(x=30,y=78,w=300,c=ink,serif=false)=>drawRefTextBlock(ctx,main||'企业名称笔试',x,y,w,36,c,{align:'left',maxLines:3,minSize:24,weight:900,lineHeight:1.12,family:serif?'"Songti SC",serif':'"PingFang SC",sans-serif'})
+  const foot=(s,c=ink)=>paragraph(s,30,432,300,12,c)
+  const actual=vItems(plan,['资料目录','使用说明','练习记录'])
+  box(0,0,360,480,cream)
+  if(style==='editorial_edition'){
+    box(0,0,360,12,'#d35c3d');txt('STUDY EDITION / 资料专刊',30,35,11);line(65);const end=title(30,85,300,ink,true);txt('先读目录，再开始这一轮',30,end+22,18,ink,800);line(end+60);actual.slice(0,4).forEach((s,i)=>{const x=30+i%2*160,y=end+85+Math.floor(i/2)*65;txt(s,x,y,14);txt('认识内容 · 分步使用',x,y+25,11)});foot('让每类资料，都有自己的使用位置。')
+  }else if(style==='editorial_cobalt'){
+    box(0,0,360,480,'#244fdd');txt('ONE FOCUS / 一个重点',30,30,11,'#fff');title(30,95,300,'#fff');ctx.save();ctx.translate(25,265);ctx.rotate(-.05);box(0,0,310,125,'#f5e95f');paragraph('这一轮，先把问题找出来。',20,20,270,20,'#183d9c');txt('完成练习 → 记录原因 → 查找资料',20,88,12,'#183d9c');ctx.restore();foot('做完以后，留一点时间给复盘。','#fff')
+  }else if(style==='editorial_spine'){
+    box(0,0,360,480,'#efe5d4');box(0,0,52,480,'#6c342b');ctx.save();ctx.translate(18,380);ctx.rotate(-Math.PI/2);txt('STUDY COMPANION',0,0,14,'#fff');ctx.restore();txt('学习资料 · 使用笔记',78,35,11);const end=title(78,82,250,ink,true);line(end+25,78,250);paragraph('建立自己的资料索引',78,end+50,230,22);paragraph('按内容分类\n按问题查找\n按练习记录回看',78,end+120,230,14)
+  }else if(style==='editorial_receipt'){
+    box(0,0,360,480,'#243b32');box(28,28,304,424,'#fffaf0');txt('STUDY RECEIPT',50,50,11);const end=title(50,85,260);txt('本轮练习，留下什么？',50,end+22,17);['完成内容','错误原因','待查问题'].forEach((s,i)=>{const y=end+65+i*48;txt(s,50,y);txt(['记下来','分分类','回头看'][i],310,y,14,ink,500,'right');ctx.setLineDash([3,3]);line(y+30,50,260);ctx.setLineDash([])});paragraph('下一轮重点，来自这一次的记录。',50,388,260,13);for(let x=28;x<332;x+=16){ctx.fillStyle='#243b32';ctx.beginPath();ctx.moveTo(x,452);ctx.lineTo(x+8,442);ctx.lineTo(x+16,452);ctx.fill()}
+  }else if(style==='editorial_orange'){
+    box(0,0,360,480,'#ef7547');txt('START SMALL / 从一件事开始',30,30,11);title();ctx.fillStyle='#f8ebd6';ctx.beginPath();ctx.arc(180,320,110,0,Math.PI*2);ctx.fill();txt('资料太多？',180,270,24,ink,800,'center');txt('今天先选一类。',180,317,15,ink,500,'center');txt('看目录，做一组，记一个问题。',180,350,12,ink,500,'center');foot('把任务缩小，才方便真正开始。')
+  }else if(style==='editorial_gallery'){
+    box(0,0,360,480,'#f0eee7');txt('COLLECTION / 资料内容',30,30,11);box(30,75,300,275,'#fffdf8');ctx.strokeStyle='#a8a59a';ctx.strokeRect(30,75,300,275);drawRefTextBlock(ctx,main,55,110,250,34,ink,{align:'center',maxLines:3,minSize:24,family:'"Songti SC",serif'});line(267,55,250);paragraph(actual.join(' / '),55,288,250,12);txt('先认识资料，再安排顺序',180,378,18,ink,800,'center');txt('分阶段配合使用',180,414,13,ink,500,'center')
+  }else if(style==='editorial_ribbon'){
+    box(0,0,360,480,'#edf0f6');txt('REVIEW NOTES',30,30,11,'#26375b');title(30,100,300,'#26375b');ctx.save();ctx.translate(0,280);ctx.transform(1,-.087,0,1,0,0);box(0,0,360,135,'#26375b');txt('第二轮，先回看问题记录。',30,25,20,'#fff',800);paragraph('找到对应内容，再完成一次练习。',30,77,300,14,'#fff');ctx.restore();foot('这一次，把注意力放在错误原因上。')
+  }else if(style==='editorial_split'){
+    box(0,0,360,480,'#fff');box(0,0,360,225,'#dfe9de');txt('企业笔试 / 资料配合方法',30,30,11);title(30,72);box(0,225,360,8,ink);txt('先搭框架',30,260,20,ink,800);txt('浏览已有资料，认识内容结构。',30,297,14);line(334);txt('再做练习',30,355,20,ink,800);txt('结合练习记录，整理具体问题。',30,392,14);foot('把阅读和练习连接起来。')
+  }else if(style==='editorial_letter'){
+    box(0,0,360,480,'#f8f1e6');txt('A NOTE FOR YOUR STUDY',35,35,11);const end=title(35,80,290,ink,true);box(35,end+30,3,175,'#b64d3d');txt('给刚打开资料的你：',55,end+34,18,ink,800);paragraph('先不用急着全部看完。\n花一点时间读目录，选择一部分开始。做完以后，记下哪里还不清楚。',55,end+79,260,14);foot('一步一步，整理自己的节奏。','#b64d3d')
+  }else if(style==='editorial_architect'){
+    box(0,0,360,480,'#e5e9e4');txt('FRAMEWORK / 学习框架',30,30,11);title();txt('01',215,305,125,'#c3ccc1',700);box(30,260,2,145,'#52684f');paragraph('把资料拆成具体任务',54,260,260,22);paragraph('浏览一个分类\n完成一组练习\n整理一类问题',54,320,260,14);foot('从可以完成的一步开始。')
+  }else if(style==='editorial_ticket'){
+    box(0,0,360,480,'#eee4d6');vRound(ctx,30,30,300,420,20,'#fffaf0','#4a3c2f');txt('STUDY PASS / 学习路线',52,53,11);const end=title(52,92,256);txt('从目录到复盘',52,end+20,20,ink,800);paragraph('起点　认识资料\n途中　分步练习\n终点　本轮复盘',52,end+65,256,14);ctx.setLineDash([4,4]);line(350,30,300,'#a69986');ctx.setLineDash([]);txt('每一步，都留下下一步的线索。',52,370,12);for(let x=52;x<305;x+=8)box(x,407,x%3+1,25,'#4a3c2f')
+  }else if(style==='editorial_night'){
+    box(0,0,360,480,'#172e35');txt('QUIET STUDY / 专注一页',30,30,11,'#f4e9ce');title(30,80,300,'#f4e9ce');vRound(ctx,30,250,300,162,[90,90,15,15],'#203e43','#557276');ctx.fillStyle='#e8b354';ctx.beginPath();ctx.arc(180,278,5,0,Math.PI*2);ctx.fill();txt('这一页，只解决一个疑问',180,308,18,'#f4e9ce',700,'center');txt('先写下问题，再回到资料中找答案',180,355,13,'#f4e9ce',500,'center');foot('先把这一点弄清。','#f4e9ce')
+  }else if(style==='editorial_accordion'){
+    box(0,0,360,480,'#f3ece6');txt('FOLDING GUIDE / 使用指南',30,30,11);title();['打开资料 → 先看分类','开始练习 → 记录疑问','完成本轮 → 整理原因','准备下轮 → 选择重点'].forEach((s,i)=>{ctx.save();ctx.translate(30,248+i*40);ctx.transform(1,-.052,0,1,0,0);box(0,0,300,40,i%2?'#f1ded3':'#e6c8b8');txt(s,18,12,14);ctx.restore()});foot('让每次练习都有清楚的前后顺序。')
+  }else if(style==='editorial_annotation'){
+    box(0,0,360,480,'#fffdf6');txt('STUDY THOUGHT / 方法摘录',30,30,11);title();box(155,290,122,13,'#f5d569');paragraph('复盘时，\n别只写正确答案。\n再写一句：\n我为什么做错？',30,250,300,25,ink,'"Songti SC",serif');box(30,425,2,27,'#aa4a37');txt('记录原因，方便下一轮针对性回看。',45,429,12,'#aa4a37')
+  }else if(style==='editorial_museum'){
+    box(0,0,360,480,'#d8e2df');txt('MATERIAL STUDY',30,30,11);title(30,100,300,'#203c37',true);box(30,295,300,155,'#fffefa');box(30,295,300,5,'#203c37');txt('本页主题 / CONTENT',52,318,11);txt('资料内容，各有用途',52,346,19,ink,800);paragraph(actual.join(' / '),52,385,256,13)
+  }
+  ctx.restore()
+}
+
 async function renderTemplateCardImage(text, templateStyle, bottomHint, cardPlan = null) {
   const SCALE = 3
   const W = 360 * SCALE, H = 480 * SCALE
@@ -2973,6 +3032,10 @@ async function renderTemplateCardImage(text, templateStyle, bottomHint, cardPlan
   const style = templateStyle || rndPick(CARD_TEMPLATE_STYLES)
   const effectivePlan = cardPlan || buildTemplateDemoPlan(style, CARD_TEMPLATE_STYLES.indexOf(style))
   const effectiveBottomHint = effectivePlan.cardFooter || bottomHint
+  if (EDITORIAL_CARDS.some(([id]) => id === style)) {
+    drawEditorialCard(ctx, style, text, effectivePlan)
+    return offscreenToDataUrl(canvas)
+  }
   if (VIRTUAL_CARD_STYLE_IDS.has(style)) {
     drawVirtualCardImage(ctx, W, H, style, text, effectivePlan)
     return offscreenToDataUrl(canvas)

@@ -1,0 +1,17 @@
+export const EDITORIAL_CARD_STYLES = [
+  ['editorial_edition', '备考专刊', 'material_display'],
+  ['editorial_cobalt', '钴蓝宣言', 'single_focus'],
+  ['editorial_spine', '书脊藏本', 'usage_path'],
+  ['editorial_receipt', '学习收据', 'review_check'],
+  ['editorial_orange', '暖橙单点', 'single_focus'],
+  ['editorial_gallery', '留白展签', 'material_display'],
+  ['editorial_ribbon', '斜切书腰', 'review_check'],
+  ['editorial_split', '上下双章', 'usage_path'],
+  ['editorial_letter', '给备考者的信', 'scene_action'],
+  ['editorial_architect', '建筑留白', 'usage_path'],
+  ['editorial_ticket', '学习通行票', 'usage_path'],
+  ['editorial_night', '深夜阅读灯', 'question_answer'],
+  ['editorial_accordion', '折页使用指南', 'usage_path'],
+  ['editorial_annotation', '观点摘录', 'review_check'],
+  ['editorial_museum', '档案展览', 'material_display'],
+].map(([id, name, goal]) => ({ id, name, goal, family: id, goals: [goal] }))
