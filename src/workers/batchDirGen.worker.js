@@ -1364,13 +1364,13 @@ async function buildStyledSinglePdfComposite(pdfOffscreen, files, borderColor, t
 }
 
 // ── PDF 第一页渲染（OffscreenCanvas 版）─────────────────────────────
-async function renderPdfPage(pdfPath) {
+async function renderPdfPage(pdfPath, pageNumber = 1) {
   const url = _apiBase + `/api/baidu/proxy-pdf?path=${encodeURIComponent(pdfPath)}`
   const res = await fetch(url, { headers: { Authorization: `Bearer ${_token}` } })
   if (!res.ok) throw new Error(`PDF加载失败 (${res.status})`)
   const buffer = await res.arrayBuffer()
   const doc = await pdfjsLib.getDocument({ data: buffer, disableWorker: true }).promise
-  const page = await doc.getPage(1)
+  const page = await doc.getPage(Math.min(pageNumber, doc.numPages))
   const viewport = page.getViewport({ scale: 2 })
   const canvas = new OffscreenCanvas(viewport.width, viewport.height)
   await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise
@@ -3247,6 +3247,60 @@ function drawKraftDecoration(ctx, W, H, scheme, scale) {
   ctx.restore()
 }
 
+// Real source fragments are contained without cropping questions or options.
+async function renderRealMaterialCard(detail, text) {
+  const sources = shuffledCopy([
+    { path: detail?.baidu_path_exam, type: 'exam', label: '学习资料目录' },
+    { path: detail?.baidu_path_history, type: 'history', label: '历年回忆题' },
+    { path: detail?.baidu_path_mock, type: 'mock', label: '模拟练习' },
+  ].filter(source => source.path))
+  for (const source of sources) {
+    try {
+      const result = await getBaiduFiles(source.path)
+      const files = filterDirFilesByType(result.files || [], source.type)
+      if (!files.length) continue
+      let pageCanvas = null
+      let selected = null
+      if (source.type !== 'exam') {
+        let candidates = files.filter(f => !f.isdir && /\.pdf$/i.test(f.name || ''))
+        if (!candidates.length) {
+          for (const folder of shuffledCopy(files.filter(f => f.isdir)).slice(0, 3)) {
+            const nested = await getBaiduFiles(folder.path)
+            candidates.push(...filterDirFilesByType(nested.files || [], source.type).filter(f => !f.isdir && /\.pdf$/i.test(f.name || '')))
+          }
+        }
+        selected = rndPick(candidates)
+        if (selected) pageCanvas = await renderPdfPage(selected.path, rndInt(1, 4))
+      }
+      const canvas = new OffscreenCanvas(1242, 1656), ctx = canvas.getContext('2d')
+      const layout = rndInt(0, 2), ink = '#213d33'
+      ctx.fillStyle = ['#f7f3e9','#eaf0ed','#eef1f6'][layout]; ctx.fillRect(0,0,1242,1656)
+      vText(ctx, source.label + ' · 实际内容节选', 90, 76, 28, ink)
+      const main = splitCardText(text).main || `${detail.company_name || '企业'}笔试`
+      const titleBottom = drawRefTextBlock(ctx,main,90,145,1062,88,ink,{align:'left',maxLines:3,minSize:48,lineHeight:1.12})
+      const caption = pageCanvas ? `${source.label}：完成练习后，记录问题与错误原因` : `${source.label}：先认识内容，再安排学习顺序`
+      const captionBottom = drawRefTextBlock(ctx,caption,90,titleBottom+28,1062,32,ink,{align:'left',maxLines:2,minSize:28})
+      const top = captionBottom + 45, bottom = 1510
+      vRound(ctx,75,top,1092,bottom-top,22,'#ffffff')
+      if (pageCanvas) {
+        const ratio = Math.min(1020/pageCanvas.width,(bottom-top-80)/pageCanvas.height)
+        const w=pageCanvas.width*ratio,h=pageCanvas.height*ratio
+        ctx.drawImage(pageCanvas,(1242-w)/2,top+35,w,h)
+      } else {
+        const entries = shuffledCopy(files).slice(0, Math.min(7, Math.floor((bottom-top-70)/105)))
+        for (let i=0;i<entries.length;i++) {
+          const y=top+40+i*105
+          vText(ctx,String(i+1).padStart(2,'0'),110,y+12,28,'#648273')
+          drawRefTextBlock(ctx,entries[i].name || '目录项目',180,y,900,31,ink,{align:'left',maxLines:2,minSize:26,lineHeight:1.2})
+        }
+      }
+      vText(ctx,'内容节选 · 请按自己的学习进度配合使用',90,1560,25,ink)
+      return { dataUrl: await offscreenToDataUrl(canvas), source: source.label, file: selected?.name || '' }
+    } catch (error) { log(`  └ ${source.label}融合读取失败：${error.message}，尝试其他资料`, 'warn') }
+  }
+  return null
+}
+
 // ── 主批量循环 ───────────────────────────────────────────────────────
 async function runBatch({ productDetails, onlyDirImages, generationMode = 'complete', bgPool, borderColor, titlePool, cardTitleTemplatePool, useCardTitleTemplates, historyTitlePool, mockTitlePool, cardSchemes, replaceCardWithCover }) {
   _TITLE_POOL                = titlePool             || []
@@ -3341,9 +3395,11 @@ async function runBatch({ productDetails, onlyDirImages, generationMode = 'compl
       log(`  └ 生成卡片图中...`, 'info')
       try {
         const scheme = pickCardScheme() || { bg: '#d4f7d4', text: '#2d4a2d', accent: '#52c07a' }
-        const cardDataUrl = contentPlan?.coverTemplateStyle
+        const realCard = await renderRealMaterialCard(detail, cardText)
+        const cardDataUrl = realCard?.dataUrl || (contentPlan?.coverTemplateStyle
           ? await renderTemplateCardImage(cardText, contentPlan.coverTemplateStyle, contentPlan.cardFooter || pickCardBottomHint(), contentPlan)
-          : await renderCardImage(cardText, scheme)
+          : await renderCardImage(cardText, scheme))
+        if (realCard) log(`  └ 已融合${realCard.source}${realCard.file ? '：'+realCard.file : ''}`, 'info')
         images.push({ label: '卡片图', base64: cardDataUrl.replace(/^data:image\/png;base64,/, '') })
         log(`  └ 卡片图 ✓`, 'success')
       } catch (e) {
@@ -3397,6 +3453,8 @@ async function buildCardTemplatePreviews({ sampleText, cardSchemes, productDetai
 self.onmessage = async (e) => {
   if (e.data.type === 'generate-card-image') {
     try {
+      _token = e.data.token || ''
+      _apiBase = e.data.apiBase || ''
       _CARD_SCHEMES = e.data.cardSchemes || []
       _CARD_SCHEME_BAG = []
       _CARD_TEMPLATE_STYLE_BAG = []
@@ -3404,9 +3462,10 @@ self.onmessage = async (e) => {
       const text = String(e.data.text || '').trim()
       const templateStyle = String(e.data.templateStyle || '').trim()
       const scheme = pickCardScheme() || { bg: '#d4f7d4', text: '#2d4a2d', accent: '#52c07a' }
-      const dataUrl = templateStyle
+      const realCard = e.data.useRealMaterial ? await renderRealMaterialCard(e.data.productDetail, text) : null
+      const dataUrl = realCard?.dataUrl || (templateStyle
         ? await renderTemplateCardImage(text, templateStyle, pickCardBottomHint(), drawerCardPlan(templateStyle, e.data.contentPlan, e.data.productDetail))
-        : await renderCardImage(text, scheme)
+        : await renderCardImage(text, scheme))
       post({
         type: 'single-card-image',
         base64: dataUrl.replace(/^data:image\/png;base64,/, ''),

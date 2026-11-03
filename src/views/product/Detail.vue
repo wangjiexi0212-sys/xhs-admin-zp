@@ -2499,7 +2499,7 @@ function generateBatchStyleCardImage(templateStyle = '') {
     finish()
   }
   const contentPlan = ensureDrawerContentPlan()
-  worker.postMessage({ type: 'generate-card-image', text, templateStyle: templateStyle || contentPlan.coverTemplateStyle, contentPlan, productDetail: { ...data.value } })
+  worker.postMessage({ type: 'generate-card-image', text, templateStyle: templateStyle || contentPlan.coverTemplateStyle, contentPlan, productDetail: { ...data.value }, useRealMaterial: !templateStyle, token: getToken(), apiBase: import.meta.env.VITE_API_BASE || '' })
 }
 
 function openCardTemplatePicker() {
