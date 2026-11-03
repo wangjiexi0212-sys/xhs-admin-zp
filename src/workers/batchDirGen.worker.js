@@ -3361,7 +3361,17 @@ async function runBatch({ productDetails, onlyDirImages, generationMode = 'compl
   post({ type: 'done' })
 }
 
-async function buildCardTemplatePreviews({ sampleText, cardSchemes }) {
+function drawerCardPlan(style, contentPlan, detail) {
+  const demo = buildTemplateDemoPlan(style, CARD_TEMPLATE_STYLES.indexOf(style))
+  const plan = contentPlan?.coverTemplateStyle === style ? { ...contentPlan } : demo
+  if (detail && plan.cardGoal === 'material_display') {
+    plan.cardItems = [detail.baidu_path_exam && '学习资料', detail.baidu_path_history && '历年回忆题', detail.baidu_path_mock && '模拟练习'].filter(Boolean)
+    if (!plan.cardItems.length) plan.cardItems = ['资料目录', '使用说明']
+  }
+  return plan
+}
+
+async function buildCardTemplatePreviews({ sampleText, cardSchemes, productDetail }) {
   _CARD_SCHEMES = cardSchemes || []
   _CARD_SCHEME_BAG = []
   _CARD_TEMPLATE_STYLE_BAG = []
@@ -3370,7 +3380,7 @@ async function buildCardTemplatePreviews({ sampleText, cardSchemes }) {
   const previews = []
   for (let index = 0; index < CARD_TEMPLATE_STYLES.length; index++) {
     const style = CARD_TEMPLATE_STYLES[index]
-    const cardPlan = buildTemplateDemoPlan(style, index)
+    const cardPlan = drawerCardPlan(style, null, productDetail)
     const dataUrl = await renderTemplateCardImage(text, style, cardPlan.cardFooter, cardPlan)
     previews.push({
       id: style,
@@ -3395,7 +3405,7 @@ self.onmessage = async (e) => {
       const templateStyle = String(e.data.templateStyle || '').trim()
       const scheme = pickCardScheme() || { bg: '#d4f7d4', text: '#2d4a2d', accent: '#52c07a' }
       const dataUrl = templateStyle
-        ? await renderTemplateCardImage(text, templateStyle, pickCardBottomHint())
+        ? await renderTemplateCardImage(text, templateStyle, pickCardBottomHint(), drawerCardPlan(templateStyle, e.data.contentPlan, e.data.productDetail))
         : await renderCardImage(text, scheme)
       post({
         type: 'single-card-image',

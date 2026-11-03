@@ -1597,6 +1597,7 @@ import { Document, Packer, Paragraph, TextRun, HeadingLevel } from 'docx'
 import { saveAs } from 'file-saver'
 import { BODY_TEMPLATES } from '@/utils/bodyTemplates'
 import { EXTRA_TITLE_TEMPLATES } from '@/utils/extraTitleTemplates'
+import { createDiversityPlans, buildDiversityPrompt, loadDiversityHistory, appendDiversityHistory, assessDiversityRisk, assessProductValueRisk } from '@/utils/contentDiversity'
 import { toPng } from 'html-to-image'
 
 const route = useRoute()
@@ -2497,7 +2498,8 @@ function generateBatchStyleCardImage(templateStyle = '') {
     message.error(error?.message || '卡片图生成失败')
     finish()
   }
-  worker.postMessage({ type: 'generate-card-image', text, templateStyle })
+  const contentPlan = ensureDrawerContentPlan()
+  worker.postMessage({ type: 'generate-card-image', text, templateStyle: templateStyle || contentPlan.coverTemplateStyle, contentPlan, productDetail: { ...data.value } })
 }
 
 function openCardTemplatePicker() {
@@ -2539,6 +2541,7 @@ function loadCardTemplatePickerPreviews() {
   worker.postMessage({
     type: 'preview-card-templates',
     sampleText: (cardText.value || '').trim(),
+    productDetail: { ...data.value },
   })
 }
 
@@ -2819,12 +2822,20 @@ function takeTitleTemplate() {
   return titleTemplateBag.pop() || ''
 }
 
+let drawerContentPlan = null
+let drawerPlanProductId = null
+function ensureDrawerContentPlan(refresh = false) {
+  if (refresh || !drawerContentPlan || drawerPlanProductId !== data.value.id) {
+    drawerContentPlan = createDiversityPlans([{ detail: data.value }], 'extreme', loadDiversityHistory())[0]
+    drawerPlanProductId = data.value.id
+  }
+  return drawerContentPlan
+}
+
 function generateTitle() {
-  const companyName = data.value.company_name || ''
-  const randomTitle = takeTitleTemplate()
-  const out = `${companyName}笔试，${randomTitle}`
-  generatedTitle.value = out
-  cardText.value = out
+  const plan = ensureDrawerContentPlan(true)
+  generatedTitle.value = plan.noteTitle
+  cardText.value = plan.cardText
   message.success('标题生成成功')
 }
 
@@ -2929,6 +2940,47 @@ function buildCoverPromptFromCardPrompt(cardPrompt) {
 }
 
 async function generateBody() {
+  const active = llmStore.active
+  if (!active) { message.warning('请先设置使用中的模型'); return }
+  if (bodyGenerating.value) return
+  bodyGenerating.value = true
+  const detail = { ...data.value }
+  try {
+    const plan = { ...ensureDrawerContentPlan(), noteTitle: generatedTitle.value || ensureDrawerContentPlan().noteTitle }
+    if (!generatedTitle.value) generatedTitle.value = plan.noteTitle
+    if (!cardText.value) cardText.value = plan.cardText
+    const response = await getPromptList({ scene: 'content', page: 1, pageSize: 1 })
+    const prompt = response.list?.[0]
+    if (!prompt) throw new Error('未找到生成正文提示词')
+    const history = loadDiversityHistory()
+    let previous = ''
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const result = await chatLlm({
+        provider: active.provider, api_format: active.api_format, api_key: active.api_key,
+        base_url: active.base_url || '', model: active.default_model,
+        messages: [
+          { role: 'system', content: `${prompt.content}\n请优先遵守本次内容规划与事实约束。` },
+          { role: 'user', content: buildDiversityPrompt(plan, detail, previous) },
+        ], max_tokens: 3000, temperature: .87 + attempt * .04,
+      })
+      const body = (result.content || '').trim()
+      if (!body) throw new Error('模型未返回内容')
+      const risk = assessDiversityRisk({ title: plan.noteTitle, body, companyName: detail.company_name, plan }, history, 'extreme')
+      if (assessProductValueRisk(body).rejected || risk.rejected) {
+        previous = body
+        if (attempt < 2) continue
+        throw new Error('正文内容检查未通过，已自动重写3次，请重新生成')
+      }
+      generatedBody.value = body
+      appendDiversityHistory({ title: plan.noteTitle, body, companyName: detail.company_name, plan })
+      message.success('正文生成成功')
+      return
+    }
+  } catch (error) { message.error(error.message || '正文生成失败') }
+  finally { bodyGenerating.value = false }
+}
+
+async function generateLegacyBody() {
   const active = llmStore.active
   if (!active) {
     Modal.warning({
