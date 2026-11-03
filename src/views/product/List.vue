@@ -1309,15 +1309,7 @@ async function generateNoteForProduct(detail, presetTitle = null, contentPlan = 
     })
     const body = (bodyRes.content || '').trim()
     if (!body) throw new Error('正文生成：模型未返回内容')
-    const bodyLength = body.replace(/\s+/g, '').length
-    const lengthAcceptable = bodyLength >= Math.floor(plan.minLength * 0.75) && bodyLength <= Math.ceil(plan.maxLength * 1.2)
-    if (!lengthAcceptable) {
-      if (attempt < 3) {
-        previousDraft = body
-        continue
-      }
-      throw new Error(`正文篇幅不符合规划（当前约 ${bodyLength} 字，目标 ${plan.minLength}-${plan.maxLength} 字）`)
-    }
+    // 篇幅是生成建议，不作为失败条件；正文偏长或偏短仍继续价值与相似度检查并正常入库。
     const productValueRisk = assessProductValueRisk(body)
     if (productValueRisk.rejected) {
       if (attempt < 3) {
