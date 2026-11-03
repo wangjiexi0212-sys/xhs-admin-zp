@@ -85,6 +85,25 @@
         </div>
       </div>
       <a-divider style="margin: 12px 0" />
+      <div class="dir-batch-diversity-row">
+        <div>
+          <div class="dir-batch-order-title">内容差异化强度</div>
+          <div class="dir-batch-order-tip">统一规划标题、正文结构、开头结尾、篇幅和卡片模板，并与最近生成历史比对</div>
+        </div>
+        <a-select
+          v-model:value="dirBatchDiversityLevel"
+          :options="DIVERSITY_LEVEL_OPTIONS"
+          style="width: 190px; flex-shrink: 0"
+        />
+      </div>
+      <div class="dir-batch-diversity-notice">
+        {{ dirBatchDiversityLevel === 'extreme'
+          ? '极高差异化：本批次策略尽量不重复，并与本机最近 200 条记录比较；高相似正文自动重写，最多 3 次。'
+          : dirBatchDiversityLevel === 'high'
+            ? '高差异化：减少本批次和近期历史中的结构与表达重复。'
+            : '标准差异化：保持基本策略轮换，允许少量相近结构。' }}
+      </div>
+      <a-divider style="margin: 12px 0" />
       <div style="margin-bottom: 16px">
         <div style="font-size: 13px; font-weight: 500; color: #555; margin-bottom: 8px">生成方式</div>
         <a-radio-group v-model:value="dirBatchMode" style="display: flex; flex-direction: column; gap: 6px">
@@ -119,14 +138,6 @@
         </div>
         <a-divider style="margin: 12px 0" />
       </template>
-      <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px">
-        <span style="font-size: 13px; font-weight: 500; color: #555">卡片文案模版</span>
-        <a-switch v-model:checked="dirBatchUseCardTitleTemplates" size="small" />
-        <span style="font-size: 12px; color: #999">{{ dirBatchUseCardTitleTemplates ? '开启，随机使用考前冲刺模版' : '关闭，使用原标题池' }}</span>
-      </div>
-      <div v-if="dirBatchUseCardTitleTemplates" style="padding: 8px 12px; margin-bottom: 12px; background: #fff7e6; border: 1px solid #ffd591; border-radius: 6px; font-size: 12px; color: #8a4b00; line-height: 1.7">
-        示例：{{ cardTitleTemplatePreview }}。生成时会为每个商品随机取一条模版，并拼到“单位名笔试，”后面。
-      </div>
       <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px">
         <span style="font-size: 13px; font-weight: 500; color: #555">封面图替换卡片图</span>
         <a-switch v-model:checked="dirBatchUseCoverImage" size="small" />
@@ -319,7 +330,15 @@ import { getPromptList } from '@/api/prompts'
 import { getCardPromptList } from '@/api/cardPrompts'
 import { drawCoverStream } from '@/api/draw'
 import { proxyImageForDownload } from '@/api/xhsRewrite'
-import { BODY_TEMPLATES } from '@/utils/bodyTemplates'
+import {
+  DIVERSITY_LEVEL_OPTIONS,
+  appendDiversityHistory,
+  assessDiversityRisk,
+  buildDiversityPrompt,
+  createDiversityPlans,
+  formatPlanSummary,
+  loadDiversityHistory,
+} from '@/utils/contentDiversity'
 import { useLlmStore } from '@/stores/llm'
 import { useAiImageStore } from '@/stores/aiImage'
 import { Document, Packer, Paragraph, TextRun, HeadingLevel } from 'docx'
@@ -1249,54 +1268,60 @@ function buildProductCardText(detail, useTemplatePool = false) {
  * @param {string} [presetTitle] 预设标题（批量生成时由 Worker 传入，与卡片图文案保持一致）
  *                               不传时从 TITLE_POOL 随机生成
  */
-async function generateNoteForProduct(detail, presetTitle = null) {
+async function generateNoteForProduct(detail, presetTitle = null, contentPlan = null, comparisonEntries = [], diversityLevel = 'extreme') {
   const active = llmStore.active
   if (!active) throw new Error('未配置使用中的模型')
 
-  // --- 生成标题：优先使用预设标题（卡片图文案），否则从 TITLE_POOL 随机取一条 ---
-  const title = presetTitle || buildProductCardText(detail)
-
-  // --- 生成正文：从 BODY_TEMPLATES 固定风格模版池随机取一条，与单品页面保持一致 ---
-  const tpl = BODY_TEMPLATES[Math.floor(Math.random() * BODY_TEMPLATES.length)]
+  const plan = contentPlan || createDiversityPlans([{ detail }], diversityLevel, comparisonEntries)[0]
+  const title = plan?.noteTitle || presetTitle || buildProductCardText(detail)
 
   const bodyPromptRes = await getPromptList({ scene: 'content', page: 1, pageSize: 1 })
   const bodyPrompt = bodyPromptRes.list?.[0]
   if (!bodyPrompt) throw new Error('未找到「生成正文」场景的提示词')
 
-  const bodyUserContent = [
-    '以下是一段小红书正文模版，请严格保留其结构、分段方式和写作风格，',
-    '将模版中的企业名称和考试内容替换为下方商品信息，重新创作一条全新的小红书正文。',
-    '',
-    '【参考模版】',
-    tpl.content,
-    '',
-    '【商品信息】',
-    `企业名称：${detail.company_name || ''}`,
-    `笔试内容：${detail.job_type_name || ''}`,
-    `笔记标题：${title}`,
-    '',
-    '要求：只输出正文，不重复标题，不含任何引流内容（关注我、加微信、私信等），数字和表情符号的使用风格与模版保持一致。',
-    '禁止使用网络口头禅或夸张感叹句，例如"谁懂啊家人们"、"后台被问麻了"、"救命"、"真的绷不住"等，语气保持实用、亲切即可。',
-    '【硬性字数要求】正文总字数必须严格控制在200字以内，内容简洁精炼，宁可删减也不超字数，超过200字即视为不合格。',
-  ].join('\n')
-
-  const bodyRes = await chatLlm({
-    provider: active.provider,
-    api_format: active.api_format,
-    api_key: active.api_key,
-    base_url: active.base_url || '',
-    model: active.default_model,
-    messages: [
-      { role: 'system', content: bodyPrompt.content },
-      { role: 'user', content: bodyUserContent },
-    ],
-    max_tokens: 3000,
-    temperature: 0.8,
-  })
-  const body = (bodyRes.content || '').trim()
-  if (!body) throw new Error('正文生成：模型未返回内容')
-
-  return { title, body }
+  let previousDraft = ''
+  let lastRisk = null
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const bodyRes = await chatLlm({
+      provider: active.provider,
+      api_format: active.api_format,
+      api_key: active.api_key,
+      base_url: active.base_url || '',
+      model: active.default_model,
+      messages: [
+        {
+          role: 'system',
+          content: `${bodyPrompt.content}\n\n本次任务必须优先遵守用户消息中的差异化规划、事实边界、篇幅和禁止套用成品模板要求。`,
+        },
+        { role: 'user', content: buildDiversityPrompt(plan, detail, previousDraft) },
+      ],
+      max_tokens: 3000,
+      temperature: Math.min(0.82 + attempt * 0.05, 0.96),
+    })
+    const body = (bodyRes.content || '').trim()
+    if (!body) throw new Error('正文生成：模型未返回内容')
+    const bodyLength = body.replace(/\s+/g, '').length
+    const lengthAcceptable = bodyLength >= Math.floor(plan.minLength * 0.75) && bodyLength <= Math.ceil(plan.maxLength * 1.2)
+    if (!lengthAcceptable) {
+      if (attempt < 3) {
+        previousDraft = body
+        continue
+      }
+      throw new Error(`正文篇幅不符合规划（当前约 ${bodyLength} 字，目标 ${plan.minLength}-${plan.maxLength} 字）`)
+    }
+    const risk = assessDiversityRisk({
+      title,
+      body,
+      companyName: detail?.company_name || '',
+      plan,
+    }, comparisonEntries, diversityLevel)
+    lastRisk = risk
+    if (!risk.rejected || diversityLevel === 'standard') {
+      return { title, body, risk, plan, attempts: attempt }
+    }
+    previousDraft = body
+  }
+  throw new Error(`正文与近期内容相似度仍然偏高（风险 ${lastRisk?.score || 0}%），已自动重写 3 次`)
 }
 
 function buildNoteDocx(title, body, tags) {
@@ -1621,6 +1646,7 @@ const dirBatchBorderColor = ref('#F9863B')  // 边框颜色（背景图关闭时
 const dirBatchGenBody = ref(true)           // 是否生成正文（默认开启）
 const dirBatchUseCardTitleTemplates = ref(false) // 是否使用考前冲刺卡片文案模版
 const dirBatchUseCoverImage = ref(false)    // 是否用 AI 封面图替换卡片图
+const dirBatchDiversityLevel = ref('extreme') // standard | high | extreme
 const feishuEnabled = ref(false)            // 飞书文档开关
 const feishuFirstScheduleTime = ref('')     // 飞书第一篇定时发布时间
 const dirBatchVisible = ref(false)
@@ -1629,7 +1655,6 @@ const dirBatchLogs = ref([])
 const dirBatchDone = ref(0)
 const dirBatchTotal = ref(0)
 const dirBatchOnlyDir = computed(() => dirBatchMode.value === 'dirOnly')
-const cardTitleTemplatePreview = computed(() => `xxx笔试，${CARD_TITLE_TEMPLATE_POOL[0]}`)
 const CARD_TEMPLATE_PREVIEW_TEXT = '示例单位笔试，考前冲刺就背这些'
 const cardTemplatePreviewVisible = ref(false)
 const cardTemplatePreviewLoading = ref(false)
@@ -1854,7 +1879,7 @@ async function pickRandomCardPromptForDetail(detail) {
   return pickRandom(activeList)
 }
 
-function buildCoverPromptFromCardPromptForDetail(detail, cardPrompt, cardText) {
+function buildCoverPromptFromCardPromptForDetail(detail, cardPrompt, cardText, contentPlan = null) {
   const companyName = String(detail?.company_name || '').trim()
   const promptContent = String(cardPrompt?.content || '').trim()
   const cardTextForCover = String(cardText || (companyName ? `${companyName}笔试` : detail?.title || '笔试资料')).trim()
@@ -1864,6 +1889,9 @@ function buildCoverPromptFromCardPromptForDetail(detail, cardPrompt, cardText) {
     '',
     `封面核心主题：${cardTextForCover}`,
     companyName ? `封面中必须突出单位名称：${companyName}` : '',
+    contentPlan?.coverMainText ? `封面主文案建议：${contentPlan.coverMainText}` : '',
+    contentPlan?.coverSubText ? `封面副文案建议：${contentPlan.coverSubText}` : '',
+    contentPlan ? '封面文案不要直接复制笔记标题，保持主题一致即可。' : '',
     '',
     '【随机抽取的卡片提示词】',
     promptContent,
@@ -1899,7 +1927,7 @@ async function processCoverUrlToBase64(url) {
   }
 }
 
-async function generateBatchCoverImage(detail, cardText, onProgress) {
+async function generateBatchCoverImage(detail, cardText, onProgress, contentPlan = null) {
   const text = sanitizeCoverPromptText(cardText || buildProductCardText(detail, dirBatchUseCardTitleTemplates.value))
   const cardPrompt = await pickRandomCardPromptForDetail(detail)
   if (!cardPrompt) {
@@ -1910,7 +1938,7 @@ async function generateBatchCoverImage(detail, cardText, onProgress) {
     product_id: detail.id,
     card_text: text,
     prompt: sanitizeCoverPromptText(appendWrittenExamConstraintToPromptForDetail(
-      buildCoverPromptFromCardPromptForDetail(detail, cardPrompt, text),
+      buildCoverPromptFromCardPromptForDetail(detail, cardPrompt, text, contentPlan),
       detail,
     )),
   }
@@ -2036,6 +2064,16 @@ async function runBatchDirImages(generationMode = 'complete', useBgImage = false
     dirBatchGenerating.value = false
     return
   }
+  const diversityHistory = loadDiversityHistory()
+  const diversityPlans = createDiversityPlans(productDetails, dirBatchDiversityLevel.value, diversityHistory)
+  productDetails.forEach((item, index) => { item.contentPlan = diversityPlans[index] })
+  dirBatchLogs.value.push({
+    text: `内容差异化规划完成（${dirBatchDiversityLevel.value === 'extreme' ? '极高' : dirBatchDiversityLevel.value === 'high' ? '高' : '标准'}）`,
+    type: 'success',
+  })
+  productDetails.forEach(item => {
+    dirBatchLogs.value.push({ text: `  └ ${item.company}：${formatPlanSummary(item.contentPlan)}`, type: 'info' })
+  })
   dirBatchLogs.value.push({ text: `生成顺序：${productDetails.map(item => item.company).join(' → ')}`, type: 'info' })
 
   // ── 3. 加载背景图池（仅开启背景图时加载）──────────────────────
@@ -2050,6 +2088,7 @@ async function runBatchDirImages(generationMode = 'complete', useBgImage = false
   const nextFeishuScheduleTime = createFeishuScheduleTimeGenerator(firstScheduleTime)
   // 收集 worker 发回的每个商品图片，用于后续 note 生成 + feishu
   const productImageMap = {}  // company → { detail, folder, images: [{label, base64}] }
+  const generatedContentEntries = []
 
   await new Promise((resolve, reject) => {
     const worker = new Worker(
@@ -2071,9 +2110,11 @@ async function runBatchDirImages(generationMode = 'complete', useBgImage = false
           folder.file(`${label}.${ext}`, base64, { base64: true })
           totalImages++
         }
-        const detail = productDetails.find(p => p.id === id)?.detail
+        const productItem = productDetails.find(p => p.id === id)
+        const detail = productItem?.detail
+        const contentPlan = productItem?.contentPlan
         // cardText：Worker 生成卡片图时使用的文案，存入 map 供后续笔记标题复用
-        productImageMap[company] = { detail, folder, images, cardText }
+        productImageMap[company] = { detail, folder, images, cardText, contentPlan }
       } else if (data.type === 'done') {
         worker.terminate()
         resolve()
@@ -2108,15 +2149,16 @@ async function runBatchDirImages(generationMode = 'complete', useBgImage = false
 
   // ── 5. Worker 完成后：生成笔记内容 + docx + 飞书（主线程处理）──
   const processProduct = async (company, scheduleTime, recordIndex) => {
-    const { detail, folder, images, cardText } = productImageMap[company]
+    const { detail, folder, images, cardText, contentPlan } = productImageMap[company]
     if (!detail) return
     const shuffledTags = shuffleTags(detail.xhs_tags)
-    const noteTitle = cardText || buildProductCardText(detail, useCardTitleTemplates)
+    const noteTitle = contentPlan?.noteTitle || cardText || buildProductCardText(detail, useCardTitleTemplates)
+    const coverText = contentPlan?.cardText || cardText || noteTitle
 
     if (useCoverImage) {
       dirBatchLogs.value.push({ text: `${company} - 生成封面图中...`, type: 'info' })
       try {
-        const cover = await generateBatchCoverImage(detail, noteTitle, (event) => {
+        const cover = await generateBatchCoverImage(detail, coverText, (event) => {
           if (event.step === 'llm') {
             dirBatchLogs.value.push({ text: `  └ ${company} 封面提示词适配中...`, type: 'info' })
           } else if (event.step === 'draw') {
@@ -2127,7 +2169,7 @@ async function runBatchDirImages(generationMode = 'complete', useBgImage = false
               type: 'warn',
             })
           }
-        })
+        }, contentPlan)
         folder.file('封面图.jpg', cover.base64, { base64: true })
         images.unshift({ label: '封面图', base64: cover.base64, ext: 'jpg' })
         totalImages++
@@ -2141,17 +2183,37 @@ async function runBatchDirImages(generationMode = 'complete', useBgImage = false
     let noteResult = null
     try {
       let title, body
-      // cardText 由 Worker 生成卡片图时确定，此处直接复用，确保笔记标题与卡片图文案完全一致
-      // 若 Worker 未生成卡片图（onlyDirImages 模式下卡片图仍会生成，但作为兜底保留随机逻辑）
+        // 标题与卡片文案由差异化计划分别确定，主题相关但不再强制使用同一句话。
       if (genBody) {
-        // 完整生成：标题复用卡片图文案 + 正文（LLM）
-        const res = await generateNoteForProduct(detail, noteTitle)
+        const comparisonEntries = [...diversityHistory, ...generatedContentEntries]
+        const res = await generateNoteForProduct(detail, noteTitle, contentPlan, comparisonEntries, dirBatchDiversityLevel.value)
         title = res.title
         body = res.body
+        const historyEntry = {
+          productId: detail.id,
+          companyName: detail.company_name || company,
+          title,
+          body,
+          plan: res.plan || contentPlan,
+          risk: res.risk,
+        }
+        generatedContentEntries.push(historyEntry)
+        appendDiversityHistory(historyEntry)
+        dirBatchLogs.value.push({
+          text: `  └ 差异化检查：${res.risk?.level === 'low' ? '低风险' : '中风险'}（${res.risk?.score || 0}%）${res.attempts > 1 ? `，自动重写 ${res.attempts - 1} 次` : ''}`,
+          type: res.risk?.level === 'low' ? 'success' : 'warn',
+        })
       } else {
         // 仅生成标题，跳过正文 LLM 调用
         title = noteTitle
         body = null
+        appendDiversityHistory({
+          productId: detail.id,
+          companyName: detail.company_name || company,
+          title,
+          body: '',
+          plan: contentPlan,
+        })
       }
       noteResult = { title, body }
       const doc = buildNoteDocx(title, body, shuffledTags)
@@ -2599,6 +2661,22 @@ onMounted(() => {
   font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.dir-batch-diversity-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+.dir-batch-diversity-notice {
+  margin-top: 10px;
+  padding: 9px 12px;
+  color: #31506f;
+  font-size: 12px;
+  line-height: 1.7;
+  background: #f0f9ff;
+  border: 1px solid #bae0ff;
+  border-radius: 6px;
 }
 .card-preview-toolbar {
   display: flex;

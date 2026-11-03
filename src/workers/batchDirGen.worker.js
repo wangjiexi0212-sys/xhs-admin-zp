@@ -2929,7 +2929,7 @@ async function runBatch({ productDetails, onlyDirImages, generationMode = 'compl
   const total = productDetails.length
   let done = 0
 
-  for (const { id, company, detail } of productDetails) {
+  for (const { id, company, detail, contentPlan } of productDetails) {
     log(`处理：${company}`)
 
     // 本商品所有任务使用同一张背景图（crypto 真随机）
@@ -2994,8 +2994,10 @@ async function runBatch({ productDetails, onlyDirImages, generationMode = 'compl
     }
 
     // 生成卡片文案：卡片图或封面图都会复用它作为笔记标题
-    let cardText = ''
-    try { cardText = buildCardText(detail) } catch (_) { cardText = '' }
+    let cardText = String(contentPlan?.cardText || '').trim()
+    if (!cardText) {
+      try { cardText = buildCardText(detail) } catch (_) { cardText = '' }
+    }
 
     if (replaceCardWithCover) {
       log(`  └ 已开启封面图替换卡片图，跳过卡片图生成`, 'info')
@@ -3003,7 +3005,9 @@ async function runBatch({ productDetails, onlyDirImages, generationMode = 'compl
       log(`  └ 生成卡片图中...`, 'info')
       try {
         const scheme = pickCardScheme() || { bg: '#d4f7d4', text: '#2d4a2d', accent: '#52c07a' }
-        const cardDataUrl = await renderCardImage(cardText, scheme)
+        const cardDataUrl = contentPlan?.coverTemplateStyle
+          ? await renderTemplateCardImage(cardText, contentPlan.coverTemplateStyle, pickCardBottomHint())
+          : await renderCardImage(cardText, scheme)
         images.push({ label: '卡片图', base64: cardDataUrl.replace(/^data:image\/png;base64,/, '') })
         log(`  └ 卡片图 ✓`, 'success')
       } catch (e) {
