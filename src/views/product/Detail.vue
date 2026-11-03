@@ -937,6 +937,7 @@
           >
             <img :src="`data:image/png;base64,${item.base64}`" :alt="item.name" />
             <span>{{ item.name }}</span>
+            <small>{{ item.goal }} · {{ item.viewpoint }}</small>
             <CheckCircleOutlined v-if="selectedCardTemplateId === item.id" />
           </button>
         </div>
@@ -7910,6 +7911,18 @@ async function openCustomDir(item, idx) {
   margin-top: 6px;
   overflow: hidden;
   font-size: 13px;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-template-picker__item small {
+  display: block;
+  margin-top: 3px;
+  overflow: hidden;
+  color: #8c8c8c;
+  font-size: 11px;
+  line-height: 1.35;
   text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;

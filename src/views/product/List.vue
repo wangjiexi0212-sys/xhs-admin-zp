@@ -149,7 +149,7 @@
       <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; margin-bottom: 12px; background: #f6ffed; border: 1px solid #b7eb8f; border-radius: 6px">
         <div>
           <div style="font-size: 13px; font-weight: 500; color: #31511b">卡片图静态模板预览</div>
-          <div style="font-size: 12px; color: #6b8f45; margin-top: 2px">用固定样例文案查看所有卡片图模板效果</div>
+          <div style="font-size: 12px; color: #6b8f45; margin-top: 2px">查看全部模板在不同内容目标、视角和资料标签下的效果</div>
         </div>
         <a-button size="small" :loading="cardTemplatePreviewLoading" @click="openCardTemplatePreview">查看效果图</a-button>
       </div>
@@ -191,15 +191,16 @@
       width="980px"
     >
       <div class="card-preview-toolbar">
-        <span class="card-preview-sample">静态样例：{{ CARD_TEMPLATE_PREVIEW_TEXT }}</span>
+        <span class="card-preview-sample">预览标题：{{ CARD_TEMPLATE_PREVIEW_TEXT }}</span>
         <a-button :loading="cardTemplatePreviewLoading" @click="loadCardTemplatePreviews">重新生成一组</a-button>
-        <span class="card-preview-tip">同一模板会随机展示不同布局、底部区和信息标签</span>
+        <span class="card-preview-tip">每套模板按适合的内容目标展示，正式生成时会读取商品真实资料配置</span>
       </div>
       <a-spin :spinning="cardTemplatePreviewLoading">
         <div class="card-preview-grid">
           <div v-for="item in cardTemplatePreviews" :key="item.id" class="card-preview-item">
             <img :src="`data:image/png;base64,${item.base64}`" :alt="item.name" />
             <div class="card-preview-name">{{ item.name }}</div>
+            <div class="card-preview-meta">{{ item.goal }} · {{ item.viewpoint }}</div>
           </div>
         </div>
         <a-empty v-if="!cardTemplatePreviews.length && !cardTemplatePreviewLoading" description="暂无预览" />
@@ -1664,7 +1665,7 @@ const dirBatchLogs = ref([])
 const dirBatchDone = ref(0)
 const dirBatchTotal = ref(0)
 const dirBatchOnlyDir = computed(() => dirBatchMode.value === 'dirOnly')
-const CARD_TEMPLATE_PREVIEW_TEXT = '示例单位笔试，考前冲刺就背这些'
+const CARD_TEMPLATE_PREVIEW_TEXT = '示例企业笔试，资料怎么分步使用'
 const cardTemplatePreviewVisible = ref(false)
 const cardTemplatePreviewLoading = ref(false)
 const cardTemplatePreviews = ref([])
@@ -2808,5 +2809,12 @@ onMounted(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.card-preview-meta {
+  margin-top: 3px;
+  color: #8c8c8c;
+  font-size: 11px;
+  line-height: 1.35;
+  text-align: center;
 }
 </style>

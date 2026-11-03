@@ -1686,75 +1686,69 @@ const CARD_TEMPLATE_STYLE_NAMES = {
   concept_answer: '标准答题卡',
   concept_track: '进阶赛道',
   concept_tree: '知识生长树',
-  concept_countdown: '七日倒计时',
+  concept_countdown: '分阶段计划',
   concept_radar: '五维雷达',
-  concept_stairs: '四阶通关',
+  concept_stairs: '四步学习路径',
   concept_puzzle: '四块拼图',
   concept_compare: '效率对照组',
   concept_matrix: '备考坐标系',
   concept_compass: '备考指南针',
-  concept_ranking: '提分排行榜',
+  concept_ranking: '内容使用顺序',
   concept_orbit: '知识轨道',
   concept_elements: '考点元素表',
   concept_funnel: '复习漏斗',
-  concept_timeline: '冲刺时间轴',
-  concept_target: '靶心提分',
+  concept_timeline: '学习时间轴',
+  concept_target: '单点聚焦',
   concept_circuit: '解题电路',
-  concept_bars: '得分柱状图',
+  concept_bars: '学习状态图',
 }
 
 const CARD_BOTTOM_HINTS = [
-  '👈 左滑查看更多笔试备考资料',
-  '📚 更多笔试复习资料，左滑查看',
-  '✨ 往左翻，还有整理好的笔试资料',
-  '📖 左滑解锁更多笔试学习资料',
-  '📝 后面几页还有笔试备考干货',
-  '👉 想看更多笔试资料？往左滑',
-  '📌 左滑查看后续笔试资料内容',
-  '💡 笔试复习资料还没完，继续左滑',
-  '🎯 更多笔试重点资料藏在后面',
-  '📚 下一页继续分享笔试备考资料',
-  '👀 往左滑，看看还有哪些笔试资料',
-  '📑 左边还有更多笔试复习内容',
-  '🌟 左滑继续查看笔试学习笔记',
-  '📖 笔试资料已整理，往左翻阅',
-  '✍️ 左滑查看更多笔试知识整理',
-  '📚 继续往左翻，笔试资料还有不少',
-  '💫 更多笔试备考内容，左滑就能看',
-  '📌 别急着划走，左滑还有笔试资料',
-  '🗂️ 后续图片还有更多笔试复习资料',
-  '👈 左滑进入下一组笔试备考内容',
-  '📒 笔试高频考点资料，左滑接着看',
-  '🎯 往左翻，更多笔试核心资料等你看',
-  '📚 左滑还有笔试真题与复习笔记',
-  '📝 笔试知识点整理，下一页继续',
-  '✨ 左滑查看更多笔试题型资料',
-  '📖 备考笔试的小伙伴，继续左滑看资料',
-  '💡 笔试重点内容还有，往左滑查看',
-  '📑 左滑翻阅更多笔试资料整理',
-  '👈 更多笔试知识清单，请向左翻',
-  '🌷 往左翻翻，笔试复习资料还在后面',
-  '📚 后面准备了更多笔试学习内容',
-  '🔖 左滑查看笔试资料的其他部分',
-  '📌 笔试备考资料持续分享，左滑继续',
-  '🎓 左滑了解更多笔试复习知识',
-  '📝 更多笔试考点笔记，下一张接着看',
-  '📖 想系统复习笔试？左滑看更多资料',
-  '✨ 这还不是全部，左滑还有笔试资料',
-  '📚 笔试复习内容比较多，左滑慢慢看',
-  '🎯 往左翻页，继续查看笔试备考重点',
-  '👀 后面还有笔试资料，记得左滑哦',
-  '📒 左滑查看更多笔试专项复习内容',
-  '🗂️ 更多笔试备考整理，向左翻页查看',
-  '💡 左滑还有笔试常见题型学习资料',
-  '📚 笔试资料分享继续，左滑看下一页',
-  '📝 更多笔试复习笔记，往左翻就有',
-  '📖 左滑看看后面整理的笔试知识点',
-  '🌟 下一张还有笔试备考资料，继续翻',
-  '👈 向左滑动，查看剩余笔试资料',
-  '📌 更多笔试复习参考资料，左滑浏览',
-  '🎯 左滑继续，后面还有笔试备考内容',
+  '先认识资料结构，再安排学习顺序',
+  '不同资料可以分阶段配合使用',
+  '完成练习后，记得记录错误原因',
+  '一次只解决一个具体问题',
+  '先看目录，再开始第一轮练习',
+  '把资料拆成可以逐项完成的任务',
+  '下一轮重点来自这一次的检查',
+  '先完成眼前这一步，再继续展开',
+  '做完一组内容，再停下来复盘',
+  '准备下一轮前，先回看已有记录',
 ]
+
+const CARD_TEMPLATE_DEMO_GOALS = [
+  { id: 'material_display', name: '资料展示', viewpoint: '目录导航', items: ['学习资料', '历年回忆题', '模拟练习', '使用说明'], footer: '先认识资料结构，再安排学习顺序' },
+  { id: 'usage_path', name: '使用路径', viewpoint: '分步使用', items: ['先看目录', '开始练习', '分类整理', '完成复盘'], footer: '把资料拆成可以逐项完成的任务' },
+  { id: 'question_answer', name: '问题解答', viewpoint: '操作说明', items: ['明确问题', '查找内容', '完成练习', '记录结果'], footer: '一次只解决一个具体问题' },
+  { id: 'review_check', name: '复盘自查', viewpoint: '薄弱项检查', items: ['完成情况', '错误原因', '薄弱内容', '下一轮重点'], footer: '下一轮重点来自这一次的检查' },
+  { id: 'single_focus', name: '单点拆解', viewpoint: '重点解释', items: ['找到内容', '完成一次', '记录问题', '回看整理'], footer: '把一个问题讲清楚再进入下一项' },
+  { id: 'scene_action', name: '场景动作', viewpoint: '完成练习后', items: ['打开资料', '顺着目录', '开始练习', '及时复盘'], footer: '做完一组内容，再停下来复盘' },
+]
+
+const CARD_ROUTE_STYLE_IDS = new Set(['concept_metro','concept_track','concept_stairs','concept_compass','concept_timeline','concept_circuit','concept_countdown'])
+const CARD_REVIEW_STYLE_IDS = new Set(['concept_dashboard','concept_answer','concept_radar','concept_matrix','concept_bars','concept_compare'])
+const CARD_MAP_STYLE_IDS = new Set(['concept_tree','concept_puzzle','concept_orbit','concept_elements','concept_funnel'])
+const CARD_FOCUS_STYLE_IDS = new Set(['concept_target','concept_ranking'])
+
+function buildTemplateDemoPlan(style, index = 0) {
+  let preferredGoal = ''
+  if (CARD_ROUTE_STYLE_IDS.has(style)) preferredGoal = 'usage_path'
+  else if (CARD_REVIEW_STYLE_IDS.has(style)) preferredGoal = 'review_check'
+  else if (CARD_MAP_STYLE_IDS.has(style)) preferredGoal = 'material_display'
+  else if (CARD_FOCUS_STYLE_IDS.has(style)) preferredGoal = 'single_focus'
+  const eligible = preferredGoal
+    ? CARD_TEMPLATE_DEMO_GOALS.filter(goal => goal.id === preferredGoal)
+    : CARD_TEMPLATE_DEMO_GOALS
+  const goal = eligible[index % eligible.length] || CARD_TEMPLATE_DEMO_GOALS[0]
+  return {
+    cardGoal: goal.id,
+    cardGoalName: goal.name,
+    cardViewpoint: goal.viewpoint,
+    cardScene: goal.viewpoint,
+    cardItems: [...goal.items],
+    cardFooter: goal.footer,
+  }
+}
 
 function pickCardTemplateStyle() {
   if (!_CARD_TEMPLATE_STYLE_BAG.length) _CARD_TEMPLATE_STYLE_BAG = shuffledCopy(CARD_TEMPLATE_STYLES)
@@ -1768,7 +1762,7 @@ function pickCardScheme() {
 }
 
 function pickCardBottomHint() {
-  return rndPick(CARD_BOTTOM_HINTS) || '👈 左滑查看更多笔试备考资料'
+  return rndPick(CARD_BOTTOM_HINTS) || '先看目录，再安排学习顺序'
 }
 
 function splitCardText(text) {
@@ -1828,8 +1822,8 @@ function drawRightHint(ctx, W, H, scale, text, color = '#1a1a1a', highlight = '#
 
 const CARD_LAYOUT_VARIANTS = ['classic', 'centerHero', 'sideTitle', 'noticeBoard', 'infoFirst', 'compactTop']
 const CARD_BOTTOM_MODES = ['hint', 'tags', 'subtitle', 'none']
-const CARD_INFO_CHIPS = ['真题汇编', '高频考点', '考前冲刺', '速记清单', '重点整理', '资料合集', '刷题资料', '考点归纳']
-const CARD_SUBTITLE_POOL = ['重点资料已整理', '适合考前集中复习', '先抓高频再刷题', '备考少走弯路', '资料清单已备好', '短期冲刺可参考']
+const CARD_INFO_CHIPS = ['学习资料', '历年回忆题', '模拟练习', '内容索引', '分步使用', '练习复盘', '错误整理', '下一轮重点']
+const CARD_SUBTITLE_POOL = ['先看资料结构再开始练习', '不同内容可以分阶段使用', '完成练习后及时复盘', '从一个具体问题开始', '把学习任务逐项拆开', '回看记录再安排下一轮']
 
 function pickCardAntiVariant(style) {
   const denseStyles = ['vertical', 'receipt_card', 'calendar_card', 'outline_card']
@@ -1882,8 +1876,8 @@ function drawCardSubtleTexture(ctx, W, H, scale, palette) {
   ctx.restore()
 }
 
-function drawCardInfoChips(ctx, x, y, maxWidth, palette, scale, count = 3) {
-  const chips = shuffledCopy(CARD_INFO_CHIPS).slice(0, count)
+function drawCardInfoChips(ctx, x, y, maxWidth, palette, scale, count = 3, sourceItems = null) {
+  const chips = shuffledCopy(sourceItems?.length ? sourceItems : CARD_INFO_CHIPS).slice(0, count)
   let cx = x
   let cy = y
   ctx.textBaseline = 'top'
@@ -1903,15 +1897,15 @@ function drawCardInfoChips(ctx, x, y, maxWidth, palette, scale, count = 3) {
   return cy + 34 * scale
 }
 
-function drawCardBottomVariant(ctx, W, H, scale, mode, bottomHint, palette, x, maxWidth) {
+function drawCardBottomVariant(ctx, W, H, scale, mode, bottomHint, palette, x, maxWidth, cardPlan = null) {
   const y = H - 104 * scale
   if (mode === 'none') return
   if (mode === 'tags') {
-    drawCardInfoChips(ctx, x, y, maxWidth, palette, scale, 3)
+    drawCardInfoChips(ctx, x, y, maxWidth, palette, scale, 3, cardPlan?.cardItems)
     return
   }
   if (mode === 'subtitle') {
-    const text = rndPick(CARD_SUBTITLE_POOL) || '重点资料已整理'
+    const text = cardPlan?.cardFooter || rndPick(CARD_SUBTITLE_POOL) || '先看资料结构再开始练习'
     ctx.font = `bold ${20 * scale}px "PingFang SC", "Helvetica Neue", sans-serif`
     ctx.textBaseline = 'top'
     const w = Math.min(ctx.measureText(text).width + 22 * scale, maxWidth)
@@ -2095,7 +2089,8 @@ function drawTemplateCardTitle(ctx, lines, x, y, maxWidth, style, palette, scale
   return y + Math.min(lines.length, maxLines) * lineHeight
 }
 
-function drawTemplateCardDecor(ctx, W, H, style, palette, scale) {
+function drawTemplateCardDecor(ctx, W, H, style, palette, scale, cardPlan = null) {
+  const items = cardPlan?.cardItems?.length ? cardPlan.cardItems : CARD_INFO_CHIPS
   ctx.save()
   if (style === 'stamp2') {
     ctx.strokeStyle = palette.accent
@@ -2106,23 +2101,23 @@ function drawTemplateCardDecor(ctx, W, H, style, palette, scale) {
     ctx.textAlign = 'left'
   } else if (style === 'check') {
     ctx.fillStyle = palette.accent
-    ;['真题', '模拟', '公基'].forEach((t, i) => {
+    items.slice(0, 3).forEach((t, i) => {
       const y = 275 * scale + i * 33 * scale
       ctx.beginPath(); ctx.arc(56 * scale, y + 8 * scale, 8 * scale, 0, Math.PI * 2); ctx.fill()
       ctx.strokeStyle = '#fff'; ctx.lineWidth = 2 * scale; ctx.beginPath(); ctx.moveTo(51 * scale, y + 8 * scale); ctx.lineTo(56 * scale, y + 13 * scale); ctx.lineTo(64 * scale, y + 3 * scale); ctx.stroke()
-      ctx.fillStyle = palette.sub; ctx.font = `600 ${15 * scale}px "PingFang SC", sans-serif`; ctx.fillText(`${t}资料已整理`, 75 * scale, y)
+      ctx.fillStyle = palette.sub; ctx.font = `600 ${15 * scale}px "PingFang SC", sans-serif`; ctx.fillText(t, 75 * scale, y)
       ctx.fillStyle = palette.accent
     })
   } else if (style === 'tags') {
     let x = 42 * scale, y = 282 * scale
-    ;['资料齐全', '重点清晰', '备考省心'].forEach((t, i) => {
+    items.slice(0, 3).forEach((t, i) => {
       const w = drawTemplateTag(ctx, x, y, t, ['#fff4b8', '#dbeafe', '#dcfce7'][i], '#1f2937', scale)
       x += w + 8 * scale
     })
   } else if (style === 'calendar_card') {
     ctx.fillStyle = '#ffffff'
     ctx.font = `bold ${18 * scale}px "PingFang SC", sans-serif`
-    ctx.fillText('备考清单', 36 * scale, 20 * scale)
+    ctx.fillText(cardPlan?.cardGoalName || '学习清单', 36 * scale, 20 * scale)
   } else if (style === 'vertical') {
     ctx.strokeStyle = '#e5decf'; ctx.lineWidth = 1 * scale
     for (let x = 68 * scale; x < W - 35 * scale; x += 36 * scale) {
@@ -2284,14 +2279,20 @@ function drawRefRuledBg(ctx, W, H, color = '#d9e4df') {
   }
 }
 
-function drawRefCardImage(ctx, W, H, style, text) {
+function drawRefCardImage(ctx, W, H, style, text, cardPlan = null) {
   const { main, sub } = splitCardText(text || '')
-  const title = main || '2026招聘考试资料'
-  const tagText = '笔试资料  面试资料  历年真题'
+  const title = main || '企业笔试学习资料'
+  const cardItems = cardPlan?.cardItems?.length ? cardPlan.cardItems : ['学习资料', '历年回忆题', '模拟练习']
+  const tagText = cardItems.slice(0, 3).join('  ')
+  const footerText = cardPlan?.cardFooter || '不同资料可以分阶段配合使用'
   ctx.font = '900 36px "PingFang SC", sans-serif'
   const infoLines = (sub && sub.length > 8)
     ? wrapCardLines(ctx, sub, 800).slice(0, 2)
-    : ['综合知识 | 法律基础知识', '笔试资料 | 历年真题']
+    : cardItems.slice(0, 4).reduce((lines, item, index) => {
+        if (index % 2 === 0) lines.push(item)
+        else lines[lines.length - 1] += ` · ${item}`
+        return lines
+      }, [])
 
   ctx.clearRect(0, 0, W, H)
   ctx.fillStyle = '#ffffff'
@@ -2306,7 +2307,7 @@ function drawRefCardImage(ctx, W, H, style, text) {
     ctx.strokeStyle = '#a6c7cd'; ctx.lineWidth = 5
     ctx.beginPath(); ctx.roundRect(96, 734, W - 192, 108, 54); ctx.stroke()
     drawRefContentText(ctx, 120, 990, W - 240, '', infoLines, '#f6fbfb', '#f6fbfb')
-    drawRefTextBlock(ctx, '电子版资料 可打印', 120, 1276, W - 240, 30, '#f6fbfb', { maxLines: 1, minSize: 24 })
+    drawRefTextBlock(ctx, footerText, 120, 1276, W - 240, 30, '#f6fbfb', { maxLines: 1, minSize: 20 })
     return
   }
 
@@ -2322,7 +2323,7 @@ function drawRefCardImage(ctx, W, H, style, text) {
     drawRefTextBlock(ctx, title, 88, 300, W - 176, 68, '#3f3840', { maxLines: 3, minSize: 42 })
     drawRefPill(ctx, 96, 740, W - 192, 102, '#8f7987', tagText.replaceAll('  ', ' · '), '#fff', 38, 22)
     drawRefContentText(ctx, 110, 932, W - 220, '备考内容', infoLines, '#3f3840', '#a18b99', 'left')
-    drawRefPill(ctx, 444, 1190, 504, 96, '#8f7987', '电子版资料 可打印', '#fff', 34, 48)
+    drawRefPill(ctx, 354, 1190, 684, 96, '#8f7987', footerText, '#fff', 26, 48)
     return
   }
 
@@ -2334,7 +2335,7 @@ function drawRefCardImage(ctx, W, H, style, text) {
     drawRefTextBlock(ctx, title, 150, 340, W - 300, 58, '#134536', { maxLines: 4, minSize: 38 })
     drawRefPill(ctx, 164, 750, W - 328, 104, '#1f765f', tagText.replaceAll('  ', ' · '), '#fff', 38, 18)
     drawRefContentText(ctx, 190, 940, W - 380, '笔试内容', infoLines, '#134536', '#1f765f')
-    drawRefPill(ctx, 270, 1244, W - 540, 96, '#1f765f', '电子版资料 可打印', '#fff', 34, 48)
+    drawRefPill(ctx, 190, 1244, W - 380, 96, '#1f765f', footerText, '#fff', 26, 48)
     return
   }
 
@@ -2350,7 +2351,7 @@ function drawRefCardImage(ctx, W, H, style, text) {
     drawRefTextBlock(ctx, title, 110, 310, W - 220, 62, '#342d28', { maxLines: 4, minSize: 40 })
     drawRefPill(ctx, 130, 746, W - 260, 104, '#826f5b', tagText.replaceAll('  ', ' · '), '#fff', 38, 16)
     drawRefContentText(ctx, 130, 944, W - 260, '笔试内容', infoLines, '#342d28', '#a89178', 'left')
-    drawRefPill(ctx, 286, 1240, W - 572, 94, '#826f5b', '电子版资料 可打印', '#fff', 34, 48)
+    drawRefPill(ctx, 190, 1240, W - 380, 94, '#826f5b', footerText, '#fff', 26, 48)
     return
   }
 
@@ -2362,7 +2363,7 @@ function drawRefCardImage(ctx, W, H, style, text) {
     drawRefTextBlock(ctx, title, 206, 198, W - 292, 64, '#2c2034', { maxLines: 4, minSize: 40 })
     drawRefPill(ctx, 204, 718, W - 312, 110, '#704381', tagText, '#fff', 39, 18)
     drawRefContentText(ctx, 206, 918, W - 310, '笔试内容', infoLines, '#2c2034', '#704381', 'left')
-    drawRefPill(ctx, 382, 1230, 488, 96, '#704381', '电子版资料 可打印', '#fff', 34, 48)
+    drawRefPill(ctx, 250, 1230, 752, 96, '#704381', footerText, '#fff', 26, 48)
     return
   }
 
@@ -2374,7 +2375,7 @@ function drawRefCardImage(ctx, W, H, style, text) {
     drawRefTextBlock(ctx, title, 92, 278, W - 184, 70, '#202538', { maxLines: 4, minSize: 42 })
     drawRefTextBlock(ctx, tagText, 170, 834, W - 340, 44, '#37405d', { maxLines: 1, minSize: 30 })
     drawRefContentText(ctx, 160, 980, W - 320, '', infoLines, '#202538', '#202538')
-    drawRefPill(ctx, 286, 1232, W - 572, 98, '#37405d', '电子版资料 可打印', '#fff', 34, 48)
+    drawRefPill(ctx, 190, 1232, W - 380, 98, '#37405d', footerText, '#fff', 26, 48)
     return
   }
 
@@ -2387,8 +2388,8 @@ function drawRefCardImage(ctx, W, H, style, text) {
     drawRefTextBlock(ctx, tagText.replaceAll('  ', ' | '), 100, 746, W - 200, 38, '#ba202b', { maxLines: 1, minSize: 28 })
     ctx.strokeStyle = '#aaa39a'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(W / 2, 834); ctx.lineTo(W / 2, 1110); ctx.stroke()
     drawRefContentText(ctx, 100, 886, 390, '核心内容', infoLines.slice(0, 2), '#111', '#ba202b', 'left')
-    drawRefContentText(ctx, 610, 886, 350, '资料说明', ['电子版资料', '支持打印复习'], '#111', '#ba202b', 'left')
-    drawRefPill(ctx, 270, 1248, W - 540, 96, '#c3222b', '电子版资料 可打印', '#fff', 34, 48)
+    drawRefContentText(ctx, 610, 886, 350, '使用说明', cardItems.slice(2, 4), '#111', '#ba202b', 'left')
+    drawRefPill(ctx, 190, 1248, W - 380, 96, '#c3222b', footerText, '#fff', 26, 48)
     return
   }
 
@@ -2401,7 +2402,7 @@ function drawRefCardImage(ctx, W, H, style, text) {
     drawRefPill(ctx, 96, 714, W - 192, 104, '#5c7d68', tagText.replaceAll('  ', ' · '), '#fff', 38, 16)
     ctx.fillStyle = '#fffef9'; ctx.beginPath(); ctx.roundRect(132, 906, W - 264, 258, 90); ctx.fill()
     drawRefContentText(ctx, 170, 954, W - 340, '笔试内容', infoLines, '#18392f', '#5c7d68')
-    drawRefPill(ctx, 270, 1248, W - 540, 96, '#5c7d68', '电子版资料 可打印', '#fff', 34, 48)
+    drawRefPill(ctx, 190, 1248, W - 380, 96, '#5c7d68', footerText, '#fff', 26, 48)
     return
   }
 
@@ -2414,7 +2415,7 @@ function drawRefCardImage(ctx, W, H, style, text) {
     drawRefTextBlock(ctx, tagText.replaceAll('  ', ' · '), 160, 580, W - 320, 52, '#315d34', { maxLines: 2, minSize: 34 })
     ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.roundRect(74, 810, W - 148, 512, 28); ctx.fill()
     drawRefContentText(ctx, 150, 858, W - 300, '', infoLines, '#1d4624', '#1d4624')
-    drawRefPill(ctx, 286, 1210, W - 572, 96, '#315d34', '电子版资料 可打印', '#fff', 34, 48)
+    drawRefPill(ctx, 190, 1210, W - 380, 96, '#315d34', footerText, '#fff', 26, 48)
     return
   }
 
@@ -2426,7 +2427,7 @@ function drawRefCardImage(ctx, W, H, style, text) {
     drawRefTextBlock(ctx, title, 96, 300, W - 192, 68, '#2b1d35', { maxLines: 4, minSize: 42 })
     drawRefPill(ctx, 130, 624, W - 260, 108, '#71407e', tagText, '#fff', 38, 16)
     drawRefContentText(ctx, 140, 902, W - 280, '', infoLines, '#2b1d35', '#2b1d35')
-    drawRefPill(ctx, 286, 1228, W - 572, 96, '#71407e', '电子版资料 可打印', '#fff', 34, 48)
+    drawRefPill(ctx, 190, 1228, W - 380, 96, '#71407e', footerText, '#fff', 26, 48)
     return
   }
 
@@ -2438,7 +2439,7 @@ function drawRefCardImage(ctx, W, H, style, text) {
     drawRefTextBlock(ctx, tagText, 170, 636, W - 340, 40, '#7a4185', { maxLines: 1, minSize: 30 })
     drawRefContentText(ctx, 120, 810, W - 240, '笔试内容', infoLines, '#2b1d35', '#7a4185')
     ctx.fillStyle = '#e8d9ec'; ctx.beginPath(); ctx.moveTo(60, 1180); ctx.bezierCurveTo(250, 1080, 430, 1245, 610, 1130); ctx.bezierCurveTo(770, 1024, 900, 1120, W - 60, 1192); ctx.lineTo(W - 60, H - 70); ctx.lineTo(60, H - 70); ctx.closePath(); ctx.fill()
-    drawRefPill(ctx, 286, 1220, W - 572, 96, '#7a4185', '电子版资料 可打印', '#fff', 34, 48)
+    drawRefPill(ctx, 190, 1220, W - 380, 96, '#7a4185', footerText, '#fff', 26, 48)
     return
   }
 
@@ -2448,11 +2449,11 @@ function drawRefCardImage(ctx, W, H, style, text) {
     ctx.fillStyle = '#38586b'; ctx.beginPath(); ctx.roundRect(110, 714, 710, 112, 18); ctx.fill()
     ctx.fillStyle = '#38586b'; ctx.fillRect(884, 148, 158, 112); ctx.fillRect(884, 574, 158, 112); ctx.fillRect(884, 1000, 158, 112)
     ctx.strokeStyle = '#d4dde3'; ctx.lineWidth = 16; ctx.beginPath(); ctx.arc(944, 184, 130, 0, Math.PI * 2); ctx.stroke()
-    ctx.fillStyle = '#38586b'; ctx.font = '900 28px "PingFang SC", sans-serif'; ctx.fillText('2026 招聘考试', 110, 118)
+    ctx.fillStyle = '#38586b'; ctx.font = '900 28px "PingFang SC", sans-serif'; ctx.fillText(cardPlan?.cardGoalName || '企业笔试资料', 110, 118)
     drawRefTextBlock(ctx, title, 110, 266, 710, 68, '#243642', { align: 'left', maxLines: 4, minSize: 42 })
     drawRefTextBlock(ctx, tagText, 130, 754, 670, 38, '#fff', { maxLines: 1, minSize: 28 })
     drawRefContentText(ctx, 110, 920, 650, '', infoLines, '#243642', '#243642', 'left')
-    drawRefPill(ctx, 304, 1236, 490, 96, '#38586b', '电子版资料 可打印', '#fff', 34, 48)
+    drawRefPill(ctx, 190, 1236, W - 380, 96, '#38586b', footerText, '#fff', 26, 48)
     return
   }
 
@@ -2460,15 +2461,15 @@ function drawRefCardImage(ctx, W, H, style, text) {
     ctx.fillStyle = '#f5f3f0'; ctx.fillRect(0, 0, W, H)
     ctx.strokeStyle = '#d1cbc4'; ctx.lineWidth = 3; ctx.strokeRect(60, 88, W - 120, H - 176); ctx.strokeRect(96, 122, W - 192, H - 244)
     ctx.fillStyle = '#5d4938'; ctx.fillRect(0, 70, 904, 148)
-    ctx.fillStyle = '#fff'; ctx.font = '900 32px "PingFang SC", sans-serif'; ctx.fillText('2026 招聘考试资料', 70, 138)
+    ctx.fillStyle = '#fff'; ctx.font = '900 32px "PingFang SC", sans-serif'; ctx.fillText(cardPlan?.cardGoalName || '企业笔试学习资料', 70, 138)
     ctx.fillStyle = '#e7e3df'; ctx.fillRect(138, 240, W - 138, 178)
     drawRefTextBlock(ctx, title, 160, 244, W - 220, 54, '#3f3228', { maxLines: 3, minSize: 36, family: '"Songti SC", serif' })
     ctx.fillStyle = '#5d4938'; ctx.fillRect(0, 436, 966, 156)
-    drawRefTextBlock(ctx, sub || '所属单位辅警招聘', 180, 474, 760, 54, '#fff', { maxLines: 1, minSize: 34 })
+    drawRefTextBlock(ctx, sub || cardPlan?.cardViewpoint || '资料内容与使用方法', 180, 474, 760, 54, '#fff', { maxLines: 1, minSize: 30 })
     ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.roundRect(74, 626, W - 148, 696, 28); ctx.fill()
     drawRefTextBlock(ctx, tagText, 160, 730, W - 320, 42, '#5d4938', { maxLines: 1, minSize: 30 })
-    drawRefContentText(ctx, 210, 930, W - 420, '', ['法律基础 · 行政能力', '书面表达 · 专业素养'], '#3f3228', '#3f3228')
-    drawRefPill(ctx, 286, 1214, W - 572, 96, '#5d4938', '电子版资料 可打印', '#fff', 34, 48)
+    drawRefContentText(ctx, 210, 930, W - 420, '', infoLines, '#3f3228', '#3f3228')
+    drawRefPill(ctx, 190, 1214, W - 380, 96, '#5d4938', footerText, '#fff', 26, 48)
   }
 }
 
@@ -2491,28 +2492,33 @@ function drawConceptHeader(ctx, left, right, color, accent) {
 function drawConceptTitle(ctx, text, color, subColor, top = 180) {
   const { main, sub } = splitCardText(text || '')
   const title = main || 'XX集团笔试'
-  const subtitle = sub || '真题至少完整刷两轮'
+  const subtitle = sub || '先看资料结构，再安排学习顺序'
   const titleBottom = drawRefTextBlock(ctx, title, 82, top, 916, 72, color, { align: 'left', maxLines: 2, minSize: 54, lineHeight: 1.12 })
   drawRefTextBlock(ctx, subtitle, 82, titleBottom + 24, 916, 39, subColor, { align: 'left', maxLines: 2, minSize: 30, lineHeight: 1.2 })
 }
 
 function drawConceptFooter(ctx, color, lineColor, bottomHint) {
-  const hint = bottomHint || '左滑查看更多笔试资料 →'
+  const hint = bottomHint || '不同资料可以分阶段配合使用'
   ctx.strokeStyle = lineColor
   ctx.lineWidth = 2
   ctx.beginPath(); ctx.moveTo(82, 1334); ctx.lineTo(998, 1334); ctx.stroke()
   ctx.fillStyle = color
   ctx.font = '700 25px "PingFang SC", sans-serif'
-  ctx.fillText('企业招聘考试 · 备考资料', 82, 1360)
+  ctx.fillText('企业笔试 · 学习资料', 82, 1360)
   ctx.textAlign = 'right'
   ctx.fillText(hint, 998, 1360)
   ctx.textAlign = 'left'
 }
 
-function drawConceptCardImage(ctx, W, H, style, text, bottomHint) {
+function drawConceptCardImage(ctx, W, H, style, text, bottomHint, cardPlan = null) {
   const dark = '#253a33'
   const orange = '#cf6347'
   const cream = '#f3f0e8'
+  const planItems = cardPlan?.cardItems?.length ? cardPlan.cardItems : ['学习资料', '历年回忆题', '模拟练习', '复盘整理']
+  const item = (index, fallback) => planItems[index % planItems.length] || fallback
+  const goalName = cardPlan?.cardGoalName || '资料使用'
+  const viewpoint = cardPlan?.cardViewpoint || '分步整理'
+  const footer = cardPlan?.cardFooter || bottomHint || '先看目录，再安排学习顺序'
   ctx.clearRect(0, 0, W, H)
   ctx.textBaseline = 'top'
 
@@ -2535,17 +2541,17 @@ function drawConceptCardImage(ctx, W, H, style, text, bottomHint) {
   if (style !== 'concept_compare') ctx.fillRect(0, 0, W, H)
 
   if (style === 'concept_metro') {
-    drawConceptHeader(ctx, '2026 招聘考试', '备考路线图', '#153b34', orange)
+    drawConceptHeader(ctx, '企业笔试资料', goalName, '#153b34', orange)
     drawConceptTitle(ctx, text, '#153b34', '#45665e')
     const ys = 780, xs = [150, 410, 670, 930]
     ctx.strokeStyle = '#178a78'; ctx.lineWidth = 18; ctx.beginPath(); ctx.moveTo(xs[0], ys); ctx.lineTo(xs[3], ys); ctx.stroke()
-    ;['考情','考点','真题','冲刺'].forEach((label, i) => {
+    ;[item(0,'资料'),item(1,'练习'),item(2,'整理'),item(3,'复盘')].forEach((label, i) => {
       ctx.fillStyle = cream; ctx.strokeStyle = i % 2 ? orange : '#178a78'; ctx.lineWidth = 20
       ctx.beginPath(); ctx.arc(xs[i], ys, 47, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
       ctx.fillStyle = '#153b34'; ctx.font = '900 31px "PingFang SC", sans-serif'; ctx.textAlign = 'center'; ctx.fillText(label, xs[i], ys + 82)
       ctx.font = '700 20px sans-serif'; ctx.fillText(`0${i + 1}`, xs[i], ys - 14)
     })
-    ctx.textAlign = 'left'; drawConceptFooter(ctx, '#153b34', '#b8c9c2', bottomHint)
+    ctx.textAlign = 'left'; drawConceptFooter(ctx, '#153b34', '#b8c9c2', footer)
     return
   }
 
@@ -2554,11 +2560,11 @@ function drawConceptCardImage(ctx, W, H, style, text, bottomHint) {
     drawConceptTitle(ctx, text, '#f7f4e9', '#aebcdb', 160)
     ctx.strokeStyle = '#26365e'; ctx.lineWidth = 50; ctx.beginPath(); ctx.arc(540, 800, 205, 0, Math.PI * 2); ctx.stroke()
     ctx.strokeStyle = '#6ee7d0'; ctx.lineCap = 'round'; ctx.beginPath(); ctx.arc(540, 800, 205, -Math.PI / 2, Math.PI * 1.14); ctx.stroke(); ctx.lineCap = 'butt'
-    ctx.fillStyle = '#f7f4e9'; ctx.font = '900 130px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('82', 540, 716)
-    ctx.fillStyle = '#8fa0c8'; ctx.font = '700 25px "PingFang SC", sans-serif'; ctx.fillText('备考进度', 540, 876)
-    const metrics = [['5','核心模块'],['2轮','真题计划'],['7天','冲刺周期']]
+    ctx.fillStyle = '#f7f4e9'; ctx.font = '900 88px "PingFang SC", sans-serif'; ctx.textAlign = 'center'; ctx.fillText('检查', 540, 742)
+    ctx.fillStyle = '#8fa0c8'; ctx.font = '700 25px "PingFang SC", sans-serif'; ctx.fillText(viewpoint, 540, 876)
+    const metrics = [[item(0,'资料'),'先梳理'],[item(1,'练习'),'再完成'],[item(2,'复盘'),'后检查']]
     metrics.forEach((item, i) => { const x = 95 + i * 305; ctx.fillStyle = '#19284f'; ctx.beginPath(); ctx.roundRect(x, 1080, 270, 125, 22); ctx.fill(); ctx.fillStyle = '#f5d467'; ctx.font = '900 40px sans-serif'; ctx.fillText(item[0], x + 135, 1100); ctx.fillStyle = '#c9d3eb'; ctx.font = '700 22px "PingFang SC", sans-serif'; ctx.fillText(item[1], x + 135, 1152) })
-    ctx.textAlign = 'left'; drawConceptFooter(ctx, '#6ee7d0', '#33436c', bottomHint); return
+    ctx.textAlign = 'left'; drawConceptFooter(ctx, '#6ee7d0', '#33436c', footer); return
   }
 
   if (style === 'concept_answer') {
@@ -2575,32 +2581,32 @@ function drawConceptCardImage(ctx, W, H, style, text, bottomHint) {
       ;['A','B','C','D'].forEach((v, i) => { ctx.beginPath(); ctx.arc(x + 125 + i * 70, y + 39, 18, 0, Math.PI * 2); if (i === (n - 1) % 4) ctx.fill(); else ctx.stroke(); ctx.fillStyle = i === (n - 1) % 4 ? '#fff' : '#173d6c'; ctx.font = '700 15px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(v, x + 125 + i * 70, y + 29); ctx.textAlign = 'left'; ctx.font = '700 29px monospace' })
     }
     for (let x = 82; x < 998; x += 18) { ctx.fillStyle = x % 36 ? '#173d6c' : '#8194ab'; ctx.fillRect(x, 1080, x % 54 ? 6 : 11, 65) }
-    drawConceptFooter(ctx, '#173d6c', '#b7c7de', bottomHint); return
+    drawConceptFooter(ctx, '#173d6c', '#b7c7de', footer); return
   }
 
   if (style === 'concept_track') {
     drawConceptHeader(ctx, 'STEP BY STEP', '笔试进阶路线', dark, orange); drawConceptTitle(ctx, text, dark, '#61756d')
     ctx.strokeStyle = dark; ctx.lineWidth = 78; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(150, 1120); ctx.bezierCurveTo(210, 880, 400, 1010, 500, 790); ctx.bezierCurveTo(600, 580, 790, 700, 930, 500); ctx.stroke(); ctx.lineCap = 'butt'
-    const pts = [[150,1120],[388,905],[630,710],[930,500]], labels = ['基础','专项','真题','冲刺']
+    const pts = [[150,1120],[388,905],[630,710],[930,500]], labels = [item(0,'资料'),item(1,'练习'),item(2,'整理'),item(3,'复盘')]
     pts.forEach((p, i) => { ctx.fillStyle = i === 3 ? dark : orange; ctx.beginPath(); ctx.arc(p[0], p[1], 52, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#fff'; ctx.font = '900 25px "PingFang SC", sans-serif'; ctx.textAlign = 'center'; ctx.fillText(labels[i], p[0], p[1] - 14) })
-    ctx.textAlign = 'left'; drawConceptFooter(ctx, dark, '#b9c4bd', bottomHint); return
+    ctx.textAlign = 'left'; drawConceptFooter(ctx, dark, '#b9c4bd', footer); return
   }
 
   if (style === 'concept_tree') {
     drawConceptHeader(ctx, 'KNOWLEDGE MAP', '企业招聘考试', '#173d2f', '#a77b31'); drawConceptTitle(ctx, text, '#173d2f', '#607166')
     ctx.fillStyle = '#7e6232'; ctx.beginPath(); ctx.moveTo(500, 1180); ctx.lineTo(580, 1180); ctx.lineTo(558, 665); ctx.lineTo(520, 665); ctx.closePath(); ctx.fill()
     ctx.strokeStyle = '#7e6232'; ctx.lineWidth = 30; ctx.beginPath(); ctx.moveTo(540, 825); ctx.lineTo(320, 650); ctx.moveTo(540, 760); ctx.lineTo(760, 580); ctx.stroke()
-    const leaves = [[220,590,'考情'],[390,520,'行测'],[585,490,'专业'],[790,610,'真题'],[690,790,'模拟']]
+    const leaves = [[220,590,item(0,'资料')],[390,520,item(1,'练习')],[585,490,item(2,'整理')],[790,610,item(3,'复盘')],[690,790,item(4,'检查')]]
     leaves.forEach((p, i) => { ctx.fillStyle = i === 4 ? '#d1b15f' : '#cadbb4'; ctx.beginPath(); ctx.ellipse(p[0], p[1], 100, 66, i % 2 ? .2 : -.2, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#173d2f'; ctx.font = '900 27px "PingFang SC", sans-serif'; ctx.textAlign = 'center'; ctx.fillText(p[2], p[0], p[1] - 14) })
-    ctx.textAlign = 'left'; drawConceptFooter(ctx, '#173d2f', '#c9c2ac', bottomHint); return
+    ctx.textAlign = 'left'; drawConceptFooter(ctx, '#173d2f', '#c9c2ac', footer); return
   }
 
   if (style === 'concept_countdown') {
-    drawConceptHeader(ctx, '考前冲刺计划', 'COUNTDOWN', '#f5f0df', '#ef7839')
-    ;['0','7'].forEach((n, i) => { const x = 250 + i * 310; const grad = ctx.createLinearGradient(0, 390, 0, 680); grad.addColorStop(0, '#353535'); grad.addColorStop(.49, '#353535'); grad.addColorStop(.5, '#222'); grad.addColorStop(1, '#222'); ctx.fillStyle = grad; ctx.beginPath(); ctx.roundRect(x, 330, 270, 350, 25); ctx.fill(); ctx.fillStyle = '#f5f0df'; ctx.font = '900 260px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(n, x + 135, 354) })
-    ctx.fillStyle = '#ef7839'; ctx.font = '800 27px sans-serif'; ctx.fillText('DAYS', 822, 628)
+    drawConceptHeader(ctx, '分阶段学习计划', 'STUDY PLAN', '#f5f0df', '#ef7839')
+    ;['阶','段'].forEach((n, i) => { const x = 250 + i * 310; const grad = ctx.createLinearGradient(0, 390, 0, 680); grad.addColorStop(0, '#353535'); grad.addColorStop(.49, '#353535'); grad.addColorStop(.5, '#222'); grad.addColorStop(1, '#222'); ctx.fillStyle = grad; ctx.beginPath(); ctx.roundRect(x, 330, 270, 350, 25); ctx.fill(); ctx.fillStyle = '#f5f0df'; ctx.font = '900 180px "PingFang SC", sans-serif'; ctx.textAlign = 'center'; ctx.fillText(n, x + 135, 400) })
+    ctx.fillStyle = '#ef7839'; ctx.font = '800 27px sans-serif'; ctx.fillText('PLAN', 822, 628)
     ctx.textAlign = 'left'; drawConceptTitle(ctx, text, '#f5f0df', '#b9b6aa', 780)
-    drawConceptFooter(ctx, '#ef7839', '#424242', bottomHint); return
+    drawConceptFooter(ctx, '#ef7839', '#424242', footer); return
   }
 
   if (style === 'concept_radar') {
@@ -2611,118 +2617,120 @@ function drawConceptCardImage(ctx, W, H, style, text, bottomHint) {
     ;[1,.65].forEach(k => { ctx.beginPath(); angles.forEach((a,i) => { const p=point(radius*k,a); i?ctx.lineTo(...p):ctx.moveTo(...p) }); ctx.closePath(); ctx.stroke() })
     angles.forEach(a => { const p=point(radius,a); ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(...p); ctx.stroke() })
     const values=[.92,.77,.72,.88,.64]; ctx.fillStyle='rgba(228,103,85,.25)'; ctx.strokeStyle='#e46755'; ctx.lineWidth=7; ctx.beginPath(); angles.forEach((a,i)=>{const p=point(radius*values[i],a);i?ctx.lineTo(...p):ctx.moveTo(...p)});ctx.closePath();ctx.fill();ctx.stroke()
-    ;['言语','判断','数量','资料','常识'].forEach((v,i)=>{const p=point(radius+62,angles[i]);ctx.fillStyle='#183a63';ctx.font='900 26px "PingFang SC", sans-serif';ctx.textAlign='center';ctx.fillText(v,p[0],p[1]-14)})
-    ctx.textAlign='left';drawConceptFooter(ctx,'#183a63','#b9c8d8',bottomHint);return
+    ;[item(0,'资料'),item(1,'练习'),item(2,'整理'),item(3,'复盘'),item(4,'检查')].forEach((v,i)=>{const p=point(radius+62,angles[i]);ctx.fillStyle='#183a63';ctx.font='900 24px "PingFang SC", sans-serif';ctx.textAlign='center';ctx.fillText(v,p[0],p[1]-14)})
+    ctx.textAlign='left';drawConceptFooter(ctx,'#183a63','#b9c8d8',footer);return
   }
 
   if (style === 'concept_stairs') {
-    drawConceptHeader(ctx,'4 STEPS','笔试通关路径',dark,'#b94e35');drawConceptTitle(ctx,text,dark,'#687970')
-    const colors=['#d2a778','#b97e5d','#6b8168',dark], labels=['基础','专项','真题','冲刺']
+    drawConceptHeader(ctx,'4 STEPS','四步学习路径',dark,'#b94e35');drawConceptTitle(ctx,text,dark,'#687970')
+    const colors=['#d2a778','#b97e5d','#6b8168',dark], labels=[item(0,'资料'),item(1,'练习'),item(2,'整理'),item(3,'复盘')]
     colors.forEach((c,i)=>{const x=90+i*230,h=170+i*120,y=1190-h;ctx.fillStyle=c;ctx.fillRect(x,y,230,h);ctx.fillStyle=i>1?'#fff':dark;ctx.font='900 28px "PingFang SC", sans-serif';ctx.fillText(`0${i+1}`,x+28,y+30);ctx.font='900 38px "PingFang SC", sans-serif';ctx.fillText(labels[i],x+28,y+78)})
-    drawConceptFooter(ctx,dark,'#bcae9d',bottomHint);return
+    drawConceptFooter(ctx,dark,'#bcae9d',footer);return
   }
 
   if (style === 'concept_puzzle') {
     drawConceptHeader(ctx,'完整备考拼图','企业招聘考试','#252c3a','#7657c8');drawConceptTitle(ctx,text,'#252c3a','#5d6470')
-    const blocks=[['考情','明确方向','#cbe1d4'],['考点','夯实基础','#efd28a'],['真题','掌握规律','#bdcbed'],['模拟','检验成果','#e3bbd0']]
+    const blocks=[[item(0,'资料'),'先认识内容','#cbe1d4'],[item(1,'练习'),'按顺序完成','#efd28a'],[item(2,'整理'),'记录问题','#bdcbed'],[item(3,'复盘'),'安排下一轮','#e3bbd0']]
     blocks.forEach((b,i)=>{const x=90+(i%2)*455,y=600+Math.floor(i/2)*260;ctx.fillStyle=b[2];ctx.beginPath();ctx.roundRect(x,y,415,220,i%2?[55,18,55,18]:[18,55,18,55]);ctx.fill();ctx.fillStyle='#252c3a';ctx.font='900 48px "PingFang SC",sans-serif';ctx.fillText(b[0],x+42,y+46);ctx.font='700 25px "PingFang SC",sans-serif';ctx.fillText(b[1],x+42,y+120)})
-    drawConceptFooter(ctx,'#252c3a','#c7c4bd',bottomHint);return
+    drawConceptFooter(ctx,'#252c3a','#c7c4bd',footer);return
   }
 
   if (style === 'concept_compare') {
-    ctx.globalCompositeOperation='source-over';drawConceptHeader(ctx,'备考方式对照','EFFICIENCY','#303532','#ef6b49')
-    const {main,sub}=splitCardText(text||'');ctx.fillStyle='#fff';ctx.globalCompositeOperation='difference';drawRefTextBlock(ctx,main||'XX集团笔试',82,180,916,72,'#fff',{align:'left',maxLines:2,minSize:54});drawRefTextBlock(ctx,sub||'真题至少完整刷两轮',82,300,916,39,'#fff',{align:'left',maxLines:2,minSize:30});ctx.globalCompositeOperation='source-over'
-    const cols=[{x:80,color:'#343936',title:'盲目刷题',items:['资料混乱','没有复盘','进度失控']},{x:580,color:'#fff',title:'高效备考',items:['重点清晰','真题两轮','按时冲刺']}]
+    ctx.globalCompositeOperation='source-over';drawConceptHeader(ctx,'学习阶段对照','TWO ROUNDS','#303532','#ef6b49')
+    const {main,sub}=splitCardText(text||'');ctx.fillStyle='#fff';ctx.globalCompositeOperation='difference';drawRefTextBlock(ctx,main||'企业笔试',82,180,916,72,'#fff',{align:'left',maxLines:2,minSize:54});drawRefTextBlock(ctx,sub||viewpoint,82,300,916,39,'#fff',{align:'left',maxLines:2,minSize:30});ctx.globalCompositeOperation='source-over'
+    const cols=[{x:80,color:'#343936',title:'第一轮',items:[item(0,'认识资料'),item(1,'完成练习'),'记录问题']},{x:580,color:'#fff',title:'第二轮',items:['回看记录',item(2,'检查薄弱'),item(3,'完成复盘')]}]
     cols.forEach((col,ci)=>{ctx.fillStyle=ci?'#ef6b49':'#343936';ctx.font='900 42px "PingFang SC",sans-serif';ctx.fillText(col.title,col.x,620);col.items.forEach((v,i)=>{ctx.fillStyle=col.color;ctx.font='700 29px "PingFang SC",sans-serif';ctx.fillText(v,col.x,730+i*115);ctx.strokeStyle=ci?'#52615b':'#b8b5ae';ctx.beginPath();ctx.moveTo(col.x,780+i*115);ctx.lineTo(col.x+390,780+i*115);ctx.stroke()})})
-    ctx.fillStyle='#fff';ctx.globalCompositeOperation='difference';drawConceptFooter(ctx,'#fff','#fff',bottomHint);ctx.globalCompositeOperation='source-over';return
+    ctx.fillStyle='#fff';ctx.globalCompositeOperation='difference';drawConceptFooter(ctx,'#fff','#fff',footer);ctx.globalCompositeOperation='source-over';return
   }
 
   if (style === 'concept_matrix') {
     drawConceptHeader(ctx,'复习优先级矩阵','企业招聘考试',dark,orange);drawConceptTitle(ctx,text,dark,'#65736c')
-    const cells=[['高频易错','优先突破',dark,'#fff'],['高频基础','稳定拿分','#ddb85d',dark],['低频难题','适当取舍','#e6dfce',dark],['低频基础','快速扫清','#d6e2db',dark]]
+    const cells=[[item(0,'资料内容'),'先浏览',dark,'#fff'],[item(1,'练习内容'),'按顺序完成','#ddb85d',dark],[item(2,'错误记录'),'集中整理','#e6dfce',dark],[item(3,'复盘内容'),'安排下一轮','#d6e2db',dark]]
     cells.forEach((c,i)=>{const x=90+(i%2)*450,y=610+Math.floor(i/2)*240;ctx.fillStyle=c[2];ctx.fillRect(x,y,430,220);ctx.fillStyle=c[3];ctx.font='700 28px "PingFang SC",sans-serif';ctx.fillText(c[0],x+38,y+45);ctx.font='900 39px "PingFang SC",sans-serif';ctx.fillText(c[1],x+38,y+105)})
-    drawConceptFooter(ctx,dark,'#beb8a9',bottomHint);return
+    drawConceptFooter(ctx,dark,'#beb8a9',footer);return
   }
 
   if (style === 'concept_compass') {
     ctx.fillStyle='#e8eee8';ctx.fillRect(0,0,W,H);drawConceptHeader(ctx,'STUDY COMPASS','找准复习方向','#173c35',orange);drawConceptTitle(ctx,text,'#173c35','#60736c')
     const cx=540,cy=870;ctx.strokeStyle='#173c35';ctx.lineWidth=5;ctx.beginPath();ctx.arc(cx,cy,280,0,Math.PI*2);ctx.stroke();ctx.strokeStyle='#93a69f';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(cx,cy-280);ctx.lineTo(cx,cy+280);ctx.moveTo(cx-280,cy);ctx.lineTo(cx+280,cy);ctx.stroke()
-    ctx.fillStyle=orange;ctx.beginPath();ctx.moveTo(cx+115,cy-220);ctx.lineTo(cx+26,cy+20);ctx.lineTo(cx-28,cy-25);ctx.closePath();ctx.fill();ctx.fillStyle='#173c35';ctx.beginPath();ctx.moveTo(cx-115,cy+220);ctx.lineTo(cx-26,cy-20);ctx.lineTo(cx+28,cy+25);ctx.closePath();ctx.fill();ctx.font='900 34px sans-serif';ctx.textAlign='center';ctx.fillText('N',cx,cy-258);ctx.font='900 39px "PingFang SC",sans-serif';ctx.fillText('高频考点',cx,cy-22);ctx.font='700 24px "PingFang SC",sans-serif';ctx.fillText('真题 → 复盘 → 冲刺',cx,cy+45);ctx.textAlign='left';drawConceptFooter(ctx,'#173c35','#b9c8c1',bottomHint);return
+    ctx.fillStyle=orange;ctx.beginPath();ctx.moveTo(cx+115,cy-220);ctx.lineTo(cx+26,cy+20);ctx.lineTo(cx-28,cy-25);ctx.closePath();ctx.fill();ctx.fillStyle='#173c35';ctx.beginPath();ctx.moveTo(cx-115,cy+220);ctx.lineTo(cx-26,cy-20);ctx.lineTo(cx+28,cy+25);ctx.closePath();ctx.fill();ctx.font='900 34px sans-serif';ctx.textAlign='center';ctx.fillText('N',cx,cy-258);ctx.font='900 39px "PingFang SC",sans-serif';ctx.fillText(item(0,'学习资料'),cx,cy-22);ctx.font='700 24px "PingFang SC",sans-serif';ctx.fillText(`${item(1,'练习')} → ${item(2,'整理')} → ${item(3,'复盘')}`,cx,cy+45);ctx.textAlign='left';drawConceptFooter(ctx,'#173c35','#b9c8c1',footer);return
   }
 
   if (style === 'concept_ranking') {
-    drawConceptHeader(ctx,'高频模块排行','企业招聘考试','#f0f2f3','#f3bd58');drawConceptTitle(ctx,text,'#f0f2f3','#adb7c5')
-    const rows=[['01','判断推理','重点突破'],['02','资料分析','速度训练'],['03','言语理解','稳定正确率']]
+    drawConceptHeader(ctx,'内容使用顺序','企业笔试资料','#f0f2f3','#f3bd58');drawConceptTitle(ctx,text,'#f0f2f3','#adb7c5')
+    const rows=[['01',item(0,'学习资料'),'先认识内容'],['02',item(1,'练习内容'),'按顺序完成'],['03',item(2,'复盘整理'),'回看问题']]
     rows.forEach((r,i)=>{const y=625+i*180;ctx.fillStyle='#263247';ctx.beginPath();ctx.roundRect(90,y,900,140,22);ctx.fill();ctx.fillStyle='#f3bd58';ctx.font='900 54px sans-serif';ctx.fillText(r[0],125,y+39);ctx.fillStyle='#fff';ctx.font='900 36px "PingFang SC",sans-serif';ctx.fillText(r[1],270,y+35);ctx.fillStyle='#aeb8c8';ctx.font='700 24px "PingFang SC",sans-serif';ctx.fillText(r[2],270,y+86)})
-    drawConceptFooter(ctx,'#f3bd58','#3a4557',bottomHint);return
+    drawConceptFooter(ctx,'#f3bd58','#3a4557',footer);return
   }
 
   if (style === 'concept_orbit') {
     drawConceptHeader(ctx,'CORE SYSTEM','核心知识轨道',dark,orange);drawConceptTitle(ctx,text,dark,'#6d756f')
     const cx=540,cy=850;ctx.strokeStyle='#9ea69f';ctx.lineWidth=3;ctx.beginPath();ctx.arc(cx,cy,285,0,Math.PI*2);ctx.stroke();ctx.beginPath();ctx.arc(cx,cy,185,0,Math.PI*2);ctx.stroke();ctx.fillStyle=dark;ctx.beginPath();ctx.arc(cx,cy,120,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fff';ctx.font='900 37px "PingFang SC",sans-serif';ctx.textAlign='center';ctx.fillText('笔试核心',cx,cy-20)
-    const points=[[cx,cy-285,'考情'],[cx+285,cy,'题型'],[cx,cy+285,'真题'],[cx-285,cy,'复盘']];points.forEach(p=>{ctx.fillStyle=orange;ctx.beginPath();ctx.arc(p[0],p[1],50,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fff';ctx.font='900 24px "PingFang SC",sans-serif';ctx.fillText(p[2],p[0],p[1]-13)});ctx.textAlign='left';drawConceptFooter(ctx,dark,'#c8beb2',bottomHint);return
+    const points=[[cx,cy-285,item(0,'资料')],[cx+285,cy,item(1,'练习')],[cx,cy+285,item(2,'整理')],[cx-285,cy,item(3,'复盘')]];points.forEach(p=>{ctx.fillStyle=orange;ctx.beginPath();ctx.arc(p[0],p[1],50,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fff';ctx.font='900 22px "PingFang SC",sans-serif';ctx.fillText(p[2],p[0],p[1]-13)});ctx.textAlign='left';drawConceptFooter(ctx,dark,'#c8beb2',footer);return
   }
 
   if (style === 'concept_elements') {
     drawConceptHeader(ctx,'笔试考点元素表','企业招聘考试',dark,'#ad5a45');drawConceptTitle(ctx,text,dark,'#68766f')
-    const items=[['Yy','言语'],['Tl','推理'],['Sl','数量'],['Zl','资料'],['Cs','常识'],['Zy','专业']]
+    const items=[['01',item(0,'资料')],['02',item(1,'练习')],['03',item(2,'整理')],['04',item(3,'复盘')],['05',item(4,'检查')],['06',item(5,'下一轮')]]
     items.forEach((it,i)=>{const x=90+(i%3)*305,y=600+Math.floor(i/3)*260,darkCell=i%2===1;ctx.fillStyle=darkCell?dark:'#f6f7f1';ctx.strokeStyle='#9faa9f';ctx.lineWidth=3;ctx.fillRect(x,y,270,220);ctx.strokeRect(x,y,270,220);ctx.fillStyle=darkCell?'#e5bd6a':'#ad5a45';ctx.font='900 72px sans-serif';ctx.fillText(it[0],x+30,y+30);ctx.fillStyle=darkCell?'#fff':dark;ctx.font='700 28px "PingFang SC",sans-serif';ctx.fillText(it[1],x+32,y+140)})
-    drawConceptFooter(ctx,dark,'#b9c2ba',bottomHint);return
+    drawConceptFooter(ctx,dark,'#b9c2ba',footer);return
   }
 
   if (style === 'concept_funnel') {
     drawConceptHeader(ctx,'FOCUS','复习范围逐步收紧',dark,orange);drawConceptTitle(ctx,text,dark,'#6c756f')
-    const levels=[['完整考纲',850,dark],['高频模块',700,'#486158'],['历年真题',560,'#788b74'],['易错考点',420,'#b98b5c'],['考前重点',300,orange]]
-    levels.forEach((l,i)=>{const x=(W-l[1])/2,y=590+i*125;ctx.fillStyle=l[2];ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+l[1],y);ctx.lineTo(x+l[1]-55,y+100);ctx.lineTo(x+55,y+100);ctx.closePath();ctx.fill();ctx.fillStyle='#fff';ctx.font='900 28px "PingFang SC",sans-serif';ctx.textAlign='center';ctx.fillText(l[0],W/2,y+32)});ctx.textAlign='left';drawConceptFooter(ctx,dark,'#c8bfae',bottomHint);return
+    const levels=[[item(0,'资料目录'),850,dark],[item(1,'练习内容'),700,'#486158'],[item(2,'问题记录'),560,'#788b74'],[item(3,'薄弱内容'),420,'#b98b5c'],[item(4,'下一轮重点'),300,orange]]
+    levels.forEach((l,i)=>{const x=(W-l[1])/2,y=590+i*125;ctx.fillStyle=l[2];ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+l[1],y);ctx.lineTo(x+l[1]-55,y+100);ctx.lineTo(x+55,y+100);ctx.closePath();ctx.fill();ctx.fillStyle='#fff';ctx.font='900 28px "PingFang SC",sans-serif';ctx.textAlign='center';ctx.fillText(l[0],W/2,y+32)});ctx.textAlign='left';drawConceptFooter(ctx,dark,'#c8bfae',footer);return
   }
 
   if (style === 'concept_timeline') {
-    drawConceptHeader(ctx,'14天冲刺时间轴','企业招聘考试','#243655',orange);drawConceptTitle(ctx,text,'#243655','#66758c')
-    ctx.strokeStyle='#243655';ctx.lineWidth=10;ctx.beginPath();ctx.moveTo(180,590);ctx.lineTo(180,1180);ctx.stroke();const rows=[['D-14','基础扫盲'],['D-10','专项突破'],['D-05','真题复盘'],['D-01','考前巩固']]
-    rows.forEach((r,i)=>{const y=610+i*170;ctx.fillStyle=orange;ctx.beginPath();ctx.arc(180,y,24,0,Math.PI*2);ctx.fill();ctx.fillStyle='#243655';ctx.font='900 35px sans-serif';ctx.fillText(r[0],245,y-35);ctx.font='900 40px "PingFang SC",sans-serif';ctx.fillText(r[1],430,y-37);ctx.strokeStyle='#b8c2d0';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(245,y+35);ctx.lineTo(940,y+35);ctx.stroke()});drawConceptFooter(ctx,'#243655','#bdc7d4',bottomHint);return
+    drawConceptHeader(ctx,'分阶段学习时间轴','企业笔试资料','#243655',orange);drawConceptTitle(ctx,text,'#243655','#66758c')
+    ctx.strokeStyle='#243655';ctx.lineWidth=10;ctx.beginPath();ctx.moveTo(180,590);ctx.lineTo(180,1180);ctx.stroke();const rows=[['01',item(0,'认识资料')],['02',item(1,'开始练习')],['03',item(2,'整理问题')],['04',item(3,'完成复盘')]]
+    rows.forEach((r,i)=>{const y=610+i*170;ctx.fillStyle=orange;ctx.beginPath();ctx.arc(180,y,24,0,Math.PI*2);ctx.fill();ctx.fillStyle='#243655';ctx.font='900 35px sans-serif';ctx.fillText(r[0],245,y-35);ctx.font='900 40px "PingFang SC",sans-serif';ctx.fillText(r[1],430,y-37);ctx.strokeStyle='#b8c2d0';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(245,y+35);ctx.lineTo(940,y+35);ctx.stroke()});drawConceptFooter(ctx,'#243655','#bdc7d4',footer);return
   }
 
   if (style === 'concept_target') {
-    drawConceptHeader(ctx,'FOCUS PLAN','精准锁定得分点',dark,'#6b8177');drawConceptTitle(ctx,text,dark,'#687970')
-    ctx.fillStyle='#dfe7e1';ctx.beginPath();ctx.arc(540,835,290,0,Math.PI*2);ctx.fill();ctx.fillStyle='#c5d4cc';ctx.beginPath();ctx.arc(540,835,205,0,Math.PI*2);ctx.fill();ctx.fillStyle='#91aa9d';ctx.beginPath();ctx.arc(540,835,125,0,Math.PI*2);ctx.fill();ctx.fillStyle=dark;ctx.beginPath();ctx.arc(540,835,80,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fff';ctx.font='700 21px "PingFang SC",sans-serif';ctx.textAlign='center';ctx.fillText('核心目标',540,796);ctx.font='900 29px "PingFang SC",sans-serif';ctx.fillText('高频考点',540,835)
-    ;['方向明确','训练集中','复盘到位'].forEach((v,i)=>{const x=250+i*220;ctx.fillStyle=i===1?'#d5dfd9':'#e2e7e2';ctx.beginPath();ctx.roundRect(x,1160,180,58,29);ctx.fill();ctx.fillStyle='#41574f';ctx.font='700 22px "PingFang SC",sans-serif';ctx.fillText(v,x+90,1175)});ctx.textAlign='left';drawConceptFooter(ctx,'#687970','#c5cec8',bottomHint);return
+    drawConceptHeader(ctx,'FOCUS PLAN','集中整理一个重点',dark,'#6b8177');drawConceptTitle(ctx,text,dark,'#687970')
+    ctx.fillStyle='#dfe7e1';ctx.beginPath();ctx.arc(540,835,290,0,Math.PI*2);ctx.fill();ctx.fillStyle='#c5d4cc';ctx.beginPath();ctx.arc(540,835,205,0,Math.PI*2);ctx.fill();ctx.fillStyle='#91aa9d';ctx.beginPath();ctx.arc(540,835,125,0,Math.PI*2);ctx.fill();ctx.fillStyle=dark;ctx.beginPath();ctx.arc(540,835,80,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fff';ctx.font='700 21px "PingFang SC",sans-serif';ctx.textAlign='center';ctx.fillText('本页重点',540,796);ctx.font='900 25px "PingFang SC",sans-serif';ctx.fillText(item(0,'资料使用'),540,835)
+    ;[item(1,'明确问题'),item(2,'完成练习'),item(3,'及时复盘')].forEach((v,i)=>{const x=250+i*220;ctx.fillStyle=i===1?'#d5dfd9':'#e2e7e2';ctx.beginPath();ctx.roundRect(x,1160,180,58,29);ctx.fill();ctx.fillStyle='#41574f';ctx.font='700 20px "PingFang SC",sans-serif';ctx.fillText(v,x+90,1175)});ctx.textAlign='left';drawConceptFooter(ctx,'#687970','#c5cec8',footer);return
   }
 
   if (style === 'concept_circuit') {
     drawConceptHeader(ctx,'解题思路电路图','企业招聘考试','#eef4eb','#70deb0');drawConceptTitle(ctx,text,'#eef4eb','#b8cbc3')
-    const labels=['读题','定位','排除','复核'];labels.forEach((v,i)=>{const x=90+i*245,y=720;ctx.strokeStyle='#70deb0';ctx.lineWidth=5;ctx.strokeRect(x,y,150,150);ctx.fillStyle='#eef4eb';ctx.font='900 31px "PingFang SC",sans-serif';ctx.textAlign='center';ctx.fillText(v,x+75,y+55);if(i<3){ctx.strokeStyle='#70deb0';ctx.beginPath();ctx.moveTo(x+150,y+75);ctx.lineTo(x+245,y+75);ctx.stroke();ctx.fillStyle='#70deb0';ctx.beginPath();ctx.moveTo(x+245,y+75);ctx.lineTo(x+220,y+60);ctx.lineTo(x+220,y+90);ctx.closePath();ctx.fill()}});ctx.fillStyle='#70deb0';ctx.font='700 22px monospace';ctx.textAlign='left';ctx.fillText('INPUT',90,980);ctx.textAlign='right';ctx.fillText('OUTPUT',990,980);ctx.setLineDash([15,12]);ctx.strokeStyle='#70deb0';ctx.beginPath();ctx.moveTo(90,1040);ctx.lineTo(990,1040);ctx.stroke();ctx.setLineDash([]);ctx.textAlign='left';drawConceptFooter(ctx,'#70deb0','#35584f',bottomHint);return
+    const labels=[item(0,'开始'),item(1,'练习'),item(2,'整理'),item(3,'复盘')];labels.forEach((v,i)=>{const x=90+i*245,y=720;ctx.strokeStyle='#70deb0';ctx.lineWidth=5;ctx.strokeRect(x,y,150,150);ctx.fillStyle='#eef4eb';ctx.font='900 26px "PingFang SC",sans-serif';ctx.textAlign='center';ctx.fillText(v,x+75,y+55);if(i<3){ctx.strokeStyle='#70deb0';ctx.beginPath();ctx.moveTo(x+150,y+75);ctx.lineTo(x+245,y+75);ctx.stroke();ctx.fillStyle='#70deb0';ctx.beginPath();ctx.moveTo(x+245,y+75);ctx.lineTo(x+220,y+60);ctx.lineTo(x+220,y+90);ctx.closePath();ctx.fill()}});ctx.fillStyle='#70deb0';ctx.font='700 22px monospace';ctx.textAlign='left';ctx.fillText('START',90,980);ctx.textAlign='right';ctx.fillText('REVIEW',990,980);ctx.setLineDash([15,12]);ctx.strokeStyle='#70deb0';ctx.beginPath();ctx.moveTo(90,1040);ctx.lineTo(990,1040);ctx.stroke();ctx.setLineDash([]);ctx.textAlign='left';drawConceptFooter(ctx,'#70deb0','#35584f',footer);return
   }
 
   if (style === 'concept_bars') {
-    drawConceptHeader(ctx,'SCORE PLAN','分模块提分计划',dark,orange);drawConceptTitle(ctx,text,dark,'#68756f')
-    const values=[.52,.70,.43,.82,.60],labels=['言语','判断','数量','资料','常识'];ctx.strokeStyle=dark;ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(100,1120);ctx.lineTo(980,1120);ctx.stroke();values.forEach((v,i)=>{const x=130+i*175,h=500*v;ctx.fillStyle=i%2?dark:orange;ctx.fillRect(x,1120-h,105,h);ctx.fillStyle=dark;ctx.font='800 24px "PingFang SC",sans-serif';ctx.textAlign='center';ctx.fillText(labels[i],x+52,1147);ctx.font='700 21px sans-serif';ctx.fillText(`${Math.round(v*100)}%`,x+52,1080-h)});ctx.textAlign='left';drawConceptFooter(ctx,dark,'#c1baac',bottomHint);return
+    drawConceptHeader(ctx,'STUDY STATUS','学习内容状态图',dark,orange);drawConceptTitle(ctx,text,dark,'#68756f')
+    const values=[.52,.70,.43,.82,.60],labels=[item(0,'资料'),item(1,'练习'),item(2,'整理'),item(3,'复盘'),item(4,'检查')];ctx.strokeStyle=dark;ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(100,1120);ctx.lineTo(980,1120);ctx.stroke();values.forEach((v,i)=>{const x=130+i*175,h=500*v;ctx.fillStyle=i%2?dark:orange;ctx.fillRect(x,1120-h,105,h);ctx.fillStyle=dark;ctx.font='800 21px "PingFang SC",sans-serif';ctx.textAlign='center';ctx.fillText(labels[i],x+52,1147);ctx.font='700 17px "PingFang SC",sans-serif';ctx.fillText(['待开始','进行中','待整理','需复盘','再检查'][i],x+52,1080-h)});ctx.textAlign='left';drawConceptFooter(ctx,dark,'#c1baac',footer);return
   }
 }
 
-async function renderTemplateCardImage(text, templateStyle, bottomHint) {
+async function renderTemplateCardImage(text, templateStyle, bottomHint, cardPlan = null) {
   const SCALE = 3
   const W = 360 * SCALE, H = 480 * SCALE
   const canvas = new OffscreenCanvas(W, H)
   const ctx = canvas.getContext('2d')
   const style = templateStyle || rndPick(CARD_TEMPLATE_STYLES)
+  const effectivePlan = cardPlan || buildTemplateDemoPlan(style, CARD_TEMPLATE_STYLES.indexOf(style))
+  const effectiveBottomHint = effectivePlan.cardFooter || bottomHint
   if (CONCEPT_CARD_STYLES.has(style)) {
-    drawConceptCardImage(ctx, W, H, style, text, bottomHint)
+    drawConceptCardImage(ctx, W, H, style, text, effectiveBottomHint, effectivePlan)
     return offscreenToDataUrl(canvas)
   }
   if (REFERENCE_TEA_THEME_MAP[style]) {
-    drawRefCardImage(ctx, W, H, REFERENCE_TEA_THEME_MAP[style], text)
+    drawRefCardImage(ctx, W, H, REFERENCE_TEA_THEME_MAP[style], text, effectivePlan)
     applyTeaReferenceTheme(ctx, W, H, REFERENCE_TEA_THEME_PALETTES[style])
     return offscreenToDataUrl(canvas)
   }
   if (REFERENCE_CARD_STYLES.has(style)) {
-    drawRefCardImage(ctx, W, H, style, text)
+    drawRefCardImage(ctx, W, H, style, text, effectivePlan)
     return offscreenToDataUrl(canvas)
   }
   const palette = getTemplateCardPalette(style)
   const variant = pickCardAntiVariant(style)
   drawTemplateCardBackground(ctx, W, H, style, SCALE)
   if (variant.showTexture) drawCardSubtleTexture(ctx, W, H, SCALE, palette)
-  drawTemplateCardDecor(ctx, W, H, style, palette, SCALE)
+  drawTemplateCardDecor(ctx, W, H, style, palette, SCALE, effectivePlan)
 
   const { main, sub } = buildCardCopyParts(text, variant)
   const baseX = style === 'app' || style === 'receipt_card' ? 48 * SCALE : 38 * SCALE
@@ -2749,7 +2757,7 @@ async function renderTemplateCardImage(text, templateStyle, bottomHint) {
     ctx.lineWidth = 2 * SCALE
     ctx.stroke()
   } else if (variant.layout === 'infoFirst') {
-    drawCardInfoChips(ctx, 42 * SCALE, 94 * SCALE, W - 84 * SCALE, palette, SCALE, variant.chipCount)
+    drawCardInfoChips(ctx, 42 * SCALE, 94 * SCALE, W - 84 * SCALE, palette, SCALE, variant.chipCount, effectivePlan.cardItems)
   }
 
   ctx.font = `900 ${layout.titleSize * SCALE}px "PingFang SC", "Helvetica Neue", sans-serif`
@@ -2773,12 +2781,12 @@ async function renderTemplateCardImage(text, templateStyle, bottomHint) {
 
   if (variant.showInfo && variant.layout !== 'infoFirst') {
     const infoY = Math.min(afterTitleY + 118 * SCALE, H - 192 * SCALE)
-    drawCardInfoChips(ctx, layout.align === 'center' ? 58 * SCALE : layout.x, infoY, layout.align === 'center' ? W - 116 * SCALE : layout.width, palette, SCALE, variant.chipCount)
+    drawCardInfoChips(ctx, layout.align === 'center' ? 58 * SCALE : layout.x, infoY, layout.align === 'center' ? W - 116 * SCALE : layout.width, palette, SCALE, variant.chipCount, effectivePlan.cardItems)
   }
 
   ctx.fillStyle = palette.accent
   ctx.beginPath(); ctx.roundRect(baseX, H - 78 * SCALE, rndInt(34, 72) * SCALE, 5 * SCALE, 3 * SCALE); ctx.fill()
-  drawCardBottomVariant(ctx, W, H, SCALE, variant.bottomMode, bottomHint, palette, baseX, W - baseX * 2)
+  drawCardBottomVariant(ctx, W, H, SCALE, variant.bottomMode, effectiveBottomHint, palette, baseX, W - baseX * 2, effectivePlan)
   return offscreenToDataUrl(canvas)
 }
 
@@ -3006,7 +3014,7 @@ async function runBatch({ productDetails, onlyDirImages, generationMode = 'compl
       try {
         const scheme = pickCardScheme() || { bg: '#d4f7d4', text: '#2d4a2d', accent: '#52c07a' }
         const cardDataUrl = contentPlan?.coverTemplateStyle
-          ? await renderTemplateCardImage(cardText, contentPlan.coverTemplateStyle, pickCardBottomHint())
+          ? await renderTemplateCardImage(cardText, contentPlan.coverTemplateStyle, contentPlan.cardFooter || pickCardBottomHint(), contentPlan)
           : await renderCardImage(cardText, scheme)
         images.push({ label: '卡片图', base64: cardDataUrl.replace(/^data:image\/png;base64,/, '') })
         log(`  └ 卡片图 ✓`, 'success')
@@ -3029,13 +3037,17 @@ async function buildCardTemplatePreviews({ sampleText, cardSchemes }) {
   _CARD_SCHEMES = cardSchemes || []
   _CARD_SCHEME_BAG = []
   _CARD_TEMPLATE_STYLE_BAG = []
-  const text = sampleText || '示例单位笔试，考前冲刺就背这些'
+  const text = sampleText || '示例企业笔试，资料怎么分步使用'
   const previews = []
-  for (const style of CARD_TEMPLATE_STYLES) {
-    const dataUrl = await renderTemplateCardImage(text, style, pickCardBottomHint())
+  for (let index = 0; index < CARD_TEMPLATE_STYLES.length; index++) {
+    const style = CARD_TEMPLATE_STYLES[index]
+    const cardPlan = buildTemplateDemoPlan(style, index)
+    const dataUrl = await renderTemplateCardImage(text, style, cardPlan.cardFooter, cardPlan)
     previews.push({
       id: style,
       name: CARD_TEMPLATE_STYLE_NAMES[style] || style,
+      goal: cardPlan.cardGoalName,
+      viewpoint: cardPlan.cardViewpoint,
       base64: dataUrl.replace(/^data:image\/png;base64,/, ''),
     })
   }

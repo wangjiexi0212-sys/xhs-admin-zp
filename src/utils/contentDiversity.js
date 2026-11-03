@@ -105,10 +105,36 @@ export const DIVERSITY_LEVEL_OPTIONS = [
   { label: '极高差异化（推荐）', value: 'extreme' },
 ]
 
-const COVER_STYLES = [
-  'concept_metro','concept_dashboard','concept_answer','concept_track','concept_tree','concept_countdown','concept_radar','concept_stairs','concept_puzzle','concept_compare',
-  'concept_matrix','concept_compass','concept_ranking','concept_orbit','concept_elements','concept_funnel','concept_timeline','concept_target','concept_circuit','concept_bars',
-  'ref_dark_border','ref_plaid','ref_arch','ref_ticket','ref_purple_sidebar','ref_clipboard','ref_minimal_red','ref_green_wave','ref_green_bands','ref_envelope',
+const CARD_GOALS = [
+  { id: 'material_display', name: '资料展示', needs: ['exam', 'history', 'mock'], viewpoints: ['内容整理', '目录导航', '资料说明'] },
+  { id: 'usage_path', name: '使用路径', needs: ['any'], viewpoints: ['新手起步', '学习流程', '分步使用'] },
+  { id: 'question_answer', name: '问题解答', needs: ['any'], viewpoints: ['常见疑问', '操作说明', '单点解答'] },
+  { id: 'review_check', name: '复盘自查', needs: ['history', 'mock', 'any'], viewpoints: ['练习复盘', '完成度检查', '薄弱项检查'] },
+  { id: 'single_focus', name: '单点拆解', needs: ['any'], viewpoints: ['单点提示', '重点解释', '方法拆解'] },
+  { id: 'scene_action', name: '场景动作', needs: ['any'], viewpoints: ['打开资料时', '完成练习后', '准备第二轮时'] },
+]
+
+const DOCUMENT_STYLES = [
+  'poster','check','tags','folder','note2','mono','exam','stamp','dark2','app','course','wrong','side','gridnote','paperclip','blue','photo','cutout','softpink','greenfile',
+  'orangeburst','blueprint_card','receipt_card','neon','vertical','filetab','calendar_card','folderwall_card','outline_card','cream_card','stamp2','marker',
+]
+const REFERENCE_STYLES = [
+  'ref_dark_border','ref_plaid','ref_arch','ref_ticket','ref_purple_sidebar','ref_clipboard','ref_minimal_red','ref_green_wave','ref_green_bands','ref_envelope','ref_purple_wave','ref_blue_sidebar','ref_brown_banner',
+]
+const TEA_STYLES = REFERENCE_STYLES.map(id => id.replace('ref_', 'ref_tea_'))
+const ROUTE_STYLES = ['concept_metro','concept_track','concept_stairs','concept_compass','concept_timeline','concept_circuit','concept_countdown']
+const REVIEW_STYLES = ['concept_dashboard','concept_answer','concept_radar','concept_matrix','concept_bars','concept_compare']
+const MAP_STYLES = ['concept_tree','concept_puzzle','concept_orbit','concept_elements','concept_funnel']
+const FOCUS_STYLES = ['concept_target','concept_ranking']
+
+const CARD_STYLE_DEFINITIONS = [
+  ...DOCUMENT_STYLES.map(id => ({ id, family: `document:${id}`, goals: ['material_display','question_answer','single_focus','scene_action','review_check'] })),
+  ...REFERENCE_STYLES.map(id => ({ id, family: `reference:${id}`, goals: ['material_display','question_answer','single_focus','scene_action'] })),
+  ...TEA_STYLES.map(id => ({ id, family: `reference:${id.replace('ref_tea_', 'ref_')}`, goals: ['material_display','question_answer','single_focus','scene_action'] })),
+  ...ROUTE_STYLES.map(id => ({ id, family: `route:${id}`, goals: ['usage_path','scene_action'] })),
+  ...REVIEW_STYLES.map(id => ({ id, family: `review:${id}`, goals: ['review_check','question_answer'] })),
+  ...MAP_STYLES.map(id => ({ id, family: `map:${id}`, goals: ['material_display','usage_path'] })),
+  ...FOCUS_STYLES.map(id => ({ id, family: `focus:${id}`, goals: ['single_focus','review_check'] })),
 ]
 
 function randomIndex(max) {
@@ -188,6 +214,47 @@ function buildCoverText(company, angle) {
   }
 }
 
+function buildCardItems(capabilities, goal) {
+  const materials = []
+  if (capabilities.exam) materials.push('学习资料')
+  if (capabilities.history) materials.push('历年回忆题')
+  if (capabilities.mock) materials.push('模拟练习')
+  if (!materials.length) materials.push('资料目录', '分类整理')
+  const actionMap = {
+    material_display: [...materials, '内容索引', '使用说明'],
+    usage_path: [...materials, '复盘整理'],
+    question_answer: ['先看目录', '确定顺序', '分步练习', '及时复盘'],
+    review_check: ['完成情况', '错误原因', '薄弱内容', '下一轮重点'],
+    single_focus: ['找到对应内容', '完成一次练习', '记录问题', '回看整理'],
+    scene_action: ['打开资料', '顺着目录', '开始练习', '完成复盘'],
+  }
+  return [...new Set(actionMap[goal.id] || materials)].slice(0, 6)
+}
+
+function buildCardFooter(goal) {
+  const footers = {
+    material_display: ['不同资料可以分阶段配合使用', '先认识资料结构，再安排学习顺序', '本页展示资料内容与使用思路'],
+    usage_path: ['先看目录，再按顺序开始练习', '每完成一步，再安排下一轮内容', '把资料拆成可以逐项完成的任务'],
+    question_answer: ['一次只解决一个具体问题', '先明确问题，再回到资料中查找', '把疑问转换成一个可执行动作'],
+    review_check: ['完成练习后，记得记录错误原因', '复盘不是重复答案，而是找到问题', '下一轮重点来自这一次的检查'],
+    single_focus: ['这一页只说明一个使用重点', '先完成眼前这一步，再继续展开', '把一个问题讲清楚再进入下一项'],
+    scene_action: ['打开资料后，先从第一个动作开始', '做完一组内容，再停下来检查', '准备下一轮前，先回看已有记录'],
+  }
+  return shuffledCopy(footers[goal.id] || footers.material_display)[0]
+}
+
+function pickCardStyle(goal, usedStyles, usedFamilies, history, level) {
+  const candidates = CARD_STYLE_DEFINITIONS.filter(item => item.goals.includes(goal.id))
+  const recent = history.slice(level === 'extreme' ? -120 : level === 'high' ? -60 : -25)
+  return shuffledCopy(candidates).map(item => {
+    const styleCount = usedStyles.filter(value => value === item.id).length
+    const familyCount = usedFamilies.filter(value => value === item.family).length
+    const historyStyle = recent.filter(entry => entry?.plan?.coverTemplateStyle === item.id).length
+    const historyFamily = recent.filter(entry => entry?.plan?.cardStyleFamily === item.family).length
+    return { item, score: styleCount * 1000 + familyCount * 180 + historyStyle * 30 + historyFamily * 12 }
+  }).sort((a, b) => a.score - b.score)[0]?.item || candidates[0]
+}
+
 function buildPlanFacts(detail) {
   const facts = []
   if (hasValue(detail?.company_name)) facts.push(`企业名称：${detail.company_name}`)
@@ -200,7 +267,7 @@ function buildPlanFacts(detail) {
 }
 
 export function createDiversityPlans(productDetails, level = 'extreme', history = loadDiversityHistory()) {
-  const used = { contentAngle: [], titleStrategy: [], bodyStructure: [], openingStrategy: [], endingStrategy: [], toneStrategy: [], lengthBand: [], coverTemplateStyle: [] }
+  const used = { contentAngle: [], titleStrategy: [], bodyStructure: [], openingStrategy: [], endingStrategy: [], toneStrategy: [], lengthBand: [], cardGoal: [], cardViewpoint: [], coverTemplateStyle: [], cardStyleFamily: [] }
   return productDetails.map((item) => {
     const detail = item.detail || item
     const capabilities = getCapabilities(detail)
@@ -211,7 +278,9 @@ export function createDiversityPlans(productDetails, level = 'extreme', history 
     const ending = pickWithDiversity(ENDINGS, 'endingStrategy', used.endingStrategy, history, level)
     const tone = pickWithDiversity(TONES, 'toneStrategy', used.toneStrategy, history, level)
     const lengthBand = pickWithDiversity(LENGTH_BANDS, 'lengthBand', used.lengthBand, history, level, candidate => bodyStructure.id.includes('list') ? candidate.id === 'compact_list' : true)
-    const cover = pickWithDiversity(COVER_STYLES.map(id => ({ id })), 'coverTemplateStyle', used.coverTemplateStyle, history, level)
+    const goal = pickWithDiversity(CARD_GOALS, 'cardGoal', used.cardGoal, history, level, candidate => candidate.needs.some(need => capabilities[need]))
+    const viewpoint = pickWithDiversity(goal.viewpoints.map(id => ({ id })), 'cardViewpoint', used.cardViewpoint, history, level)
+    const cover = pickCardStyle(goal, used.coverTemplateStyle, used.cardStyleFamily, history, level)
     const emojiLevel = used.contentAngle.length % 4
     const company = String(detail?.company_name || item.company || '').trim()
     let title = buildTitle(company, titleStrategy, angle)
@@ -235,6 +304,7 @@ export function createDiversityPlans(productDetails, level = 'extreme', history 
       }
     }
     const coverText = buildCoverText(company, angle)
+    const cardItems = buildCardItems(capabilities, goal)
 
     const plan = {
       contentAngle: angle.id,
@@ -260,10 +330,17 @@ export function createDiversityPlans(productDetails, level = 'extreme', history 
       maxLength: lengthBand.max,
       emojiLevel,
       coverTemplateStyle: cover.id,
+      cardStyleFamily: cover.family,
+      cardGoal: goal.id,
+      cardGoalName: goal.name,
+      cardViewpoint: viewpoint.id,
+      cardScene: viewpoint.id,
       noteTitle: title,
       coverMainText: coverText.main,
       coverSubText: coverText.sub,
       cardText: coverText.cardText,
+      cardItems,
+      cardFooter: buildCardFooter(goal),
       verifiedFacts: buildPlanFacts(detail),
     }
 
