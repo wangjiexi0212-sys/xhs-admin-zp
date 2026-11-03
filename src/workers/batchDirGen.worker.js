@@ -3251,7 +3251,70 @@ function drawKraftDecoration(ctx, W, H, scheme, scale) {
 const REAL_CARD_LAYOUTS = [
   ['real_reading','内页导读'],['real_exhibit','深绿展签'],['real_zoom','整页与放大'],['real_editorial','杂志内页'],
   ['real_sticky','练习便签'],['real_frame','单页阅读框'],['real_review','复盘工作台'],['real_archive','留白资料馆'],
+  ['real_guide_steps','攻略·三步练习'],['real_guide_triage','攻略·复盘分诊'],['real_guide_rounds','攻略·两轮关注点'],['real_guide_finish','攻略·完成标志'],
+  ['real_memo_start','备忘·先完成一点'],['real_memo_correct','备忘·答对也记录'],['real_memo_return','备忘·留给下一次'],['real_memo_question','备忘·先写一个疑问'],
+  ['real_read_requirements','导读·先看作答要求'],['real_read_inside','导读·这一页有什么'],['real_read_order','导读·读题顺序'],['real_read_note','导读·一页一条记录'],
 ]
+const STUDY_GUIDE_LAYOUTS = {
+  real_guide_steps: ['#fffdf8','一组题，怎样练得更清楚？','专业攻略 / PRACTICE GUIDE'],
+  real_guide_triage: ['#eef2ed','做完以后，问题分三类记','专业攻略 / REVIEW CHECK'],
+  real_guide_rounds: ['#fffdf8','同一页，两轮关注点可以不同','专业攻略 / ROUND BY ROUND'],
+  real_guide_finish: ['#203c35','这一轮，怎样算完成？','专业攻略 / FINISH THE LOOP'],
+  real_memo_start: ['#f7f1df','今天，先完成眼前这一组','自然备忘录 / START HERE'],
+  real_memo_correct: ['#fffdf8','答对了，也可以留下记录','自然备忘录 / A SMALL REMINDER'],
+  real_memo_return: ['#eae5de','合上资料前，留一个入口','自然备忘录 / NEXT TIME'],
+  real_memo_question: ['#eee9f1','不用一次弄清全部','自然备忘录 / ONE QUESTION'],
+  real_read_requirements: ['#eaf0f6','落笔前，先看作答要求','真实内容导读 / BEFORE YOU START'],
+  real_read_inside: ['#fffaf0','先看一页实际内容','真实内容导读 / INSIDE THE PAGE'],
+  real_read_order: ['#fffdf8','看清问题，再逐项阅读','真实内容导读 / READING ORDER'],
+  real_read_note: ['#e9eee8','一页资料，配一条学习记录','真实内容导读 / READ & NOTE'],
+}
+
+async function drawStudyGuideLayout(material, text, layout) {
+  const canvas=new OffscreenCanvas(1242,1656),ctx=canvas.getContext('2d')
+  ctx.scale(3,3);ctx.textBaseline='top'
+  const [bg,topic,kicker]=STUDY_GUIDE_LAYOUTS[layout],dark=layout==='real_guide_finish',ink=dark?'#fff8e8':'#20392f'
+  vRound(ctx,0,0,414,552,0,bg)
+  const label=(s,x,y,size=14,c=ink,weight=500)=>vText(ctx,s,x,y,size,c,weight)
+  const para=(s,x,y,w,size=14,c=ink)=>drawRefTextBlock(ctx,s,x,y,w,size,c,{align:'left',maxLines:8,minSize:size,weight:500,lineHeight:1.65})
+  const box=(x,y,w,h,c)=>vRound(ctx,x,y,w,h,0,c)
+  const sheet=(x,y,w,h)=>{box(x,y,w,h,'#fff');const img=material.canvas,r=Math.min((w-12)/img.width,(h-12)/img.height);ctx.drawImage(img,x+(w-img.width*r)/2,y+6,img.width*r,img.height*r)}
+  label(kicker,28,28,11)
+  const end=drawRefTextBlock(ctx,splitCardText(text).main||'企业名称笔试',28,61,358,36,ink,{align:'left',maxLines:3,minSize:23,lineHeight:1.12})
+  const topicEnd=para(topic,28,end+15,358,18)
+  // Compress body coordinates for long names while keeping footer and screenshot separate.
+  const top=Math.max(190,topicEnd+22), room=505-top, scale=Math.min(1,room/300)
+  ctx.save();ctx.translate(0,top);ctx.scale(1,scale)
+  if(layout==='real_guide_steps'){
+    box(0,-top,414,7,'#234d64');sheet(225,0,160,300)
+    ;[['读清要求','先确认怎样作答'],['独立完成','标记犹豫的地方'],['留下问题','为下一轮回看']].forEach(([a,b],i)=>{label(String(i+1),28,18+i*95,25,'#c47547');label(a,65,18+i*95,16,ink,800);para(b,65,49+i*95,140,13)})
+  }else if(layout==='real_guide_triage'){
+    sheet(28,0,170,300);[['没读懂','记下不理解的词句','#e3eadd'],['有犹豫','留下纠结的地方','#eee5d5'],['需查找','整理待核对问题','#e0e7ee']].forEach(([a,b,c],i)=>{box(214,i*100,172,90,c);label(a,229,14+i*100,17,ink,800);para(b,229,46+i*100,140,12)})
+  }else if(layout==='real_guide_rounds'){
+    sheet(225,0,160,300);box(28,8,3,115,'#af6347');label('第一次',45,12,19,ink,800);para('独立作答\n记录不确定',45,52,160);box(28,161,3,118,'#3a6e59');label('再次练习',45,165,19,ink,800);para('先看问题记录\n再检查是否理解',45,205,160)
+  }else if(layout==='real_guide_finish'){
+    sheet(28,0,358,210);para('□ 已独立作答\n□ 已标记疑问',28,232,174,14);para('□ 已留下记录\n□ 已安排回看',220,232,166,14)
+  }else if(layout==='real_memo_start'){
+    box(28,0,358,85,'#e6e2c8');para('资料打开以后，先不用急着翻到底。\n选一部分开始，做完再决定下一步。',44,16,326,13);sheet(28,105,165,195);para('给自己留一条记录：\n\n这次做到了哪里？\n哪里还不清楚？',214,125,170,14)
+  }else if(layout==='real_memo_correct'){
+    para('有些题答对了，\n选的时候却不确定。',28,0,358,25);sheet(235,115,150,185);box(28,120,3,155,'#af6347');para('这样的题，\n也可以留个标记。\n下次再看，\n检查自己是否理解。',45,124,173,14)
+  }else if(layout==='real_memo_return'){
+    sheet(75,0,264,205);ctx.save();ctx.translate(28,228);ctx.rotate(-.018);box(0,0,358,72,'#f5df9d');para('看到哪里、卡在哪里、下次先看哪里。\n写下来，再回来时更容易接着学。',14,12,330,13);ctx.restore()
+  }else if(layout==='real_memo_question'){
+    vRound(ctx,28,0,358,80,18,'#fffdfb');para('这一页里，\n先找一个真正想弄清的问题。',45,14,320,15);sheet(225,100,160,200);para('把问题说具体，\n再去查找。\n\n读清一处，\n也是一次进展。',28,116,170,14)
+  }else if(layout==='real_read_requirements'){
+    sheet(28,0,358,300)
+  }else if(layout==='real_read_inside'){
+    sheet(28,0,245,300);label('阅读时关注',290,20,13);para('题目说明\n\n问题内容\n\n作答要求',290,55,96,13)
+  }else if(layout==='real_read_order'){
+    sheet(28,0,358,250);label('01 作答要求',28,274,12);label('02 问题问什么',148,274,12);label('03 逐项阅读',280,274,12)
+  }else if(layout==='real_read_note'){
+    sheet(28,0,220,300);box(264,0,122,255,'#fffdf7');label('记录栏',279,18,12);['页内疑问','待查内容','下次回看'].forEach((s,i)=>{label(s,279,58+i*65,13);ctx.strokeStyle='#bdc9bb';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(279,98+i*65);ctx.lineTo(371,98+i*65);ctx.stroke()})
+  }
+  ctx.restore();label(material.source+' · 实际内容节选',28,523,11)
+  return offscreenToDataUrl(canvas)
+}
+
 let realLayoutBag = []
 function nextRealLayout() {
   if (!realLayoutBag.length) realLayoutBag = shuffledCopy(REAL_CARD_LAYOUTS.map(([id]) => id))
@@ -3259,6 +3322,7 @@ function nextRealLayout() {
 }
 
 async function drawRealLayout(material, text, layout) {
+  if (STUDY_GUIDE_LAYOUTS[layout]) return drawStudyGuideLayout(material, text, layout)
   const canvas = new OffscreenCanvas(1242,1656), ctx=canvas.getContext('2d')
   ctx.scale(3,3);ctx.textBaseline='top'
   const dark=layout==='real_exhibit', ink=dark?'#faf4e6':'#203b32'
@@ -3318,8 +3382,8 @@ async function renderRealMaterialCard(detail, text, layout = nextRealLayout(), s
         if (selected) pageCanvas = await renderPdfPage(selected.path, rndInt(1, 4))
       }
       const canvas = new OffscreenCanvas(1242, 1656), ctx = canvas.getContext('2d')
-      const layout = rndInt(0, 2), ink = '#213d33'
-      ctx.fillStyle = ['#f7f3e9','#eaf0ed','#eef1f6'][layout]; ctx.fillRect(0,0,1242,1656)
+      const legacyLayout = rndInt(0, 2), ink = '#213d33'
+      ctx.fillStyle = ['#f7f3e9','#eaf0ed','#eef1f6'][legacyLayout]; ctx.fillRect(0,0,1242,1656)
       vText(ctx, source.label + ' · 实际内容节选', 90, 76, 28, ink)
       const main = splitCardText(text).main || `${detail.company_name || '企业'}笔试`
       const titleBottom = drawRefTextBlock(ctx,main,90,145,1062,88,ink,{align:'left',maxLines:3,minSize:48,lineHeight:1.12})
