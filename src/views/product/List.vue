@@ -339,6 +339,14 @@ import {
   formatPlanSummary,
   loadDiversityHistory,
 } from '@/utils/contentDiversity'
+import {
+  appendCoverDiversityHistory,
+  assessCoverHashSimilarity,
+  assignCoverPrompts,
+  calculateCoverDHash,
+  formatCoverAssignment,
+  loadCoverDiversityHistory,
+} from '@/utils/coverDiversity'
 import { useLlmStore } from '@/stores/llm'
 import { useAiImageStore } from '@/stores/aiImage'
 import { Document, Packer, Paragraph, TextRun, HeadingLevel } from 'docx'
@@ -1927,20 +1935,11 @@ async function processCoverUrlToBase64(url) {
   }
 }
 
-async function generateBatchCoverImage(detail, cardText, onProgress, contentPlan = null) {
+async function generateBatchCoverImage(detail, cardText, onProgress, contentPlan = null, coverAssignment = null) {
   const text = sanitizeCoverPromptText(cardText || buildProductCardText(detail, dirBatchUseCardTitleTemplates.value))
-  const cardPrompt = await pickRandomCardPromptForDetail(detail)
-  if (!cardPrompt) {
-    throw new Error(detail?.job_type_name ? `未找到「${detail.job_type_name}」可用的卡片提示词` : '未找到可用的卡片提示词')
-  }
-
   const params = {
     product_id: detail.id,
     card_text: text,
-    prompt: sanitizeCoverPromptText(appendWrittenExamConstraintToPromptForDetail(
-      buildCoverPromptFromCardPromptForDetail(detail, cardPrompt, text, contentPlan),
-      detail,
-    )),
   }
 
   const activeProvider = aiImageStore.activeProvider
@@ -1949,6 +1948,20 @@ async function generateBatchCoverImage(detail, cardText, onProgress, contentPlan
     if (cfg?.model) params.keywords = cfg.model
     if (cfg?.concurrency) params.count = cfg.concurrency
   } else {
+    const cardPrompt = coverAssignment || await pickRandomCardPromptForDetail(detail)
+    if (!cardPrompt) {
+      throw new Error(detail?.job_type_name ? `未找到「${detail.job_type_name}」可用的卡片提示词` : '未找到可用的卡片提示词')
+    }
+    params.card_prompt_id = cardPrompt.id
+    params.cover_context = [
+      contentPlan?.contentAngleName ? `本篇内容角度：${contentPlan.contentAngleName}` : '',
+      contentPlan?.readerQuestion ? `本篇解决的问题：${contentPlan.readerQuestion}` : '',
+      contentPlan?.coverMainText ? `建议主文案：${contentPlan.coverMainText}` : '',
+      contentPlan?.coverSubText ? `建议副文案：${contentPlan.coverSubText}` : '',
+      ...(contentPlan?.verifiedFacts || []),
+      buildWrittenExamConstraintForDetail(detail),
+      '封面文案不得直接复制笔记标题；不得虚构年份、人数、分数、题量、命中率、考试时间或岗位。',
+    ].filter(Boolean).join('\n')
     const active = llmStore.active
     if (!active) throw new Error('请先在「系统设置 → 大模型」中设置使用中的模型')
     params.llm_provider = active.provider
@@ -1969,6 +1982,7 @@ async function generateBatchCoverImage(detail, cardText, onProgress, contentPlan
       return {
         base64: await processCoverUrlToBase64(rawUrls[0]),
         prompt: sanitizeCoverPromptText(data?.prompt || params.prompt),
+        cardPrompt: data?.card_prompt || (coverAssignment ? { id: coverAssignment.id, name: coverAssignment.name } : null),
       }
     } catch (error) {
       lastError = error
@@ -2074,6 +2088,35 @@ async function runBatchDirImages(generationMode = 'complete', useBgImage = false
   productDetails.forEach(item => {
     dirBatchLogs.value.push({ text: `  └ ${item.company}：${formatPlanSummary(item.contentPlan)}`, type: 'info' })
   })
+
+  const coverAssignmentByProductId = new Map()
+  if (useCoverImage && aiImageStore.activeProvider !== 'md2card') {
+    const promptPools = new Map()
+    const jobTypeIds = [...new Set(productDetails.map(item => Number(item.detail?.job_type_id)).filter(Boolean))]
+    for (const jobTypeId of jobTypeIds) {
+      try {
+        const res = await getCardPromptList({ job_type_id: jobTypeId, page: 1, pageSize: 100 })
+        promptPools.set(jobTypeId, Array.isArray(res?.list) ? res.list : [])
+      } catch (error) {
+        dirBatchLogs.value.push({ text: `封面模板加载失败（商品类型 ${jobTypeId}）：${error.message}`, type: 'warn' })
+      }
+    }
+    const coverAssignments = assignCoverPrompts(
+      productDetails,
+      promptPools,
+      dirBatchDiversityLevel.value,
+      loadCoverDiversityHistory(),
+    )
+    productDetails.forEach((item, index) => {
+      const assignment = coverAssignments[index]
+      if (assignment) coverAssignmentByProductId.set(Number(item.id), assignment)
+      dirBatchLogs.value.push({
+        text: `  └ ${item.company} 封面：${formatCoverAssignment(assignment)}`,
+        type: assignment ? 'info' : 'warn',
+      })
+    })
+    dirBatchLogs.value.push({ text: '封面模板已按视觉家族、构图、配色和插画元素完成避重分配', type: 'success' })
+  }
   dirBatchLogs.value.push({ text: `生成顺序：${productDetails.map(item => item.company).join(' → ')}`, type: 'info' })
 
   // ── 3. 加载背景图池（仅开启背景图时加载）──────────────────────
@@ -2114,7 +2157,14 @@ async function runBatchDirImages(generationMode = 'complete', useBgImage = false
         const detail = productItem?.detail
         const contentPlan = productItem?.contentPlan
         // cardText：Worker 生成卡片图时使用的文案，存入 map 供后续笔记标题复用
-        productImageMap[company] = { detail, folder, images, cardText, contentPlan }
+        productImageMap[company] = {
+          detail,
+          folder,
+          images,
+          cardText,
+          contentPlan,
+          coverAssignment: coverAssignmentByProductId.get(Number(id)) || null,
+        }
       } else if (data.type === 'done') {
         worker.terminate()
         resolve()
@@ -2149,7 +2199,7 @@ async function runBatchDirImages(generationMode = 'complete', useBgImage = false
 
   // ── 5. Worker 完成后：生成笔记内容 + docx + 飞书（主线程处理）──
   const processProduct = async (company, scheduleTime, recordIndex) => {
-    const { detail, folder, images, cardText, contentPlan } = productImageMap[company]
+    const { detail, folder, images, cardText, contentPlan, coverAssignment } = productImageMap[company]
     if (!detail) return
     const shuffledTags = shuffleTags(detail.xhs_tags)
     const noteTitle = contentPlan?.noteTitle || cardText || buildProductCardText(detail, useCardTitleTemplates)
@@ -2158,22 +2208,55 @@ async function runBatchDirImages(generationMode = 'complete', useBgImage = false
     if (useCoverImage) {
       dirBatchLogs.value.push({ text: `${company} - 生成封面图中...`, type: 'info' })
       try {
-        const cover = await generateBatchCoverImage(detail, coverText, (event) => {
-          if (event.step === 'llm') {
-            dirBatchLogs.value.push({ text: `  └ ${company} 封面提示词适配中...`, type: 'info' })
-          } else if (event.step === 'draw') {
-            dirBatchLogs.value.push({ text: `  └ ${company} AI绘图中...`, type: 'info' })
-          } else if (event.step === 'retry') {
-            dirBatchLogs.value.push({
-              text: `  └ ${company} 第 ${event.attempt}/${event.maxAttempts} 次重新绘图（上次失败：${event.error}）`,
-              type: 'warn',
-            })
+        const candidates = coverAssignment
+          ? [coverAssignment, ...(coverAssignment.alternatives || [])]
+          : [null]
+        let cover = null
+        let selectedCoverAssignment = coverAssignment
+        let imageHash = ''
+        let hashRisk = { similar: false, similarity: 0 }
+        for (let index = 0; index < Math.min(candidates.length, 3); index++) {
+          selectedCoverAssignment = candidates[index]
+          cover = await generateBatchCoverImage(detail, coverText, (event) => {
+            if (event.step === 'llm') {
+              dirBatchLogs.value.push({ text: `  └ ${company} 封面提示词适配中...`, type: 'info' })
+            } else if (event.step === 'draw') {
+              dirBatchLogs.value.push({ text: `  └ ${company} AI绘图中...`, type: 'info' })
+            } else if (event.step === 'retry') {
+              dirBatchLogs.value.push({
+                text: `  └ ${company} 第 ${event.attempt}/${event.maxAttempts} 次重新绘图（上次失败：${event.error}）`,
+                type: 'warn',
+              })
+            }
+          }, contentPlan, selectedCoverAssignment)
+          try {
+            imageHash = await calculateCoverDHash(cover.base64)
+            hashRisk = assessCoverHashSimilarity(imageHash)
+          } catch {
+            hashRisk = { similar: false, similarity: 0 }
           }
-        }, contentPlan)
+          if (!hashRisk.similar || index === Math.min(candidates.length, 3) - 1) break
+          dirBatchLogs.value.push({
+            text: `  └ ${company} 与近期封面相似度 ${Math.round(hashRisk.similarity * 100)}%，切换模板重画`,
+            type: 'warn',
+          })
+        }
         folder.file('封面图.jpg', cover.base64, { base64: true })
         images.unshift({ label: '封面图', base64: cover.base64, ext: 'jpg' })
         totalImages++
-        dirBatchLogs.value.push({ text: `  └ ${company} 封面图 ✓（已去重和去AI标记）`, type: 'success' })
+        if (selectedCoverAssignment?.meta) {
+          appendCoverDiversityHistory({
+            productId: detail.id,
+            companyName: detail.company_name || company,
+            contentAngle: contentPlan?.contentAngle,
+            imageHash,
+            ...selectedCoverAssignment.meta,
+          })
+        }
+        dirBatchLogs.value.push({
+          text: `  └ ${company} 封面图 ✓${cover.cardPrompt?.name ? `（模板：${cover.cardPrompt.name}）` : ''}`,
+          type: 'success',
+        })
       } catch (e) {
         dirBatchLogs.value.push({ text: `  └ ${company} 封面图失败：${e.message}`, type: 'error' })
       }
