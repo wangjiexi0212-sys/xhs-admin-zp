@@ -2499,7 +2499,18 @@ function generateBatchStyleCardImage(templateStyle = '') {
     finish()
   }
   const contentPlan = ensureDrawerContentPlan()
-  worker.postMessage({ type: 'generate-card-image', text, templateStyle: templateStyle || contentPlan.coverTemplateStyle, contentPlan, productDetail: { ...data.value }, useRealMaterial: !templateStyle, token: getToken(), apiBase: import.meta.env.VITE_API_BASE || '' })
+  try {
+    worker.postMessage(JSON.parse(JSON.stringify({ type: 'generate-card-image', text, templateStyle: templateStyle || contentPlan.coverTemplateStyle, contentPlan, productDetail: getCardProductSnapshot(), useRealMaterial: !templateStyle, token: getToken(), apiBase: import.meta.env.VITE_API_BASE || '' })))
+  } catch (error) {
+    message.error(error.message || '卡片图任务发送失败')
+    finish()
+  }
+}
+
+// Vue proxies, including nested arrays, cannot be sent through structured clone.
+// Card workers only need these scalar product fields.
+function getCardProductSnapshot() {
+  return Object.fromEntries(['company_name', 'baidu_path_exam', 'baidu_path_history', 'baidu_path_mock'].map(key => [key, String(data.value[key] || '')]))
 }
 
 function openCardTemplatePicker() {
@@ -2538,16 +2549,31 @@ function loadCardTemplatePickerPreviews() {
     message.error(error?.message || '模板预览生成失败')
     finish()
   }
-  worker.postMessage({
+  try {
+    worker.postMessage({
     type: 'preview-card-templates',
     sampleText: (cardText.value || '').trim(),
-    productDetail: { ...data.value },
-  })
+    productDetail: getCardProductSnapshot(),
+    token: getToken(),
+    apiBase: import.meta.env.VITE_API_BASE || '',
+    })
+  } catch (error) {
+    message.error(error.message || '模板预览任务发送失败')
+    finish()
+  }
 }
 
 function generateSelectedCardTemplate() {
   if (!selectedCardTemplateId.value) {
     message.warning('请选择一个卡片模板')
+    return
+  }
+  if (selectedCardTemplateId.value.startsWith('real_')) {
+    const preview = cardTemplatePickerPreviews.value.find(item => item.id === selectedCardTemplateId.value)
+    if (preview) {
+      batchCardImageUrl.value = `data:image/png;base64,${preview.base64}`
+      cardTemplatePickerVisible.value = false
+    }
     return
   }
   generateBatchStyleCardImage(selectedCardTemplateId.value)

@@ -3427,13 +3427,24 @@ function drawerCardPlan(style, contentPlan, detail) {
   return plan
 }
 
-async function buildCardTemplatePreviews({ sampleText, cardSchemes, productDetail }) {
+async function buildCardTemplatePreviews({ sampleText, cardSchemes, productDetail, token, apiBase }) {
+  _token = token || ''
+  _apiBase = apiBase || ''
   _CARD_SCHEMES = cardSchemes || []
   _CARD_SCHEME_BAG = []
   _CARD_TEMPLATE_STYLE_BAG = []
   _CARD_LAYOUT_VARIANT_BAGS = new Map()
   const text = sampleText || '示例企业笔试，资料怎么分步使用'
   const previews = []
+  if (productDetail) {
+    const realText = `${productDetail.company_name || '企业'}笔试，资料内容节选`
+    for (const [field, label] of [['baidu_path_exam','真实学习资料目录'],['baidu_path_history','真实回忆题融合'],['baidu_path_mock','真实模拟题融合']]) {
+      if (!productDetail[field]) continue
+      const sourceDetail = { company_name: productDetail.company_name, [field]: productDetail[field] }
+      const real = await renderRealMaterialCard(sourceDetail, realText)
+      if (real) previews.push({ id: `real_${field}`, name: label, goal: '真实资料融合', viewpoint: real.file || real.source, base64: real.dataUrl.replace(/^data:image\/png;base64,/, '') })
+    }
+  }
   for (let index = 0; index < CARD_TEMPLATE_STYLES.length; index++) {
     const style = CARD_TEMPLATE_STYLES[index]
     const cardPlan = drawerCardPlan(style, null, productDetail)

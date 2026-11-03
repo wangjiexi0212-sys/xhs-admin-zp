@@ -1741,7 +1741,7 @@ function openCardTemplatePreview() {
   }
 }
 
-function loadCardTemplatePreviews() {
+async function loadCardTemplatePreviews() {
   if (cardTemplatePreviewLoading.value) return
   cardTemplatePreviewLoading.value = true
   const worker = new Worker(
@@ -1764,11 +1764,25 @@ function loadCardTemplatePreviews() {
     cardTemplatePreviewLoading.value = false
     worker.terminate()
   }
-  worker.postMessage({
+  let productDetail = null
+  if (selectedRowKeys.value.length) {
+    try { productDetail = await getProductDetail(selectedRowKeys.value[0]) }
+    catch (error) { message.warning('商品资料读取失败，本次仅展示静态模板') }
+  } else { message.info('勾选一个商品后重新生成，可查看真实目录与题目截图融合效果') }
+  try {
+    worker.postMessage(JSON.parse(JSON.stringify({
     type: 'preview-card-templates',
     sampleText: CARD_TEMPLATE_PREVIEW_TEXT,
     cardSchemes: CARD_STYLE_SCHEMES,
-  })
+    productDetail,
+    token: getToken(),
+    apiBase: import.meta.env.VITE_API_BASE || '',
+    })))
+  } catch (error) {
+    message.error(error.message || '模板预览任务发送失败')
+    cardTemplatePreviewLoading.value = false
+    worker.terminate()
+  }
 }
 
 async function onBatchGenerateDirImages() {
