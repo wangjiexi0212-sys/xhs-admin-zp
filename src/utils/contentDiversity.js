@@ -387,6 +387,25 @@ export function ensureBodyCompany(body, companyName) {
 }
 
 export function buildDiversityPrompt(plan, detail, previousDraft = '') {
+  // Resolve again here so an edited drawer title also controls the body task.
+  const family = /考什么|考哪些|笔试内容|备考内容|复习内容|备考方向|复习方向/.test(plan.noteTitle || '') ? 'scope' : plan.titleFamily
+  const scopes = (plan.examScope || []).join('、')
+  const contracts = {
+    scope: ['笔试内容拆解', '笔试准备哪些具体内容？', '先回答科目与学习内容，再简短说明如何准备', `依次展开${scopes}，每项给具体学习内容；资料用途最多一句，不得占主体`],
+    guide: ['科目备考攻略', '各科目怎样准备？', '科目各有准备方法', `围绕${scopes}给具体准备安排，禁止全文只写资料分类`],
+    focus: ['科目重点梳理', '各方向重点准备什么？', '明确学习内容与相应练习动作', `具体展开${scopes}的学习重点，不虚构官方高频考点`],
+    practice: ['分科刷题路线', '不同科目怎样刷题？', '按科目讲练习动作，资料辅助', `结合${scopes}讲刷题安排，不要只介绍三类资料用途`],
+    thinking: ['作答方法', '题目怎样读和怎样作答？', '解释具体作答动作', `围绕允许科目讲读题、判断或计算方法，不编造实际题目`],
+    review: ['分科复盘', '各科练习后怎样补？', '不同科目对应不同补习动作', `联系${scopes}给出具体薄弱内容与补习方式，不能只写记录错误原因`],
+  }
+  const contract = contracts[family]
+  if (contract && !plan.studyDays) {
+    plan = { ...plan, contentAngleName: contract[0], readerQuestion: contract[1], examDirection: scopes,
+      coreViewpoint: contract[2], practicalDeliverable: contract[3], bodyStructureName: '先回答标题，再分科展开',
+      bodyStructureInstruction: '开头两句直接回答标题；主体按允许的科目分别展开具体内容和学习动作；结尾可短句结束。',
+      openingInstruction: '直接进入单位笔试与具体科目，禁止以很多人、资料散、形成合力等通用铺垫开场。',
+      endingInstruction: '讲完即结束，不用现在回顾一下、你有没有等反问收尾。' }
+  }
   const emojiInstruction = [
     '全文不使用表情符号。',
     '全文最多使用1个表情符号。',
@@ -409,6 +428,7 @@ export function buildDiversityPrompt(plan, detail, previousDraft = '') {
     `已配置资料类型：${(plan.availableMaterials || []).join('、') || '未确认，不宣称商品包含任何特定资料'}`,
     plan.studyDays ? `本篇写${plan.studyDays}天冲刺方案，天数仅是复习周期建议，不表示考试即将开始，不说三天足够、保证通过或保证分数。` : '',
     '【正文质量要求】以科目拆解、刷题路线或资料用途为主线，开头直接进入企业备考场景。口吻干脆自然，短段落，适量表情，不写成通用学习方法说明书。',
+    '不要编造学习禁忌，例如“回忆题和模拟卷不能同一天刷”。不写形成合力、实质性推进、发挥作用等空泛表达。',
     '明确写刷历年回忆题、翻学习资料、练薄弱模块、做模拟卷；避免“选一组企业笔试练习、处理一项、留下判断依据、完成标志、适用场景、限制”等生硬表达。资料动作仅限已配置类型。',
     '允许范围包含公基时讲知识框架、易混内容与练习；包含行测时可讲言语、判断、数量、资料分析的分模块练习；包含企业文化时讲企业概况、业务介绍、文化表述的阅读整理，不编造具体企业事实。',
     '文章必须有主次：科目拆解型分别介绍方向；刷题路线型突出资料使用顺序；资料用途型解释每类资料作用；单科型详细讲一个科目。不要每篇都重复同一套三条通用建议。',
