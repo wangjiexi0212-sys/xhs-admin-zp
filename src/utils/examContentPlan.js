@@ -33,15 +33,20 @@ export function chooseExamTopic(detail, batchPlans, history, shuffle) {
     ['material_usage','资料用途','拿到资料后分别怎么用？','每类资料承担不同任务','只介绍已配置资料的用途，并关联本次科目；不虚构内容','three_paragraphs'],
     ['subject_focus','单科重点','这部分应该怎么学和练？','围绕一个科目把阅读与练习讲具体','选一个允许科目详细展开，其他科目简短带过','single_deep_dive'],
     ['second_route','第二轮复习','第一轮以后怎样继续？','第二轮集中补薄弱模块，不是重新从头翻','把再刷回忆题、翻学习资料、模拟练习串成具体安排','four_short_paragraphs'],
-    ...[3,5,7].map(days => [`sprint_${days}`,`${days}天冲刺方案`,`${days}天复习计划怎样安排？`,'按天分配复习任务，每天有具体科目与资料动作',`逐日列出${days}天计划，天数是建议学习周期，不是考试倒计时，不保证学完或通过`,'three_steps']),
   ]
+  // A shuffled ten-slot cycle reserves one slot for all sprint plans combined.
+  const sprintSlot = takeSprintSlot()
+  if (sprintSlot) {
+    const days = takeSprintDays()
+    editorialTasks.splice(0, editorialTasks.length, [`sprint_${days}`,`${days}天冲刺方案`,`${days}天复习计划怎样安排？`,'按天分配复习任务，每天有具体科目与资料动作',`逐日列出${days}天计划，天数是建议学习周期，不是考试倒计时，不保证学完或通过`,'three_steps'])
+  }
   const options = scope.directions.flatMap(direction => editorialTasks.filter(task => {
     if (task[0] === 'culture') return /企业文化/.test(direction)
     if (task[0] === 'situation') return /社区|实务|综合能力/.test(direction)
-    if (/企业文化/.test(direction)) return ['reading','memory','split','check','concept'].includes(task[0])
+    if (/企业文化/.test(direction)) return ['subject_guide','subject_focus','material_usage','second_route'].includes(task[0]) || task[0].startsWith('sprint_')
     return true
   }).map(task => ({ direction, task, key: `${direction}:${task[0]}` })))
-  const recent = history.slice(-120).map(entry => entry.plan || {})
+  const recent = [...history.slice(-120).map(entry => entry.plan || {}), ...sessionTopicPlans]
   const ranked = shuffle(options).map(option => ({ ...option, score:
     batchPlans.filter(p => p.topicKey === option.key).length * 1000 +
     batchPlans.filter(p => p.learningTask === option.task[0]).length * 30 +
@@ -54,4 +59,32 @@ export function chooseExamTopic(detail, batchPlans, history, shuffle) {
     availableMaterials: [detail.baidu_path_exam && '学习资料', detail.baidu_path_history && '历年回忆题', detail.baidu_path_mock && '模拟卷'].filter(Boolean),
     topicKey: selected.key, learningTask: id, coreViewpoint: viewpoint, practicalDeliverable: deliverable,
     angle: { id: selected.key, name: `${selected.direction}·${name}`, main: name, question, need: 'any' }, structure }
+}
+
+const sessionTopicPlans = []
+let sprintSlots = []
+let sprintDays = []
+let lastWasSprint = false
+function takeSprintSlot() {
+  if (!sprintSlots.length) {
+    // Reserve a randomized position; avoid a sprint at a cycle boundary.
+    const values = new Uint32Array(1)
+    globalThis.crypto.getRandomValues(values)
+    const index = (lastWasSprint ? 1 : 0) + values[0] % (lastWasSprint ? 9 : 10)
+    sprintSlots = Array.from({length:10},(_,i)=>i===index)
+  }
+  const sprint = sprintSlots.shift()
+  lastWasSprint = sprint
+  return sprint
+}
+function takeSprintDays() {
+  if (!sprintDays.length) {
+    sprintDays = [3,5,7]
+    for(let i=2;i>0;i--){const values=new Uint32Array(1);globalThis.crypto.getRandomValues(values);const j=values[0]%(i+1);[sprintDays[i],sprintDays[j]]=[sprintDays[j],sprintDays[i]]}
+  }
+  return sprintDays.pop()
+}
+export function rememberSessionTopic(plan) {
+  sessionTopicPlans.push(plan)
+  if(sessionTopicPlans.length>200)sessionTopicPlans.shift()
 }

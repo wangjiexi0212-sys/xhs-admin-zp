@@ -1,3 +1,4 @@
+const sessionTitles = []
 const GROUPS = [
   ['guide',['备考攻略','备考攻略全梳理','备考从这里开始','这份备考攻略收好','备考指南','准备笔试看这篇','备考思路整理','先看这份备考说明','备考安排怎么做','备考这样起步','学习路线梳理','备考攻略速看']],
   ['focus',['重点梳理','复习重点速看','重点内容整理','复习先抓什么','学习重点怎么理','复习要点梳理','这些重点先理清','重点内容怎么学','复习思路速看','备考重点看这里','复习方向梳理','先把重点理清']],
@@ -29,7 +30,7 @@ export function chooseNoteTitle(company, detail, topic, batch, history, shuffle)
   // Never invent an abbreviation or cut a sentence to fit a long company name.
   if(!options.length) options=[{title:`${name}笔试`,family:'identity',phrase:'笔试'}].filter(x=>Array.from(x.title).length<=20)
   if(!options.length) throw new Error('企业名称过长，请设置准确的企业简称后生成20字以内标题')
-  const recent=history.slice(-150)
+  const recent=[...history.slice(-150), ...sessionTitles]
   options=shuffle(options).map(x=>({...x,score:
     batch.filter(p=>p.noteTitle===x.title).length*10000+
     batch.filter(p=>p.titlePhrase===x.phrase).length*1000+
@@ -37,5 +38,8 @@ export function chooseNoteTitle(company, detail, topic, batch, history, shuffle)
     recent.filter(e=>e.plan?.titlePhrase===x.phrase).length*25+
     batch.filter(p=>p.titleFamily===x.family).length*2+(x.family===preferred?0:5),
   })).sort((a,b)=>a.score-b.score)
-  return options[0]
+  const selected = options[0]
+  sessionTitles.push({title:selected.title,plan:{titlePhrase:selected.phrase}})
+  if(sessionTitles.length>200)sessionTitles.shift()
+  return selected
 }

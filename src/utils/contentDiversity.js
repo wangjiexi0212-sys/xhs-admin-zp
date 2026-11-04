@@ -1,5 +1,5 @@
 import { EDITORIAL_CARD_STYLES } from './editorialCardStyles.js'
-import { chooseExamTopic } from './examContentPlan.js'
+import { chooseExamTopic, rememberSessionTopic } from './examContentPlan.js'
 import { chooseNoteTitle } from './noteTitlePlanner.js'
 
 const HISTORY_KEY = 'xhs-content-diversity-history-v1'
@@ -375,6 +375,7 @@ export function createDiversityPlans(productDetails, level = 'extreme', history 
 
     Object.keys(used).forEach((field) => used[field].push(plan[field]))
     batchPlans.push(plan)
+    rememberSessionTopic(plan)
     return plan
   })
 }
