@@ -1,4 +1,5 @@
 import { EDITORIAL_CARD_STYLES } from './editorialCardStyles.js'
+import { chooseExamTopic } from './examContentPlan.js'
 
 const HISTORY_KEY = 'xhs-content-diversity-history-v1'
 const HISTORY_LIMIT = 200
@@ -273,20 +274,19 @@ function buildPlanFacts(detail) {
   if (hasValue(detail?.company_name)) facts.push(`企业名称：${detail.company_name}`)
   if (hasValue(detail?.job_type_name)) facts.push(`商品类型：${detail.job_type_name}`)
   if (hasValue(detail?.written_exam_content)) facts.push(`已填写的笔试内容：${detail.written_exam_content}`)
-  if (hasValue(detail?.baidu_path_exam)) facts.push('资料包含笔试学习资料目录')
-  if (hasValue(detail?.baidu_path_history)) facts.push('资料包含历年回忆题目录')
-  if (hasValue(detail?.baidu_path_mock)) facts.push('资料包含模拟题目录')
   return facts
 }
 
 export function createDiversityPlans(productDetails, level = 'extreme', history = loadDiversityHistory()) {
   const used = { contentAngle: [], titleStrategy: [], bodyStructure: [], openingStrategy: [], endingStrategy: [], toneStrategy: [], lengthBand: [], cardGoal: [], cardViewpoint: [], coverTemplateStyle: [], cardStyleFamily: [] }
+  const batchPlans = []
   return productDetails.map((item) => {
     const detail = item.detail || item
     const capabilities = getCapabilities(detail)
-    const angle = pickWithDiversity(CONTENT_ANGLES, 'contentAngle', used.contentAngle, history, level, candidate => capabilities[candidate.need])
+    const topic = chooseExamTopic(detail, batchPlans, history, shuffledCopy)
+    const angle = topic.angle
     let titleStrategy = pickWithDiversity(TITLE_STRATEGIES, 'titleStrategy', used.titleStrategy, history, level)
-    const bodyStructure = pickWithDiversity(BODY_STRUCTURES, 'bodyStructure', used.bodyStructure, history, level)
+    const bodyStructure = BODY_STRUCTURES.find(item => item.id === topic.structure) || BODY_STRUCTURES[0]
     const opening = pickWithDiversity(OPENINGS, 'openingStrategy', used.openingStrategy, history, level)
     const ending = pickWithDiversity(ENDINGS, 'endingStrategy', used.endingStrategy, history, level)
     const tone = pickWithDiversity(TONES, 'toneStrategy', used.toneStrategy, history, level)
@@ -320,6 +320,7 @@ export function createDiversityPlans(productDetails, level = 'extreme', history 
     const cardItems = buildCardItems(capabilities, goal)
 
     const plan = {
+      ...topic,
       contentAngle: angle.id,
       contentAngleName: angle.name,
       readerQuestion: angle.question,
@@ -358,6 +359,7 @@ export function createDiversityPlans(productDetails, level = 'extreme', history 
     }
 
     Object.keys(used).forEach((field) => used[field].push(plan[field]))
+    batchPlans.push(plan)
     return plan
   })
 }
@@ -377,6 +379,14 @@ export function buildDiversityPrompt(plan, detail, previousDraft = '') {
     '【本篇内容规划】',
     `内容角度：${plan.contentAngleName}`,
     `需要解决的问题：${plan.readerQuestion}`,
+    `允许的备考方向：${(plan.examScope || []).join('、')}`,
+    `本篇只展开：${plan.examDirection || ''}`,
+    `核心观点：${plan.coreViewpoint || ''}`,
+    `必须提供的实用内容：${plan.practicalDeliverable || ''}`,
+    plan.examScopeSource === 'fallback' ? '上述方向来自商品类型的默认备考建议，不得称为已确认的官方考试范围。' : '以上范围来自商品详情填写的笔试内容，不得自行增加其他科目。',
+    '正文不得读取、引用或描述网盘目录、文件名、截图或试题的具体内容；只根据本次笔试方向关联生成。',
+    '示例必须标注为示例，不编造企业事实、考试题目、法规政策结论、经历和考生反馈。',
+    '整篇围绕一个问题交付指定方法，不要反复写成多看资料、多刷题、及时复盘的通用三条建议。',
     `正文结构：${plan.bodyStructureName}。${plan.bodyStructureInstruction}`,
     `开头方式：${plan.openingStrategyName}。${plan.openingInstruction}`,
     `结尾方式：${plan.endingStrategyName}。${plan.endingInstruction}`,

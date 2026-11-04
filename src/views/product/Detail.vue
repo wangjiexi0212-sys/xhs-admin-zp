@@ -2965,7 +2965,7 @@ function buildCoverPromptFromCardPrompt(cardPrompt) {
   ].filter(Boolean).join('\n')
 }
 
-async function generateBody() {
+async function generateBody(selectedTemplate = null) {
   const active = llmStore.active
   if (!active) { message.warning('请先设置使用中的模型'); return }
   if (bodyGenerating.value) return
@@ -2986,7 +2986,7 @@ async function generateBody() {
         base_url: active.base_url || '', model: active.default_model,
         messages: [
           { role: 'system', content: `${prompt.content}\n请优先遵守本次内容规划与事实约束。` },
-          { role: 'user', content: buildDiversityPrompt(plan, detail, previous) },
+          { role: 'user', content: buildDiversityPrompt(plan, detail, previous) + (selectedTemplate?.content ? `\n【可参考的表达风格】\n${selectedTemplate.content}\n仅参考表达风格，不得沿用模板中的企业事实、科目、经历或固定推荐结尾；本次规划优先。` : '') },
         ], max_tokens: 3000, temperature: .87 + attempt * .04,
       })
       const body = (result.content || '').trim()
@@ -3104,6 +3104,11 @@ async function generateLegacyBody() {
 }
 
 async function generateBodyFromTemplate(tpl) {
+  templateModalVisible.value = false
+  return generateBody(tpl)
+}
+
+async function generateLegacyBodyFromTemplate(tpl) {
   const active = llmStore.active
   if (!active) {
     Modal.warning({
