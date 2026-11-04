@@ -3,8 +3,8 @@ export function resolveExamScope(detail = {}) {
   const type = String(detail.job_type_name || '')
   if (configured) return { source: 'configured', directions: configured.split(/[、，,；;\n]+/).map(s => s.trim()).filter(Boolean) }
   if (/社区工作|社工/.test(type + String(detail.company_name || ''))) return { source: 'fallback', directions: ['社区工作专业知识和实务', '公共基础知识', '行政能力测试', '综合能力测验'] }
-  if (/国企|央企|国有|中央企业/.test(type)) return { source: 'fallback', directions: ['综合基础知识', '企业文化'] }
-  return { source: 'fallback', directions: ['综合基础知识'] }
+  if (/国企|央企|国有|中央企业/.test(type)) return { source: 'fallback', directions: ['公共基础知识', '行政能力测试', '企业文化'] }
+  return { source: 'fallback', directions: ['公共基础知识', '行政能力测试'] }
 }
 
 // Each task supplies a different concrete deliverable, rather than synonyms for a generic guide.
@@ -27,7 +27,15 @@ const TASKS = [
 
 export function chooseExamTopic(detail, batchPlans, history, shuffle) {
   const scope = resolveExamScope(detail)
-  const options = scope.directions.flatMap(direction => TASKS.filter(task => {
+  const editorialTasks = [
+    ['subject_guide','科目拆解','各个备考方向分别怎么准备？','不同科目采用不同准备动作','逐项解释本次允许科目的复习重点，搭配实际已配置资料','three_item_list'],
+    ['practice_route','刷题路线','历年回忆题、学习资料、模拟卷怎样衔接？','先练习发现薄弱点，再补知识，最后完整练习','围绕已配置资料写清先刷什么、怎样补、最后怎么练','three_steps'],
+    ['material_usage','资料用途','拿到资料后分别怎么用？','每类资料承担不同任务','只介绍已配置资料的用途，并关联本次科目；不虚构内容','three_paragraphs'],
+    ['subject_focus','单科重点','这部分应该怎么学和练？','围绕一个科目把阅读与练习讲具体','选一个允许科目详细展开，其他科目简短带过','single_deep_dive'],
+    ['second_route','第二轮复习','第一轮以后怎样继续？','第二轮集中补薄弱模块，不是重新从头翻','把再刷回忆题、翻学习资料、模拟练习串成具体安排','four_short_paragraphs'],
+    ...[3,5,7].map(days => [`sprint_${days}`,`${days}天冲刺方案`,`${days}天复习计划怎样安排？`,'按天分配复习任务，每天有具体科目与资料动作',`逐日列出${days}天计划，天数是建议学习周期，不是考试倒计时，不保证学完或通过`,'three_steps']),
+  ]
+  const options = scope.directions.flatMap(direction => editorialTasks.filter(task => {
     if (task[0] === 'culture') return /企业文化/.test(direction)
     if (task[0] === 'situation') return /社区|实务|综合能力/.test(direction)
     if (/企业文化/.test(direction)) return ['reading','memory','split','check','concept'].includes(task[0])
@@ -42,6 +50,8 @@ export function chooseExamTopic(detail, batchPlans, history, shuffle) {
   })).sort((a,b) => a.score-b.score)
   const selected = ranked[0], [id,name,question,viewpoint,deliverable,structure] = selected.task
   return { examScope: scope.directions, examScopeSource: scope.source, examDirection: selected.direction,
+    editorialMode: id, studyDays: id.startsWith('sprint_') ? Number(id.split('_')[1]) : null,
+    availableMaterials: [detail.baidu_path_exam && '学习资料', detail.baidu_path_history && '历年回忆题', detail.baidu_path_mock && '模拟卷'].filter(Boolean),
     topicKey: selected.key, learningTask: id, coreViewpoint: viewpoint, practicalDeliverable: deliverable,
     angle: { id: selected.key, name: `${selected.direction}·${name}`, main: name, question, need: 'any' }, structure }
 }

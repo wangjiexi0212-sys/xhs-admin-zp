@@ -297,7 +297,7 @@ export function createDiversityPlans(productDetails, level = 'extreme', history 
     const topic = chooseExamTopic(detail, batchPlans, history, shuffledCopy)
     const angle = topic.angle
     let titleStrategy = pickWithDiversity(TITLE_STRATEGIES, 'titleStrategy', used.titleStrategy, history, level)
-    const bodyStructure = BODY_STRUCTURES.find(item => item.id === topic.structure) || BODY_STRUCTURES[0]
+    const bodyStructure = topic.studyDays ? { id: 'daily_plan', name: '逐日复习计划', instruction: `按第1天至第${topic.studyDays}天分别安排，不能合并省略天数，每天说明科目、资料和具体动作。` } : BODY_STRUCTURES.find(item => item.id === topic.structure) || BODY_STRUCTURES[0]
     const opening = pickWithDiversity(OPENINGS, 'openingStrategy', used.openingStrategy, history, level)
     const ending = pickWithDiversity(ENDINGS, 'endingStrategy', used.endingStrategy, history, level)
     const tone = pickWithDiversity(TONES, 'toneStrategy', used.toneStrategy, history, level)
@@ -398,6 +398,12 @@ export function buildDiversityPrompt(plan, detail, previousDraft = '') {
     `本篇只展开：${plan.examDirection || ''}`,
     `核心观点：${plan.coreViewpoint || ''}`,
     `必须提供的实用内容：${plan.practicalDeliverable || ''}`,
+    `已配置资料类型：${(plan.availableMaterials || []).join('、') || '未确认，不宣称商品包含任何特定资料'}`,
+    plan.studyDays ? `本篇写${plan.studyDays}天冲刺方案，天数仅是复习周期建议，不表示考试即将开始，不说三天足够、保证通过或保证分数。` : '',
+    '【正文质量要求】以科目拆解、刷题路线或资料用途为主线，开头直接进入企业备考场景。口吻干脆自然，短段落，适量表情，不写成通用学习方法说明书。',
+    '明确写刷历年回忆题、翻学习资料、练薄弱模块、做模拟卷；避免“选一组企业笔试练习、处理一项、留下判断依据、完成标志、适用场景、限制”等生硬表达。资料动作仅限已配置类型。',
+    '允许范围包含公基时讲知识框架、易混内容与练习；包含行测时可讲言语、判断、数量、资料分析的分模块练习；包含企业文化时讲企业概况、业务介绍、文化表述的阅读整理，不编造具体企业事实。',
+    '文章必须有主次：科目拆解型分别介绍方向；刷题路线型突出资料使用顺序；资料用途型解释每类资料作用；单科型详细讲一个科目。不要每篇都重复同一套三条通用建议。',
     `标题表达方向：${plan.titlePhrase || ''}。正文必须回应标题；涉及备考攻略、复习重点时围绕本篇笔试方向给出具体建议。`,
     '标题中的答题思路仅指方法指导，不得编造实际试题解析、题库内容、官方考情或提分效果。',
     plan.examScopeSource === 'fallback' ? '上述方向来自商品类型的默认备考建议，不得称为已确认的官方考试范围。' : '以上范围来自商品详情填写的笔试内容，不得自行增加其他科目。',

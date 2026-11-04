@@ -21,6 +21,11 @@ export function chooseNoteTitle(company, detail, topic, batch, history, shuffle)
     {title:`${name}笔试｜${phrase}`,family,phrase},
     ...(['guide','focus'].includes(family)?[{title:`${name}备考，${phrase}`,family,phrase}]:[]),
   ])).filter(x=>Array.from(x.title).length<=20)
+  if (topic.studyDays) {
+    options = [`${name}笔试，${topic.studyDays}天冲刺方案`, `${name}笔试｜${topic.studyDays}天复习计划`, `${name}备考，${topic.studyDays}天安排`]
+      .filter(title=>Array.from(title).length<=20)
+      .map(title=>({title,family:'sprint',phrase:`${topic.studyDays}天冲刺方案`}))
+  }
   // Never invent an abbreviation or cut a sentence to fit a long company name.
   if(!options.length) options=[{title:`${name}笔试`,family:'identity',phrase:'笔试'}].filter(x=>Array.from(x.title).length<=20)
   if(!options.length) throw new Error('企业名称过长，请设置准确的企业简称后生成20字以内标题')
