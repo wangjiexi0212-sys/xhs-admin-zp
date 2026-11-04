@@ -1614,6 +1614,17 @@ function normalizeCardStyle(input) {
 }
 
 const EDITORIAL_CARDS = [
+  ['editorial_blue_outline','蓝色分区·备考清单','material_display'],
+  ['editorial_green_bulletin','绿色备考信息报','material_display'],
+  ['editorial_red_grid','红色网格·备考攻略','material_display'],
+  ['book_wine','酒红书脊·经典清单','material_display'],
+  ['book_navy','藏蓝精装·居中书封','single_focus'],
+  ['book_sage','鼠尾草绿·侧栏手册','usage_path'],
+  ['book_ivory','象牙白·批注书页','review_check'],
+  ['book_ochre','牛皮纸·档案书套','material_display'],
+  ['book_split','红白分章·备考专集','usage_path'],
+  ['editorial_burgundy_list','酒红书脊·知识清单','material_display'],
+  ['editorial_red_report','红框备考信息报','material_display'],
   ['editorial_edition','备考专刊','material_display'], ['editorial_cobalt','钴蓝宣言','single_focus'],
   ['editorial_spine','书脊藏本','usage_path'], ['editorial_receipt','学习收据','review_check'],
   ['editorial_orange','暖橙单点','single_focus'], ['editorial_gallery','留白展签','material_display'],
@@ -2977,6 +2988,173 @@ function drawVirtualCardImage(ctx, W, H, style, text, cardPlan = null) {
   drawVirtualFooter(ctx,W,H,palette,cardPlan)
 }
 
+function drawRedStudyReport(ctx,text,plan) {
+  const red='#b52a2d',ink='#101715'
+  vRound(ctx,0,0,360,480,13,'#f7fbfc','#ce2027',6)
+  const main=splitCardText(text).main||'企业笔试'
+  const titleEnd=drawRefTextBlock(ctx,main,20,18,320,27,red,{align:'center',maxLines:3,minSize:17,lineHeight:1.1})
+  const y=titleEnd+10
+  vText(ctx,'备考重点梳理',180,y,21,ink,900,'center')
+  ctx.strokeStyle='#da1721';ctx.lineWidth=2.5;ctx.beginPath()
+  for(let i=0;i<=180;i++){const xx=90+i,yy=y+27+Math.sin(i/9)*2.3;i?ctx.lineTo(xx,yy):ctx.moveTo(xx,yy)}ctx.stroke()
+  const section=(label,top)=>{ctx.font='700 12px "PingFang SC",sans-serif';const w=ctx.measureText(label).width+12;vRound(ctx,13,top,w,19,4,red);vText(ctx,label,19,top+3,12,'#fff',700)}
+  section('复习方向说明',y+43)
+  const scopes=plan?.examScope?.length?plan.examScope:['公共基础知识','行政能力测试']
+  const scopeText=scopes.join('、')
+  drawRefTextBlock(ctx,scopeText,14,y+70,332,12,ink,{align:'left',maxLines:2,minSize:10,lineHeight:1.35})
+  const top=y+107,bottom=461
+  ctx.setLineDash([3,2]);ctx.strokeStyle='#424846';ctx.lineWidth=1;ctx.beginPath();ctx.roundRect(9,top,342,bottom-top,14);ctx.stroke();ctx.setLineDash([])
+  section('分科复习与练习',top+10)
+  const rows=scopes.slice(0,4).map(s=>{
+    const action=/行测|行政能力/.test(s)?'言语、判断、数量、资料分析，分模块练习':/企业文化/.test(s)?'企业概况、业务介绍、文化表述，分别整理':/社区|实务/.test(s)?'理解专业概念，结合情境梳理分析思路':/公基|公共基础|综合基础/.test(s)?'梳理知识框架，对照易混内容，再配合练习':'围绕已填写内容梳理知识，搭配练习与复盘'
+    return [s,action]
+  })
+  let rowY=top+39
+  ctx.fillStyle=red;ctx.fillRect(15,rowY,330,22);vText(ctx,'备考方向',22,rowY+5,10,'#fff',700);vText(ctx,'学习安排',125,rowY+5,10,'#fff',700);rowY+=22
+  rows.forEach(([name,action])=>{ctx.fillStyle='#fff';ctx.fillRect(15,rowY,330,36);ctx.strokeStyle='#c8cecc';ctx.lineWidth=.6;ctx.strokeRect(15,rowY,330,36);ctx.beginPath();ctx.moveTo(115,rowY);ctx.lineTo(115,rowY+36);ctx.stroke();drawRefTextBlock(ctx,name,21,rowY+7,88,10,red,{align:'left',maxLines:2,minSize:9,lineHeight:1.2});drawRefTextBlock(ctx,action,123,rowY+6,215,10,ink,{align:'left',maxLines:2,minSize:9,lineHeight:1.25});rowY+=36})
+  if(rowY+85<bottom){section('资料配合使用',rowY+11);const items=plan?.availableMaterials?.length?plan.availableMaterials:plan?.cardItems||['梳理知识','安排练习','集中复盘'];drawRefTextBlock(ctx,items.join(' → '),17,rowY+39,326,11,ink,{align:'left',maxLines:2,minSize:9,lineHeight:1.3});vRound(ctx,16,rowY+70,328,19,0,'#f9e699');vText(ctx,'先明确复习内容，再安排阅读和练习。',22,rowY+74,10,ink,700)}
+}
+
+function drawBurgundyKnowledgeList(ctx,text,plan) {
+  const red='#852638',ink='#292324',serif='"Songti SC","Noto Serif CJK SC","SimSun",serif'
+  ctx.fillStyle='#fcfaf8';ctx.fillRect(0,0,360,480)
+  const spine=ctx.createLinearGradient(0,0,32,0);spine.addColorStop(0,'#541923');spine.addColorStop(.7,red);spine.addColorStop(1,'#a65060')
+  ctx.fillStyle=spine;ctx.fillRect(0,0,29,480)
+  ctx.fillStyle='rgba(55,20,25,.12)';ctx.fillRect(29,0,4,480)
+  vText(ctx,'笔 试 备 考 · 学 习 资 料',55,42,7,red,600)
+  const raw=splitCardText(text).main||'企业笔试'
+  // Separate the company from the exam label, keeping the company fully visible.
+  const company=raw.replace(/笔试$/,'')
+  let companySize=30,lines=[]
+  while(companySize>=13){ctx.font=`900 ${companySize}px ${serif}`;lines=wrapCardLines(ctx,company,246);if(lines.length<=2)break;companySize--}
+  ctx.fillStyle=ink;ctx.textAlign='left';ctx.textBaseline='top'
+  lines.slice(0,2).forEach((s,i)=>ctx.fillText(s,55,70+i*companySize*1.15))
+  const divider=Math.max(133,70+lines.length*companySize*1.15+14)
+  const rule=(y,w=249)=>{ctx.strokeStyle='#d4a9ae';ctx.lineWidth=.6;ctx.beginPath();ctx.moveTo(55,y);ctx.lineTo(55+w,y);ctx.stroke()}
+  rule(divider)
+  drawRefTextBlock(ctx,'笔试备考\n知识清单'.replace('\n',''),55,divider+19,249,43,ink,{align:'left',maxLines:2,minSize:30,lineHeight:1.1,family:serif})
+  vText(ctx,'（与分层练习）',55,divider+127,17,ink,800)
+  rule(divider+158,220)
+  const scopes=plan?.examScope?.length?plan.examScope:[]
+  const labels=plan?.availableMaterials?.length?plan.availableMaterials:plan?.cardItems?.length?plan.cardItems:['知识梳理','分层练习','学习复盘']
+  ctx.save();ctx.globalAlpha=.075;ctx.fillStyle=red;ctx.font=`150px ${serif}`;ctx.fillText('Aa',167,330);ctx.restore()
+  vText(ctx,scopes.length?scopes.slice(0,3).join(' · '):'阅读 · 练习 · 复盘',55,divider+173,8,ink,500)
+  vText(ctx,'Study Notes · Knowledge & Practice',55,divider+195,7,red,500)
+  const listTop=divider+223
+  labels.slice(0,3).forEach((s,i)=>{const y=listTop+i*27;rule(y,145);vText(ctx,String(i+1).padStart(2,'0'),55,y+6,7,red,500);drawRefTextBlock(ctx,s,72,y+5,124,9,ink,{align:'left',maxLines:1,minSize:7,lineHeight:1.1});})
+  ctx.save();ctx.translate(335,56);ctx.rotate(Math.PI/2);vText(ctx,'K N O W L E D G E  ·  P R A C T I C E',0,0,6,'#b88790',500);ctx.restore()
+  vText(ctx,'先梳理内容，再安排练习',55,460,7,'#8b7c7d',500)
+}
+
+function drawBlueExamOutline(ctx,text,plan){
+  const blue='#108bb5',accent='#2085a5',ink='#101715'
+  ctx.fillStyle=blue;ctx.fillRect(0,0,360,480)
+  vRound(ctx,7,7,346,104,0,'#fff')
+  vText(ctx,'企业笔试 · 内容与复习安排',180,20,9,accent,600,'center')
+  const end=drawRefTextBlock(ctx,splitCardText(text).main||'企业笔试',17,40,326,28,ink,{align:'center',maxLines:2,minSize:16,lineHeight:1.05})
+  vText(ctx,'笔试备考内容梳理',180,Math.min(91,end+8),16,accent,800,'center')
+  const section=(label,y)=>{vText(ctx,'✦ '+label,12,y,14,'#fff',700);vText(ctx,'▪ ▪ ▪',340,y+2,12,'#fff',700,'right')}
+  const block=(s,x,y,w,size=10,maxLines=3)=>drawRefTextBlock(ctx,s,x,y,w,size,ink,{align:'left',maxLines,minSize:size,weight:600,lineHeight:1.3})
+  const scopes=plan?.examScope?.length?plan.examScope:plan?.cardItems||['学习内容','练习安排','学习复盘']
+  section('一、先理清复习方向',121);vRound(ctx,7,149,346,157,0,'#fff')
+  scopes.slice(0,3).forEach((s,i)=>{
+    const y=159+i*47;ctx.font='800 11px "PingFang SC",sans-serif';const title=`${i+1}. ${s}`
+    vRound(ctx,12,y,Math.min(332,ctx.measureText(title).width+6),16,0,'#ffe788');vText(ctx,title,15,y+2,11,accent,800)
+    const action=/行测|行政能力/.test(s)?'言语、判断、数量、资料分析，分模块练习。':/企业文化/.test(s)?'企业概况、业务介绍、文化表述分别整理。':/社区|实务/.test(s)?'理解专业概念，结合情境梳理分析思路。':'先梳理知识内容，再配合练习和回看。'
+    block(action,13,y+20,331,10,2)
+  })
+  section('二、资料怎样配合使用',317);vRound(ctx,7,345,346,128,0,'#fff')
+  const materials=plan?.availableMaterials?.length?plan.availableMaterials:plan?.cardItems||['阅读内容','独立练习','集中复盘']
+  materials.slice(0,3).forEach((s,i)=>{const y=359+i*29;vText(ctx,'✓',14,y,15,accent,800);const action=/回忆/.test(s)?'独立练习，发现薄弱部分':/模拟/.test(s)?'完整练习后集中检查':/学习资料/.test(s)?'补知识、理思路，再练薄弱内容':'按学习进度安排';block(`${s}：${action}`,34,y+1,308,10,2)})
+  vText(ctx,'先明确本轮任务，再安排下一轮重点。',14,458,8,accent,600)
+}
+
+function drawGreenStudyBulletin(ctx,text,plan){
+  const green='#128044',ink='#111b16'
+  vRound(ctx,0,0,360,480,15,'#fff',green,5)
+  ctx.save();ctx.globalAlpha=.035;ctx.fillStyle=green;ctx.font='900 48px "PingFang SC",sans-serif';ctx.textAlign='center';ctx.fillText('学习资料',180,200);ctx.fillText('STUDY NOTES',180,290);ctx.fillText('阅读 · 练习',180,380);ctx.restore();ctx.textAlign='left'
+  vText(ctx,'企业笔试 · 备考信息整理',16,18,9,green,800)
+  const main=splitCardText(text).main||'企业笔试'
+  const end=drawRefTextBlock(ctx,main,17,42,326,27,green,{align:'center',maxLines:2,minSize:17,lineHeight:1.1})
+  vText(ctx,'备考重点与安排',180,end+12,18,ink,900,'center')
+  ctx.strokeStyle=green;ctx.lineWidth=2;ctx.beginPath();for(let i=0;i<=190;i++){const x=85+i,y=end+37+Math.sin(i/9)*2;i?ctx.lineTo(x,y):ctx.moveTo(x,y)}ctx.stroke()
+  const top=end+55,scale=Math.min(1,(461-top)/330)
+  ctx.save();ctx.translate(0,top);ctx.scale(1,scale)
+  const block=(s,x,y,w,size=10,lines=3)=>drawRefTextBlock(ctx,s,x,y,w,size,ink,{align:'left',maxLines:lines,minSize:size,weight:600,lineHeight:1.3})
+  const section=(s,y)=>{ctx.font='600 13px "PingFang SC",sans-serif';vRound(ctx,14,y,Math.min(332,ctx.measureText(s).width+14),21,5,green);vText(ctx,s,21,y+4,13,'#fff',600)}
+  const panel=(y,h)=>{ctx.save();ctx.fillStyle='rgba(255,255,255,.8)';ctx.beginPath();ctx.roundRect(13,y,334,h,13);ctx.fill();ctx.setLineDash([2,1.5]);ctx.strokeStyle='#24794c';ctx.lineWidth=1;ctx.stroke();ctx.restore()}
+  const scopes=plan?.examScope?.length?plan.examScope:plan?.cardItems||['梳理内容','安排练习']
+  section('一、先把复习方向分清',0);panel(28,39);block(scopes.slice(0,4).join('、')+'：先认识内容，再安排阅读与练习。',21,36,318,10,2)
+  section('二、各个方向怎么准备？',75);panel(103,112)
+  scopes.slice(0,3).forEach((s,i)=>{const y=111+i*33;vText(ctx,`${i+1}. ${s}`,21,y,10,green,900);const action=/行测|行政能力/.test(s)?'言语、判断、数量、资料分析，分模块练习。':/企业文化/.test(s)?'企业概况、业务介绍、文化表述，分开整理。':/社区|实务/.test(s)?'理解专业概念，结合情境梳理分析思路。':'先理清知识内容，再搭配练习与回看。';block(action,21,y+14,318,9,1)})
+  section('三、资料配合使用',223);panel(251,65)
+  const materials=plan?.availableMaterials?.length?plan.availableMaterials:plan?.cardItems||['学习内容','练习安排','集中复盘']
+  materials.slice(0,3).forEach((s,i)=>{const action=/回忆/.test(s)?'独立练习，发现薄弱部分':/模拟/.test(s)?'完整练习，集中检查':/学习资料/.test(s)?'补知识、理思路，再回到练习':'按自己的进度安排';block(`✓ ${s}：${action}`,21,259+i*17,318,9,1)})
+  ctx.restore();vText(ctx,'先明确本轮任务，再安排下一轮重点。',18,464,8,green,600)
+}
+
+function drawRedGridGuide(ctx,text,plan){
+  const red='#c90010',ink='#151817'
+  ctx.fillStyle='#fcfefe';ctx.fillRect(0,0,360,480)
+  ctx.strokeStyle='#e8efef';ctx.lineWidth=.5
+  for(let x=0;x<360;x+=23){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,480);ctx.stroke()}
+  for(let y=0;y<480;y+=23){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(360,y);ctx.stroke()}
+  vRound(ctx,13,10,334,89,5,red)
+  ctx.fillStyle=red;ctx.beginPath();ctx.moveTo(26,97);ctx.lineTo(26,109);ctx.lineTo(45,97);ctx.fill()
+  const company=(splitCardText(text).main||'企业笔试').replace(/笔试$/,'')
+  drawRefTextBlock(ctx,company,24,20,312,25,'#fff',{align:'center',maxLines:2,minSize:15,lineHeight:1.05})
+  vText(ctx,'笔试备考攻略',180,74,16,'#fff',900,'center')
+  const scopes=plan?.examScope?.length?plan.examScope:[]
+  const items=plan?.availableMaterials?.length?plan.availableMaterials:plan?.cardItems||['学习内容','练习安排','集中复盘']
+  const directions=scopes.length?scopes:items
+  const block=(s,x,y,w,size=10,maxLines=3)=>drawRefTextBlock(ctx,s,x,y,w,size,ink,{align:'left',maxLines,minSize:size,weight:600,lineHeight:1.3})
+  const outline=(y,h)=>{vRound(ctx,9,y,342,h,13,'#ffffff');ctx.strokeStyle='#ad2633';ctx.lineWidth=.9;ctx.setLineDash([3,2]);ctx.beginPath();ctx.roundRect(9,y,342,h,13);ctx.stroke();ctx.setLineDash([])}
+  const section=(label,y)=>{ctx.font='800 12px "PingFang SC",sans-serif';const w=Math.min(337,ctx.measureText(label).width+38);vRound(ctx,10,y,w,24,12,red);vText(ctx,'★',20,y+4,14,'#ffe66a',800);vText(ctx,label,40,y+5,12,'#fff',800)}
+  const highlight=(s,y)=>{vRound(ctx,19,y,320,16,0,'#ffe788');block(s,23,y+2,312,9,1)}
+  vRound(ctx,10,115,340,37,7,'#fff','#b67b7e',.6)
+  block(directions.slice(0,3).join('、')+'：先理清学习内容，再安排阅读与练习。',17,123,326,10,2)
+  section('一、复习方向 & 学习重点',161);outline(194,115)
+  directions.slice(0,3).forEach((s,i)=>{
+    const y=204+i*33
+    vText(ctx,`${i+1}. ${s}`,19,y,10,'#ad202c',800)
+    const action=/行测|行政能力/.test(s)?'言语、判断、数量、资料分析，分模块练习。':/企业文化/.test(s)?'企业概况、业务介绍、文化表述，分别整理。':/公共基础|公基/.test(s)?'梳理知识框架，对照易混内容，再配合练习。':/社区|实务/.test(s)?'理解专业概念，结合情境梳理分析思路。':'先浏览已有内容，明确本轮学习任务。'
+    block(action,19,y+14,322,9,1)
+  })
+  section('二、资料配合 & 使用顺序',318);outline(350,73)
+  items.slice(0,3).forEach((s,i)=>{vText(ctx,`✓ ${s}`,19,359+i*19,10,'#ad202c',800);})
+  section('三、复习提醒',432)
+  highlight('先明确本轮任务，再安排阅读和练习。',460)
+}
+
+function drawBookSeries(ctx,style,text,plan){
+  const serif='"Songti SC","Noto Serif CJK SC",SimSun,serif'
+  const name=splitCardText(text).main||'企业名称笔试'
+  const ink=style==='book_navy'?'#f2e5c9':'#2e2926'
+  const bg={book_wine:'#fcfaf6',book_navy:'#1d3248',book_sage:'#e8ede4',book_ivory:'#fffdf8',book_ochre:'#eadcc2',book_split:'#f6f2ec'}[style]
+  vRound(ctx,0,0,360,480,0,bg)
+  const txt=(s,x,y,size=12,c=ink,align='left')=>vText(ctx,s,x,y,size,c,600,align)
+  const block=(s,x,y,w,size=15,c=ink,family=serif)=>drawRefTextBlock(ctx,s,x,y,w,size,c,{align:'left',maxLines:4,minSize:size,weight:800,lineHeight:1.2,family})
+  const title=(x,y,w=304,c=ink,center=false)=>drawRefTextBlock(ctx,name,x,y,w,30,c,{align:center?'center':'left',maxLines:3,minSize:19,weight:900,lineHeight:1.14,family:serif})
+  const rule=(x,y,w,c='#b9aaa0')=>{ctx.strokeStyle=c;ctx.lineWidth=.7;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+w,y);ctx.stroke()}
+  const watermark=(s,c=ink)=>{ctx.save();ctx.globalAlpha=.06;ctx.fillStyle=c;ctx.font=`140px ${serif}`;ctx.fillText(s,185,335);ctx.restore()}
+  const entries=(items,x,y,w)=>items.slice(0,3).forEach((s,i)=>{rule(x,y+i*34,w);txt(`0${i+1}`,x,y+9+i*34,10,'#9d634b');drawRefTextBlock(ctx,s,x+29,y+8+i*34,w-29,11,ink,{align:'left',maxLines:1,minSize:9})})
+  const materials=plan?.availableMaterials?.length?plan.availableMaterials:plan?.cardItems||['资料内容','练习安排','学习复盘']
+  const scopes=plan?.examScope?.length?plan.examScope:plan?.cardItems||['梳理内容','分步练习','回看整理']
+  if(style==='book_wine'){
+    vRound(ctx,0,0,23,480,0,'#7b2534');txt('STUDY NOTES · 企业笔试',55,35,9,'#7b2534');const end=title(55,77,275);rule(55,end+17,275);block('备考资料',55,end+38,275,39);block('使用清单',55,end+86,275,39);txt('（阅读与练习，分开安排）',55,end+142,13);entries(materials,55,end+180,222);watermark('Aa');txt('先认识内容，再开始练习。',55,454,9)
+  }else if(style==='book_navy'){
+    ctx.strokeStyle='#b29d75';ctx.lineWidth=1;ctx.strokeRect(15,15,330,450);txt('THE STUDY COLLECTION',180,40,9,ink,'center');const end=title(35,90,290,ink,true);rule(40,end+24,280,'#b29d75');drawRefTextBlock(ctx,'复习方向',40,end+55,280,38,ink,{align:'center',minSize:30,maxLines:1,family:serif});drawRefTextBlock(ctx,'一页梳理',40,end+102,280,38,ink,{align:'center',minSize:30,maxLines:1,family:serif});ctx.strokeRect(40,end+168,280,57);drawRefTextBlock(ctx,scopes.slice(0,3).join(' · '),52,end+184,256,12,ink,{align:'center',maxLines:2,minSize:10});txt('阅读与练习相互衔接',180,430,11,ink,'center');txt('KNOWLEDGE & PRACTICE',180,451,8,ink,'center')
+  }else if(style==='book_sage'){
+    vRound(ctx,0,0,40,480,0,'#3d5646');ctx.save();ctx.translate(16,360);ctx.rotate(-Math.PI/2);txt('STUDY HANDBOOK',0,0,11,'#e8ede4');ctx.restore();txt('企业笔试 · 学习手册',63,35,9);const end=title(63,78,260);vRound(ctx,63,end+25,43,5,0,'#9d694a');block('第一轮',63,end+49,260,38);block('这样开始',63,end+96,260,38);entries(['先认识学习内容','再安排独立练习','回到薄弱内容补习'],63,end+159,260);txt('把复习顺序排清楚。',63,454,9)
+  }else if(style==='book_ivory'){
+    vRound(ctx,0,0,360,10,0,'#9d634b');txt('REVIEW EDITION',28,37,9);txt('复盘篇',285,37,10,'#9d634b');const end=title(28,92);rule(28,end+20,304);block('做完以后',28,end+48,304,39);block('还要看什么',28,end+96,304,39);vRound(ctx,28,end+163,2,96,0,'#9d634b');block('回看易混内容\n检查读题与计算过程\n整理仍未解决的问题',43,end+164,280,13,ink,'"PingFang SC",sans-serif');watermark('R');txt('让下一轮练习，有具体内容可看。',28,454,9)
+  }else if(style==='book_ochre'){
+    ctx.strokeStyle='#5d4937';ctx.strokeRect(25,25,310,430);txt('企业笔试 / MATERIAL GUIDE',45,49,9);const end=title(45,90,270);rule(45,end+20,270);block('资料内容',45,end+44,270,36);block('怎么配合',45,end+89,270,36);vRound(ctx,26,end+145,308,39,0,'#5d4937');txt('阅读 → 练习 → 集中复盘',180,end+158,12,'#fff8ec','center');entries(materials,45,end+206,270);txt('按实际资料配置安排使用',45,434,9)
+  }else if(style==='book_split'){
+    vRound(ctx,0,0,360,190,0,'#7b2534');txt('EXAM PREPARATION',28,32,9,'#fff5e7');title(28,78,304,'#fff5e7');txt('学习安排 / STUDY ROUTE',28,210,9);block('先理内容',28,241,304,37);block('再练薄弱点',28,287,304,37);entries(scopes,28,350,245);watermark('03');txt('围绕当前备考方向安排学习',28,461,8)
+  }
+}
+
 // Editorial cards use a 360 × 480 design coordinate system, matching the reviewed HTML.
 function drawEditorialCard(ctx, style, text, plan) {
   ctx.save(); ctx.scale(3,3); ctx.textBaseline='top'
@@ -2990,7 +3168,19 @@ function drawEditorialCard(ctx, style, text, plan) {
   const foot=(s,c=ink)=>paragraph(s,30,432,300,12,c)
   const actual=vItems(plan,['资料目录','使用说明','练习记录'])
   box(0,0,360,480,cream)
-  if(style==='editorial_edition'){
+  if(style==='editorial_blue_outline'){
+    drawBlueExamOutline(ctx,text,plan)
+  }else if(style==='editorial_green_bulletin'){
+    drawGreenStudyBulletin(ctx,text,plan)
+  }else if(style==='editorial_red_grid'){
+    drawRedGridGuide(ctx,text,plan)
+  }else if(style.startsWith('book_')){
+    drawBookSeries(ctx,style,text,plan)
+  }else if(style==='editorial_burgundy_list'){
+    drawBurgundyKnowledgeList(ctx,text,plan)
+  }else if(style==='editorial_red_report'){
+    drawRedStudyReport(ctx,text,plan)
+  }else if(style==='editorial_edition'){
     box(0,0,360,12,'#d35c3d');txt('STUDY EDITION / 资料专刊',30,35,11);line(65);const end=title(30,85,300,ink,true);txt('先读目录，再开始这一轮',30,end+22,18,ink,800);line(end+60);actual.slice(0,4).forEach((s,i)=>{const x=30+i%2*160,y=end+85+Math.floor(i/2)*65;txt(s,x,y,14);txt('认识内容 · 分步使用',x,y+25,11)});foot('让每类资料，都有自己的使用位置。')
   }else if(style==='editorial_cobalt'){
     box(0,0,360,480,'#244fdd');txt('ONE FOCUS / 一个重点',30,30,11,'#fff');title(30,95,300,'#fff');ctx.save();ctx.translate(25,265);ctx.rotate(-.05);box(0,0,310,125,'#f5e95f');paragraph('这一轮，先把问题找出来。',20,20,270,20,'#183d9c');txt('完成练习 → 记录原因 → 查找资料',20,88,12,'#183d9c');ctx.restore();foot('做完以后，留一点时间给复盘。','#fff')
