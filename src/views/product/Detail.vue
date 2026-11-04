@@ -837,6 +837,14 @@
             </div>
           </template>
           <div class="cover-prompt-picker">
+            <div style="margin-bottom:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+              <span>视觉变化</span>
+              <a-radio-group v-model:value="coverVariationLevel" size="small" :disabled="coverGenerating">
+                <a-radio-button value="light">轻度：配色装饰</a-radio-button>
+                <a-radio-button value="standard">标准：配色与主体</a-radio-button>
+                <a-radio-button value="deep">深度：增加构图变化</a-radio-button>
+              </a-radio-group>
+            </div>
             <div class="cover-prompt-picker__header">
               <span class="cover-prompt-picker__label">提示词方式</span>
               <a-radio-group v-model:value="coverPromptMode" button-style="solid" size="small">
@@ -1634,6 +1642,7 @@ const coverImageUrl = ref('')
 const coverImageUrls = ref([])
 const coverPromptUsed = ref('')
 const coverPromptMode = ref('random')
+const coverVariationLevel = ref('standard')
 const coverPromptOptions = ref([])
 const coverPromptOptionsLoading = ref(false)
 const selectedCoverPromptId = ref(null)
@@ -2333,7 +2342,7 @@ async function generateCoverImage(useEditedPrompt = false) {
   }
 
   if (params.prompt) {
-    params.prompt = varyCoverDecoration(params.prompt)
+    params.prompt = varyCoverDecoration(params.prompt, coverVariationLevel.value)
     coverPromptUsed.value = params.prompt
   }
 
