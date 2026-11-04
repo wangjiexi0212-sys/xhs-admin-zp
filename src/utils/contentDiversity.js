@@ -1,5 +1,6 @@
 import { EDITORIAL_CARD_STYLES } from './editorialCardStyles.js'
 import { chooseExamTopic } from './examContentPlan.js'
+import { chooseNoteTitle } from './noteTitlePlanner.js'
 
 const HISTORY_KEY = 'xhs-content-diversity-history-v1'
 const HISTORY_LIMIT = 200
@@ -199,11 +200,14 @@ function pickWithDiversity(items, field, batchUsed, history, level, eligibility 
 
 function buildTitle(company, strategy, angle) {
   const prefix = company ? `${company}笔试` : '企业笔试'
+  // Direction labels may contain the company name from written_exam_content.
+  // Keep the task itself in titles; the company already appears in the prefix.
+  const task = company ? String(angle.main || '').split(company).join('').replace(/^[·：:，,\s]+|[·：:，,\s]+$/g, '') : angle.main
   const map = {
     direct_question: `${prefix}：${angle.question}`,
     choice_question: angle.id.includes('history') ? `${prefix}：先做题还是先看答案？` : `${prefix}：先看资料还是先做练习？`,
     common_question: `关于${prefix}，这个问题经常被忽略`,
-    information: `${prefix}${angle.name}`,
+    information: `${prefix}：${task}`,
     material: `${prefix}资料内容和使用方法整理`,
     method: `${prefix}${angle.main}可以这样做`,
     order: `${prefix}资料使用顺序整理`,
@@ -212,12 +216,19 @@ function buildTitle(company, strategy, angle) {
     checklist: `${prefix}${angle.main}自查清单`,
     comparison: `${prefix}：低效做法和有效做法的区别`,
     single_focus: `${prefix}，这篇只讲${angle.main}`,
-    objective: `${prefix}${angle.name}汇总`,
+    objective: `${prefix}${task}汇总`,
     operation: `${prefix}${angle.main}操作流程`,
     notice: `${prefix}${angle.main}注意事项`,
     beginner: `第一次准备${prefix}，先弄清这件事`,
   }
-  return map[strategy.id] || `${prefix}${angle.name}`
+  const title = map[strategy.id] || `${prefix}：${task}`
+  const first = company ? title.indexOf(company) : -1
+  const unique = first < 0 ? title : title.slice(0, first + company.length) + title.slice(first + company.length).split(company).join('')
+  if (Array.from(unique).length <= 20) return unique
+  // Prefer a complete short task over truncating a long sentence halfway.
+  const compact = `${prefix}：${task}`
+  if (Array.from(compact).length <= 20) return compact
+  return Array.from(prefix).slice(0, 20).join('')
 }
 
 function buildCoverText(company, angle) {
@@ -316,11 +327,15 @@ export function createDiversityPlans(productDetails, level = 'extreme', history 
         title = buildTitle(company, titleStrategy, angle)
       }
     }
+    const selectedTitle = chooseNoteTitle(company, detail, topic, batchPlans, history, shuffledCopy)
+    title = selectedTitle.title
     const coverText = buildCoverText(company, angle)
     const cardItems = buildCardItems(capabilities, goal)
 
     const plan = {
       ...topic,
+      titleFamily: selectedTitle.family,
+      titlePhrase: selectedTitle.phrase,
       contentAngle: angle.id,
       contentAngleName: angle.name,
       readerQuestion: angle.question,
@@ -383,6 +398,8 @@ export function buildDiversityPrompt(plan, detail, previousDraft = '') {
     `本篇只展开：${plan.examDirection || ''}`,
     `核心观点：${plan.coreViewpoint || ''}`,
     `必须提供的实用内容：${plan.practicalDeliverable || ''}`,
+    `标题表达方向：${plan.titlePhrase || ''}。正文必须回应标题；涉及备考攻略、复习重点时围绕本篇笔试方向给出具体建议。`,
+    '标题中的答题思路仅指方法指导，不得编造实际试题解析、题库内容、官方考情或提分效果。',
     plan.examScopeSource === 'fallback' ? '上述方向来自商品类型的默认备考建议，不得称为已确认的官方考试范围。' : '以上范围来自商品详情填写的笔试内容，不得自行增加其他科目。',
     '正文不得读取、引用或描述网盘目录、文件名、截图或试题的具体内容；只根据本次笔试方向关联生成。',
     '示例必须标注为示例，不编造企业事实、考试题目、法规政策结论、经历和考生反馈。',
