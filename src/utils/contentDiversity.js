@@ -379,6 +379,13 @@ export function createDiversityPlans(productDetails, level = 'extreme', history 
   })
 }
 
+export function ensureBodyCompany(body, companyName) {
+  const text = String(body || '').trim()
+  const company = String(companyName || '').trim()
+  if (!text || !company || text.includes(company)) return text
+  return `准备${company}笔试，${text.replace(/^[这本]篇只解决一个问题[：:]\s*/, '')}`
+}
+
 export function buildDiversityPrompt(plan, detail, previousDraft = '') {
   const emojiInstruction = [
     '全文不使用表情符号。',
@@ -392,6 +399,7 @@ export function buildDiversityPrompt(plan, detail, previousDraft = '') {
     '不要模仿任何既有成品文章，不得套用固定开头、固定清单和资料推荐结尾。',
     '',
     '【本篇内容规划】',
+    `正文开头第一段必须自然写出完整单位名称“${detail?.company_name || ''}”，明确是准备该单位的笔试，不能只在标题提及单位。后文按需提及，不要反复堆叠名称。`,
     `内容角度：${plan.contentAngleName}`,
     `需要解决的问题：${plan.readerQuestion}`,
     `允许的备考方向：${(plan.examScope || []).join('、')}`,

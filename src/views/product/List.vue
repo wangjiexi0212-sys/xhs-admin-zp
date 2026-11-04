@@ -343,6 +343,7 @@ import {
   assessProductValueRisk,
   assessDiversityRisk,
   buildDiversityPrompt,
+  ensureBodyCompany,
   createDiversityPlans,
   formatPlanSummary,
   loadDiversityHistory,
@@ -1314,7 +1315,7 @@ async function generateNoteForProduct(detail, presetTitle = null, contentPlan = 
       max_tokens: 3000,
       temperature: Math.min(0.82 + attempt * 0.05, 0.96),
     })
-    const body = (bodyRes.content || '').trim()
+    const body = ensureBodyCompany(bodyRes.content, detail.company_name)
     if (!body) throw new Error('正文生成：模型未返回内容')
     // 篇幅是生成建议，不作为失败条件；正文偏长或偏短仍继续价值与相似度检查并正常入库。
     const productValueRisk = assessProductValueRisk(body)

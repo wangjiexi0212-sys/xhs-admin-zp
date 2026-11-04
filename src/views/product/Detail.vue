@@ -1597,7 +1597,7 @@ import { Document, Packer, Paragraph, TextRun, HeadingLevel } from 'docx'
 import { saveAs } from 'file-saver'
 import { BODY_TEMPLATES } from '@/utils/bodyTemplates'
 import { EXTRA_TITLE_TEMPLATES } from '@/utils/extraTitleTemplates'
-import { createDiversityPlans, buildDiversityPrompt, loadDiversityHistory, appendDiversityHistory, assessDiversityRisk, assessProductValueRisk } from '@/utils/contentDiversity'
+import { createDiversityPlans, buildDiversityPrompt, loadDiversityHistory, appendDiversityHistory, assessDiversityRisk, assessProductValueRisk, ensureBodyCompany } from '@/utils/contentDiversity'
 import { toPng } from 'html-to-image'
 
 const route = useRoute()
@@ -2989,7 +2989,7 @@ async function generateBody(selectedTemplate = null) {
           { role: 'user', content: buildDiversityPrompt(plan, detail, previous) + (selectedTemplate?.content ? `\n【可参考的表达风格】\n${selectedTemplate.content}\n仅参考表达风格，不得沿用模板中的企业事实、科目、经历或固定推荐结尾；本次规划优先。` : '') },
         ], max_tokens: 3000, temperature: .87 + attempt * .04,
       })
-      const body = (result.content || '').trim()
+      const body = ensureBodyCompany(result.content, detail.company_name)
       if (!body) throw new Error('模型未返回内容')
       const risk = assessDiversityRisk({ title: plan.noteTitle, body, companyName: detail.company_name, plan }, history, 'extreme')
       if (assessProductValueRisk(body).rejected || risk.rejected) {
