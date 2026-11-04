@@ -1597,6 +1597,7 @@ import { Document, Packer, Paragraph, TextRun, HeadingLevel } from 'docx'
 import { saveAs } from 'file-saver'
 import { BODY_TEMPLATES } from '@/utils/bodyTemplates'
 import { EXTRA_TITLE_TEMPLATES } from '@/utils/extraTitleTemplates'
+import { varyCoverDecoration } from '@/utils/coverDecorationVariant'
 import { createDiversityPlans, buildDiversityPrompt, loadDiversityHistory, appendDiversityHistory, assessDiversityRisk, assessProductValueRisk, ensureBodyCompany } from '@/utils/contentDiversity'
 import { toPng } from 'html-to-image'
 
@@ -2329,6 +2330,11 @@ async function generateCoverImage(useEditedPrompt = false) {
       coverGenerating.value = false
       return
     }
+  }
+
+  if (params.prompt) {
+    params.prompt = varyCoverDecoration(params.prompt)
+    coverPromptUsed.value = params.prompt
   }
 
   if (activeProvider === 'md2card') {
