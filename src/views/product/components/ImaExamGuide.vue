@@ -56,7 +56,56 @@
           <div class="preview-scale">
             <div :ref="el => setPageRef(el, pageIndex)" class="guide-page" :class="`theme-${theme}`">
               <div class="page-inner">
-                <template v-if="theme === 'analysis'">
+                <template v-if="theme === 'emerald'">
+                  <template v-if="pageIndex === 0">
+                    <header class="emerald-hero">
+                      <div class="emerald-eyebrow">— {{ targetCompany }} · {{ emeraldYear }} 招聘攻略</div>
+                      <h1>{{ guide.title }}</h1>
+                      <div v-if="guide.subtitle" class="subtitle">{{ guide.subtitle }}</div>
+                      <div class="emerald-meta">
+                        <span v-for="item in emeraldMeta" :key="item">◉ {{ item }}</span>
+                      </div>
+                    </header>
+                    <div v-if="emeraldFacts.length" class="emerald-facts">
+                      <div v-for="fact in emeraldFacts" :key="fact.label" class="emerald-fact">
+                        <strong>{{ fact.value }}</strong><span>{{ fact.label }}</span>
+                      </div>
+                    </div>
+                  </template>
+                  <div v-else class="emerald-page-head">
+                    <span>{{ targetCompany }} · 笔试攻略</span><span>{{ pageIndex + 1 }} / {{ pages.length }}</span>
+                  </div>
+                  <main :class="['emerald-content', { 'emerald-content-first': pageIndex === 0, 'emerald-content-modules': pageIndex === 1, 'emerald-content-last': pageIndex === pages.length - 1 }]">
+                    <section
+                      v-for="(block, blockIndex) in page"
+                      :key="blockIndex"
+                      :class="['emerald-block', `emerald-${block.kind}`, { 'emerald-warning': pageIndex === pages.length - 1 && block.kind !== 'closing' }]"
+                    >
+                      <div v-if="block.heading" class="emerald-section-title">
+                        <span>{{ emeraldSectionNo(pageIndex, blockIndex) }}</span><h2>{{ block.heading }}</h2><i />
+                      </div>
+                      <div v-if="pageIndex === 1 && blockIndex < 2" class="emerald-module-card">
+                        <b>{{ blockIndex === 0 ? '第一模块' : '第二模块' }}</b>
+                        <h3>{{ analysisBlockView(block).lead || block.heading }}</h3>
+                        <p v-for="(paragraph, pIndex) in block.paragraphs" :key="pIndex">{{ paragraph }}</p>
+                      </div>
+                      <template v-else-if="pageIndex > 0 && pageIndex < pages.length - 1">
+                        <p v-if="analysisBlockView(block).lead" class="emerald-lead">{{ analysisBlockView(block).lead }}</p>
+                        <div class="emerald-steps">
+                          <div v-for="(item, itemIndex) in analysisBlockView(block).items" :key="itemIndex" class="emerald-step">
+                            <span>{{ itemIndex + 1 }}</span><div><strong>{{ item.title }}</strong><p>{{ item.detail }}</p></div>
+                          </div>
+                        </div>
+                      </template>
+                      <template v-else>
+                        <p v-for="(paragraph, pIndex) in block.paragraphs" :key="pIndex">{{ paragraph }}</p>
+                      </template>
+                    </section>
+                  </main>
+                  <div v-if="pageIndex === pages.length - 1" class="emerald-signoff">— 祝备考顺利，稳稳进面</div>
+                  <div class="emerald-page-number">{{ String(pageIndex + 1).padStart(2, '0') }} / {{ String(pages.length).padStart(2, '0') }}</div>
+                </template>
+                <template v-else-if="theme === 'analysis'">
                   <div class="analysis-masthead">
                     <span>{{ analysisHeader }}</span>
                     <span>笔试考点拆解</span>
@@ -146,7 +195,26 @@ const themeOptions = [
   { value: 'navy', label: '深蓝简洁风' },
   { value: 'green', label: '绿色备考风' },
   { value: 'analysis', label: '考点拆解杂志风' },
+  { value: 'emerald', label: '墨绿金色商务报告风' },
 ]
+
+const emeraldYear = computed(() => String(
+  props.product?.written_exam_time || props.product?.apply_time || props.product?.title || new Date().getFullYear()
+).match(/20\d{2}/)?.[0] || new Date().getFullYear())
+const emeraldMeta = computed(() => [
+  props.product?.apply_time ? `报名 ${props.product.apply_time}` : '',
+  props.product?.written_exam_time ? `笔试 ${props.product.written_exam_time}` : '',
+  props.product?.job_type_name || '',
+].filter(Boolean))
+const emeraldFacts = computed(() => [
+  { label: '招聘人数', value: props.product?.recruit_count || props.product?.recruitment_count || '' },
+  { label: '报名时间', value: props.product?.apply_time || props.product?.registration_time || '' },
+  { label: '笔试时间', value: props.product?.written_exam_time || '' },
+  { label: '岗位类型', value: props.product?.job_type_name || '' },
+].filter(item => String(item.value).trim()))
+function emeraldSectionNo(pageIndex, blockIndex) {
+  return String(pageIndex * 2 + blockIndex + 1).padStart(2, '0')
+}
 
 const analysisHeader = computed(() => {
   const year = String(props.product?.written_exam_time || props.product?.apply_time || props.product?.title || '').match(/20\d{2}/)?.[0]
@@ -229,7 +297,8 @@ const pages = computed(() => {
   let used = 0
   for (const block of pageBlocks.value) {
     const cost = block.paragraphs[0].length + (block.heading ? 90 : 0)
-    if (page.length && used + cost > (output.length ? 650 : 540)) {
+    const capacity = theme.value === 'emerald' ? (output.length ? 620 : 300) : (output.length ? 650 : 540)
+    if (page.length && used + cost > capacity) {
       output.push(page)
       page = []
       used = 0
@@ -480,7 +549,8 @@ async function renderImages() {
       const previousTransform = node.style.transform
       node.style.transform = 'none'
       try {
-        output.push(await toPng(node, { width: 1080, height: 1440, pixelRatio: 1, cacheBust: true, backgroundColor: theme.value === 'analysis' ? '#ffffff' : '#eef1f5' }))
+        const backgroundColor = theme.value === 'analysis' ? '#ffffff' : (theme.value === 'emerald' ? '#f7f3eb' : '#eef1f5')
+        output.push(await toPng(node, { width: 1080, height: 1440, pixelRatio: 1, cacheBust: true, backgroundColor }))
       } finally {
         node.style.transform = previousTransform
       }
@@ -556,4 +626,48 @@ h1{font-size:45px;line-height:1.35;margin:0 0 18px;font-weight:800;letter-spacin
 .theme-analysis .analysis-fact span{margin-top:7px;color:#77736d;font-family:"PingFang SC","Microsoft YaHei",sans-serif;font-size:17px}
 .theme-analysis .analysis-footer{display:block;position:absolute;z-index:2;left:76px;right:76px;bottom:0;padding:14px 0 32px;border-top:1px solid #d8d4cd;background:#fff;color:#77736d;font-family:"PingFang SC","Microsoft YaHei",sans-serif;font-size:18px}
 .theme-analysis .page-number{z-index:3;right:76px;bottom:32px;color:#77736d;font-family:"PingFang SC","Microsoft YaHei",sans-serif;font-size:18px}
+.theme-emerald{--emerald:#173d40;--emerald-soft:#eaf2f0;--gold:#b8833d;--paper:#f7f3eb;padding:0;background:var(--paper);color:#272823;font-family:"PingFang SC","Microsoft YaHei",sans-serif}
+.theme-emerald .page-inner{height:1440px;padding:0 54px 58px;border-radius:0;background:var(--paper)}
+.theme-emerald .emerald-hero{margin:0 -54px;padding:76px 54px 86px;background:var(--emerald);color:#fff}
+.theme-emerald .emerald-eyebrow{margin-bottom:38px;color:#e0c28b;font-size:20px;letter-spacing:5px}
+.theme-emerald h1{max-width:950px;margin:0 0 18px;color:#fff;font-family:"Songti SC","STSong","SimSun",serif;font-size:48px;font-weight:700;line-height:1.35;letter-spacing:1px}
+.theme-emerald .subtitle{max-width:900px;margin:0;color:#c6d4d1;text-align:left;font-size:23px;font-weight:400;line-height:1.6}
+.theme-emerald .emerald-meta{display:flex;flex-wrap:wrap;gap:22px 34px;margin-top:36px;color:#d9e3e0;font-size:18px}
+.theme-emerald .emerald-facts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px;margin:-52px -28px 0;position:relative;z-index:1}
+.theme-emerald .emerald-fact{display:flex;flex-direction:column;justify-content:center;min-height:126px;padding:20px 24px;border:1px solid #ded8cc;border-radius:18px;background:#fff;box-shadow:0 10px 24px rgba(40,55,48,.10)}
+.theme-emerald .emerald-fact strong{overflow:hidden;color:var(--emerald);font-family:"Songti SC","STSong","SimSun",serif;font-size:27px;line-height:1.25;text-overflow:ellipsis;white-space:nowrap}
+.theme-emerald .emerald-fact span{margin-top:12px;color:#696a64;font-size:17px}
+.theme-emerald .emerald-page-head{display:flex;justify-content:space-between;padding:30px 0 16px;border-bottom:2px solid var(--emerald);color:#787970;font-size:16px;letter-spacing:1px}
+.theme-emerald .emerald-content{padding:36px 0 42px}
+.theme-emerald .emerald-content-first{padding-top:68px}
+.theme-emerald .emerald-block{margin-bottom:32px}
+.theme-emerald .emerald-section-title{display:grid;grid-template-columns:auto auto 1fr;align-items:center;gap:14px;margin-bottom:24px}
+.theme-emerald .emerald-section-title>span{color:var(--gold);font-family:"Songti SC","STSong","SimSun",serif;font-size:27px;font-weight:700}
+.theme-emerald .emerald-section-title h2{margin:0;color:#20231f;font-family:"Songti SC","STSong","SimSun",serif;font-size:31px;line-height:1.3}
+.theme-emerald .emerald-section-title i{height:1px;background:#d9d0c0}
+.theme-emerald .emerald-block>p,.theme-emerald .emerald-lead{margin:0 0 20px;color:#363933;font-size:22px;line-height:1.82;text-align:justify;white-space:pre-wrap}
+.theme-emerald .emerald-intro{padding:26px 30px;border:1px solid #bed2cd;border-left:6px solid #277276;border-radius:16px;background:var(--emerald-soft)}
+.theme-emerald .emerald-intro .emerald-section-title{margin-bottom:14px}
+.theme-emerald .emerald-content-modules{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px 26px}
+.theme-emerald .emerald-content-modules .emerald-block:nth-child(n+3){grid-column:1/-1}
+.theme-emerald .emerald-module-card{height:100%;padding:26px 28px;border:1px solid #ddd6c9;border-radius:18px;background:#fff;box-shadow:0 10px 22px rgba(49,52,45,.06)}
+.theme-emerald .emerald-module-card>b{display:inline-block;padding:7px 15px;border-radius:20px;background:#e8f1ef;color:var(--emerald);font-size:16px}
+.theme-emerald .emerald-module-card h3{margin:22px 0 14px;color:var(--emerald);font-family:"Songti SC","STSong","SimSun",serif;font-size:29px}
+.theme-emerald .emerald-module-card p{margin:0;color:#454740;font-size:20px;line-height:1.75}
+.theme-emerald .emerald-steps{display:flex;flex-direction:column;gap:0}
+.theme-emerald .emerald-step{display:grid;grid-template-columns:58px 1fr;gap:20px;padding:18px 0;border-bottom:1px dashed #d8d1c5}
+.theme-emerald .emerald-step>span{display:flex;align-items:center;justify-content:center;width:52px;height:52px;border-radius:50%;background:var(--emerald);color:#fff;font-family:"Songti SC","STSong","SimSun",serif;font-size:24px}
+.theme-emerald .emerald-step strong{display:block;margin-bottom:7px;color:#22241f;font-size:21px}
+.theme-emerald .emerald-step p{margin:0;color:#5f6159;font-size:18px;line-height:1.55}
+.theme-emerald .emerald-content-last{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px}
+.theme-emerald .emerald-content-last .emerald-section-title{grid-column:1/-1}
+.theme-emerald .emerald-warning{position:relative;padding:25px 28px;border:1px solid #dfbd91;border-radius:18px;background:#fff8f0}
+.theme-emerald .emerald-warning::after{content:'!';position:absolute;right:24px;top:-16px;display:flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:50%;background:var(--gold);color:#fff;font-size:24px;font-weight:700}
+.theme-emerald .emerald-warning .emerald-section-title{display:block;margin-bottom:14px}.theme-emerald .emerald-warning .emerald-section-title>span,.theme-emerald .emerald-warning .emerald-section-title i{display:none}
+.theme-emerald .emerald-warning .emerald-section-title h2{color:#8a4b19;font-family:"PingFang SC","Microsoft YaHei",sans-serif;font-size:22px}
+.theme-emerald .emerald-closing{grid-column:1/-1;padding:34px 38px;border-radius:20px;background:var(--emerald);color:#fff}
+.theme-emerald .emerald-closing .emerald-section-title h2,.theme-emerald .emerald-closing>p{color:#fff}
+.theme-emerald .emerald-closing .emerald-section-title i{background:rgba(255,255,255,.25)}
+.theme-emerald .emerald-signoff{position:absolute;left:92px;bottom:82px;color:#e0c28b;font-size:20px;font-weight:700}
+.theme-emerald .emerald-page-number{position:absolute;right:54px;bottom:28px;color:#8a8b82;font-size:16px}
 </style>
