@@ -56,22 +56,46 @@
           <div class="preview-scale">
             <div :ref="el => setPageRef(el, pageIndex)" class="guide-page" :class="`theme-${theme}`">
               <div class="page-inner">
-                <div v-if="theme === 'analysis'" class="analysis-masthead">
-                  <span>{{ targetCompany }} · 笔试攻略</span>
-                  <span>考点拆解</span>
-                </div>
-                <template v-if="pageIndex === 0">
-                  <h1>{{ guide.title }}</h1>
-                  <div v-if="guide.subtitle" class="subtitle">{{ guide.subtitle }}</div>
-                  <div class="divider" />
+                <template v-if="theme === 'analysis'">
+                  <div class="analysis-masthead">
+                    <span>{{ analysisHeader }}</span>
+                    <span>笔试考点拆解</span>
+                  </div>
+                  <div class="analysis-kicker">{{ analysisKicker(pageIndex) }}</div>
+                  <template v-if="pageIndex === 0">
+                    <h1>{{ guide.title }}</h1>
+                    <div v-if="guide.subtitle" class="subtitle">{{ guide.subtitle }}</div>
+                  </template>
+                  <div class="analysis-content">
+                    <section v-for="(block, blockIndex) in page" :key="blockIndex" :class="['analysis-block', `analysis-${block.kind}`]">
+                      <div v-if="block.heading" class="analysis-block-title">
+                        <span class="analysis-block-no">{{ String(blockIndex + 1).padStart(2, '0') }}</span>
+                        <h2>{{ block.heading }}</h2>
+                      </div>
+                      <p v-for="(paragraph, pIndex) in block.paragraphs" :key="pIndex">{{ paragraph }}</p>
+                    </section>
+                  </div>
+                  <div v-if="pageIndex === 0 && analysisFacts.length" class="analysis-facts">
+                    <div v-for="fact in analysisFacts" :key="fact.label" class="analysis-fact">
+                      <strong>{{ fact.value }}</strong><span>{{ fact.label }}</span>
+                    </div>
+                  </div>
+                  <div class="analysis-footer">{{ analysisHeader }}</div>
+                  <div class="page-number">{{ String(pageIndex + 1).padStart(2, '0') }} / {{ String(pages.length).padStart(2, '0') }}</div>
                 </template>
-                <div v-for="(block, blockIndex) in page" :key="blockIndex" :class="['content-block', `block-${block.kind}`]">
-                  <h2 v-if="block.heading">{{ block.heading }}</h2>
-                  <p v-for="(paragraph, pIndex) in block.paragraphs" :key="pIndex">{{ paragraph }}</p>
-                </div>
-                <div class="watermark">{{ targetCompany }} · 笔试攻略</div>
-                <div v-if="theme === 'analysis'" class="analysis-footer">{{ targetCompany }} · 完整笔试攻略</div>
-                <div class="page-number">{{ pageIndex + 1 }} / {{ pages.length }}</div>
+                <template v-else>
+                  <template v-if="pageIndex === 0">
+                    <h1>{{ guide.title }}</h1>
+                    <div v-if="guide.subtitle" class="subtitle">{{ guide.subtitle }}</div>
+                    <div class="divider" />
+                  </template>
+                  <div v-for="(block, blockIndex) in page" :key="blockIndex" :class="['content-block', `block-${block.kind}`]">
+                    <h2 v-if="block.heading">{{ block.heading }}</h2>
+                    <p v-for="(paragraph, pIndex) in block.paragraphs" :key="pIndex">{{ paragraph }}</p>
+                  </div>
+                  <div class="watermark">{{ targetCompany }} · 笔试攻略</div>
+                  <div class="page-number">{{ pageIndex + 1 }} / {{ pages.length }}</div>
+                </template>
               </div>
             </div>
           </div>
@@ -114,6 +138,20 @@ const themeOptions = [
   { value: 'analysis', label: '考点拆解杂志风' },
 ]
 
+const analysisHeader = computed(() => {
+  const year = String(props.product?.written_exam_time || props.product?.apply_time || props.product?.title || '').match(/20\d{2}/)?.[0]
+  return [year, targetCompany.value.trim(), props.product?.job_type_name].filter(Boolean).join(' · ')
+})
+const analysisFacts = computed(() => [
+  { label: '招聘人数', value: props.product?.recruit_count || props.product?.recruitment_count || '' },
+  { label: '报名时间', value: props.product?.apply_time || props.product?.registration_time || '' },
+  { label: '笔试时间', value: props.product?.written_exam_time || '' },
+].filter(item => String(item.value).trim()))
+function analysisKicker(index) {
+  if (index === 0) return '一 · 考试概览'
+  return `${['二', '三', '四', '五', '六', '七', '八', '九'][Math.min(index - 1, 7)]} · 攻略拆解`
+}
+
 function splitText(value, max = 250) {
   const source = String(value || '').split(/\n+/).map(v => v.trim()).filter(Boolean)
   const result = []
@@ -138,13 +176,13 @@ const pages = computed(() => {
   const output = []
   let page = []
   let used = 0
-  let capacity = 540
+  let capacity = theme.value === 'analysis' ? 390 : 540
   for (const block of blocks) {
     let first = true
     for (const paragraph of block.paragraphs) {
       const cost = paragraph.length + (first && block.heading ? 90 : 0)
       if (page.length && used + cost > capacity) {
-        output.push(page); page = []; used = 0; capacity = 650
+        output.push(page); page = []; used = 0; capacity = theme.value === 'analysis' ? 500 : 650
       }
       page.push({ kind: block.kind, heading: first ? block.heading : '', paragraphs: [paragraph] })
       used += cost
@@ -187,9 +225,10 @@ function parseGuide(text) {
 }
 
 const sensitiveReplacements = [
-  [/习近平新时代中国特色社会主义思想/g, '相关重要理论'],
-  [/(习近平|毛泽东|邓小平|江泽民|胡锦涛|李克强|李强)/g, '相关重要人物'],
-  [/(总书记|国家主席|国务院总理)/g, '相关负责人'],
+  [/习\s*近\s*平(?:\s*总\s*书\s*记|\s*国\s*家\s*主\s*席)?(?:\s*重要)?\s*讲话(?:\s*要点)?/g, '公共基础相关内容'],
+  [/习\s*近\s*平\s*新\s*时\s*代\s*中\s*国\s*特\s*色\s*社\s*会\s*主\s*义\s*思\s*想/g, '相关重要理论'],
+  [/(习\s*近\s*平|毛\s*泽\s*东|邓\s*小\s*平|江\s*泽\s*民|胡\s*锦\s*涛|李\s*克\s*强|李\s*强)/g, '相关重要人物'],
+  [/(总\s*书\s*记|国\s*家\s*主\s*席|国\s*务\s*院\s*总\s*理)/g, '相关负责人'],
   [/时事政治/g, '时事热点'],
   [/政治理论/g, '公共基础理论'],
   [/政治常识/g, '公共基础常识'],
@@ -226,6 +265,18 @@ function sanitizeGuideContent(value) {
     })),
     closing: sanitizeSensitiveText(value.closing),
   }
+}
+
+let sanitizingGuide = false
+function sanitizeGuideInPlace() {
+  if (sanitizingGuide) return
+  const sanitized = sanitizeGuideContent(guide)
+  const before = JSON.stringify(guide)
+  const after = JSON.stringify(sanitized)
+  if (before === after) return
+  sanitizingGuide = true
+  Object.assign(guide, sanitized)
+  nextTick(() => { sanitizingGuide = false })
 }
 
 function cleanJsonText(text) {
@@ -355,6 +406,7 @@ async function downloadAll() {
 }
 
 watch(() => props.product?.company_name, value => { if (value) targetCompany.value = value }, { immediate: true })
+watch(guide, sanitizeGuideInPlace, { deep: true, flush: 'sync' })
 watch([() => guide.title, () => guide.subtitle, () => guide.intro, () => guide.closing, () => guide.sections.map(item => `${item.title}:${item.content}`).join('|'), theme], () => { images.value = [] })
 onMounted(loadProfile)
 </script>
@@ -369,23 +421,29 @@ h1{font-size:45px;line-height:1.35;margin:0 0 18px;font-weight:800;letter-spacin
 .block-intro{background:var(--soft);border-left:7px solid var(--accent);border-radius:16px;padding:26px 30px}.block-intro h2{border:0;padding:0}.block-closing{background:#f7f9fb;border:1px solid #e1e7ee;border-radius:18px;padding:26px 30px}
 .watermark{position:absolute;left:180px;top:620px;transform:rotate(-48deg);font-size:48px;color:rgba(90,105,120,.10);white-space:nowrap}.page-number{position:absolute;right:45px;bottom:26px;color:#9aa7b4;font-size:19px}
 .theme-blue{--accent:#3788ed;--soft:#edf6ff}.theme-navy{--accent:#193c68;--soft:#f0f4f8}.theme-green{--accent:#24956b;--soft:#edf9f4}
-.analysis-masthead,.analysis-footer{display:none}
 .theme-analysis{--accent:#b5362d;--soft:#f5f1e8;background:#fff;padding:0;color:#151515;font-family:"Songti SC","STSong","SimSun",serif}
 .theme-analysis .page-inner{height:1440px;border-radius:0;padding:62px 76px 78px;background:#fff}
 .theme-analysis .analysis-masthead{display:flex;justify-content:space-between;align-items:center;padding-bottom:14px;margin-bottom:42px;border-bottom:3px solid #171717;color:#6f6b65;font-family:"PingFang SC","Microsoft YaHei",sans-serif;font-size:20px;letter-spacing:.5px}
-.theme-analysis h1{max-width:880px;margin:0 0 24px;color:#111;font-family:"Songti SC","STSong","SimSun",serif;font-size:58px;font-weight:500;line-height:1.25;letter-spacing:4px}
+.theme-analysis .analysis-kicker{margin-bottom:22px;color:#77736d;font-family:"PingFang SC","Microsoft YaHei",sans-serif;font-size:23px;letter-spacing:1px}
+.theme-analysis h1{max-width:900px;margin:0 0 22px;color:#111;font-family:"Songti SC","STSong","SimSun",serif;font-size:60px;font-weight:500;line-height:1.25;letter-spacing:4px}
 .theme-analysis .subtitle{text-align:left;margin:0 0 28px;color:#b5362d;font-family:"PingFang SC","Microsoft YaHei",sans-serif;font-size:27px;font-weight:700;line-height:1.55}
-.theme-analysis .divider{height:1px;margin:22px 0 34px;background:#d9d5ce}
-.theme-analysis .content-block{margin-bottom:29px}
-.theme-analysis .content-block h2{margin:0 0 17px;padding:0;border:0;color:#171717;font-family:"Songti SC","STSong","SimSun",serif;font-size:39px;font-weight:500;line-height:1.35;letter-spacing:2px}
-.theme-analysis .content-block p{margin:0 0 18px;color:#393735;font-family:"PingFang SC","Microsoft YaHei",sans-serif;font-size:25px;line-height:1.82;text-align:left}
-.theme-analysis .block-intro{padding:25px 28px;border:0;border-radius:0;background:#f5f1e8}
-.theme-analysis .block-intro h2{color:#b5362d;font-family:"PingFang SC","Microsoft YaHei",sans-serif;font-size:27px;font-weight:700;letter-spacing:0}
-.theme-analysis .block-section{padding-bottom:21px;border-bottom:1px solid #e6e2dc}
-.theme-analysis .block-closing{padding:25px 30px;border:0;border-radius:0;background:#151515}
-.theme-analysis .block-closing h2,.theme-analysis .block-closing p{color:#fff}
-.theme-analysis .block-closing h2{font-family:"PingFang SC","Microsoft YaHei",sans-serif;font-size:28px;font-weight:700;letter-spacing:0}
-.theme-analysis .watermark{display:none}
+.theme-analysis .analysis-content{margin-top:26px}
+.theme-analysis .analysis-block{padding:0 0 24px;margin-bottom:25px;border-bottom:1px solid #e6e2dc}
+.theme-analysis .analysis-block-title{display:grid;grid-template-columns:70px 1fr;align-items:start;gap:18px;margin-bottom:14px}
+.theme-analysis .analysis-block-no{color:#d8d2c8;font-family:"Songti SC","STSong","SimSun",serif;font-size:47px;line-height:1}
+.theme-analysis .analysis-block h2{margin:0;color:#171717;font-family:"Songti SC","STSong","SimSun",serif;font-size:38px;font-weight:500;line-height:1.32;letter-spacing:2px}
+.theme-analysis .analysis-block p{margin:0 0 13px;color:#484540;font-family:"PingFang SC","Microsoft YaHei",sans-serif;font-size:24px;line-height:1.78;text-align:left;white-space:pre-wrap}
+.theme-analysis .analysis-intro{padding:24px 28px;border:0;background:#f5f1e8}
+.theme-analysis .analysis-intro .analysis-block-no{color:#b5362d}
+.theme-analysis .analysis-intro h2{color:#b5362d;font-family:"PingFang SC","Microsoft YaHei",sans-serif;font-size:28px;font-weight:700;letter-spacing:0}
+.theme-analysis .analysis-closing{padding:24px 28px;border:0;background:#151515}
+.theme-analysis .analysis-closing .analysis-block-no{color:#e2b643}
+.theme-analysis .analysis-closing h2,.theme-analysis .analysis-closing p{color:#fff}
+.theme-analysis .analysis-facts{display:grid;grid-template-columns:repeat(3,1fr);position:absolute;left:76px;right:76px;bottom:100px;border:2px solid #202020;background:#fff}
+.theme-analysis .analysis-fact{display:flex;flex-direction:column;justify-content:center;align-items:center;min-height:100px;padding:12px 16px;text-align:center;border-right:1px solid #d8d4cd}
+.theme-analysis .analysis-fact:last-child{border-right:0}
+.theme-analysis .analysis-fact strong{color:#b5362d;font-family:"Songti SC","STSong","SimSun",serif;font-size:25px;font-weight:500;line-height:1.35}
+.theme-analysis .analysis-fact span{margin-top:7px;color:#77736d;font-family:"PingFang SC","Microsoft YaHei",sans-serif;font-size:17px}
 .theme-analysis .analysis-footer{display:block;position:absolute;left:76px;right:76px;bottom:32px;padding-top:12px;border-top:1px solid #d8d4cd;color:#77736d;font-family:"PingFang SC","Microsoft YaHei",sans-serif;font-size:18px}
 .theme-analysis .page-number{right:76px;bottom:32px;color:#77736d;font-family:"PingFang SC","Microsoft YaHei",sans-serif;font-size:18px}
 </style>
