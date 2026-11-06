@@ -873,6 +873,9 @@
               <a-button type="primary" ghost size="small" @click="openMultiStyleCoverPicker">
                 生成多风格封面
               </a-button>
+              <a-button type="primary" ghost size="small" @click="matrixCoverRef?.open()">
+                生成矩阵封面
+              </a-button>
             </div>
             <div v-if="coverPromptMode === 'specified'" class="cover-prompt-options">
               <a-spin v-if="coverPromptOptionsLoading" />
@@ -942,7 +945,7 @@
       <a-alert
         type="info"
         show-icon
-        message="已根据当前企业与封面标题生成 8 个风格提示词。可直接编辑，选择其中一个生成封面。"
+        message="已根据当前企业与封面标题生成 18 个差异化风格提示词。每套采用不同场景、素材和内容视角，可直接编辑后生成。"
         style="margin-bottom:16px"
       />
       <div class="multi-cover-grid">
@@ -973,6 +976,8 @@
         </a-card>
       </div>
     </a-modal>
+
+    <MatrixCoverGenerator ref="matrixCoverRef" :product="data" @generate="handleMatrixCoverGenerate" />
 
     <a-modal
       v-model:open="cardTemplatePickerVisible"
@@ -1642,6 +1647,7 @@ import { LeftOutlined, EditOutlined, FileTextOutlined, DownloadOutlined, BulbOut
 import HtmlCardImages from './components/HtmlCardImages.vue'
 import NoteImageSetDrawer from './components/NoteImageSetDrawer.vue'
 import ImaExamGuide from './components/ImaExamGuide.vue'
+import MatrixCoverGenerator from './components/MatrixCoverGenerator.vue'
 import { getProductDetail } from '@/api/products'
 import { getContentTemplateList } from '@/api/contentTemplates'
 import { getPromptList } from '@/api/prompts'
@@ -1711,6 +1717,7 @@ const selectedCoverPrompt = computed(() =>
 const multiStyleCoverVisible = ref(false)
 const multiStyleCoverPlans = ref([])
 const activeMultiStyleId = ref('')
+const matrixCoverRef = ref(null)
 const templateModalVisible = ref(false)
 const communityImageDrawer = reactive({
   visible: false,
@@ -2396,6 +2403,76 @@ const MULTI_COVER_STYLES = [
     description: '出版物式排版，克制、稳重、耐看。',
     visual: '暖白纸张背景，深灰蓝大标题但不顶满画面，细线分隔，单一低饱和橙色小标签，大面积留白，少量页码或书页线稿元素，像专业考试教辅书内页，极简、清晰、稳重',
   },
+  {
+    id: 'timeline-planner', name: '时间轴备考计划风', swatch: 'linear-gradient(135deg,#f7fbff,#7aa7c7)',
+    description: '用时间轴串联报名、笔试与复习动作。',
+    visual: '极浅蓝灰纸张背景，深蓝灰标题，中央使用一条清晰的纵向时间轴，圆点节点配简短日期标签，底部是一张小型复习计划便签；仅使用低饱和蓝与暖橙强调，像整洁的项目计划页',
+    angle: '从时间管理角度呈现，先展示报名和笔试节点，再给出按先后顺序排列的备考动作。',
+    structure: '标题区 + 纵向时间轴 + 复习动作清单。时间轴只放商品中存在的日期，不补造倒计时天数。',
+  },
+  {
+    id: 'exam-blueprint', name: '考试蓝图数据风', swatch: 'linear-gradient(135deg,#eef6f6,#3d7776)',
+    description: '数据卡与科目蓝图组合，快速掌握全貌。',
+    visual: '暖白背景，墨绿色细边框，顶部为大标题，下方用三张等宽数字卡呈现基础信息，主体用简洁的横向条带展示笔试范围，搭配极少量圆环或刻度线元素；像明亮的咨询报告信息图，不做深色大屏',
+    angle: '从考试全貌角度呈现，突出“招多少、何时报名、何时考试、考什么”四个读者最先关心的问题。',
+    structure: '标题区 + 三项数据卡 + 笔试范围蓝图 + 两条优先级建议。',
+  },
+  {
+    id: 'library-index', name: '图书馆索引卡风', swatch: 'linear-gradient(135deg,#fbf6e9,#b89765)',
+    description: '索引卡、书签和编号标签，知识感强。',
+    visual: '浅米色书页背景，中央是一张放大的图书馆索引卡，使用细横线、编号、书签和页签元素，标题像书目名称，深棕灰文字配低饱和橄榄绿；可在角落放一支铅笔与一小叠无字卡片，保持真实纸张质感和清晰排版',
+    angle: '从资料索引角度呈现，把笔试内容整理成可检索的知识目录，并给出资料准备顺序。',
+    structure: '书目式主标题 + 基础信息索引行 + 3—5个知识目录条目 + 资料准备建议。',
+  },
+  {
+    id: 'newspaper-brief', name: '招聘简报报刊风', swatch: 'linear-gradient(135deg,#fffdf8,#8f9aa3)',
+    description: '报刊头版式信息编排，正式且重点鲜明。',
+    visual: '象牙白新闻纸背景，深灰黑衬线大标题，细双线报头，正文采用两栏但每栏文字简短，使用一个低饱和红色日期章作为小面积强调；配一张无文字的钢笔或文件夹小插图，像现代招聘简报而非复古旧报纸',
+    angle: '从招聘快讯角度呈现，用“核心事实、考试范围、备考提醒”三个新闻栏目组织内容。',
+    structure: '报头 + 主标题 + 核心事实导语 + 两栏短信息 + 底部备考提醒。避免长段落。',
+  },
+  {
+    id: 'roadmap-route', name: '上岸路线图风', swatch: 'linear-gradient(135deg,#f4fbf7,#72a98c)',
+    description: '路线节点展示从报名到备考的完整路径。',
+    visual: '浅灰绿色纸张背景，一条从左上到右下的柔和曲线路径贯穿画面，沿途放置3—5个圆形节点和简洁图标，如文件、书本、铅笔、试卷；深墨绿标题，节点采用低饱和绿和杏色，画面像清晰的学习路线图',
+    angle: '从行动路径角度呈现，把考生下一步该做什么拆成连续节点，强调执行顺序。',
+    structure: '主标题 + 基础信息起点卡 + 3—5步路线节点 + 终点备考目标。不得编造录取结果。',
+  },
+  {
+    id: 'clipboard-checklist', name: '清单夹板执行风', swatch: 'linear-gradient(135deg,#fafafa,#9bb6a5)',
+    description: '大号清单与勾选框，行动建议直接明确。',
+    visual: '浅灰白桌面背景，中间是一张白色夹板纸，顶部金属夹具，深灰标题，内容用大号复选框和短句排列，低饱和绿色表示重点；角落只放一支中性笔和一个无字便利贴，不出现复杂装饰',
+    angle: '从任务执行角度呈现，基础信息作为“先确认”，笔试范围作为“要复习”，建议作为“立即行动”。',
+    structure: '标题 + 已确认基础信息清单 + 复习范围清单 + 今日可执行的2—3项任务。',
+  },
+  {
+    id: 'calendar-countdown', name: '日历节点提醒风', swatch: 'linear-gradient(135deg,#fff9f2,#d99c78)',
+    description: '日历与提醒贴纸突出关键时间和备考节奏。',
+    visual: '暖白背景，顶部一张简洁翻页日历，日期使用低饱和陶土橙，正文为深灰；下方用两个小提醒贴纸展示报名与笔试信息，再配一条简短复习节奏栏，材质像纸质日程本，明亮、克制、易读',
+    angle: '从关键日期提醒角度呈现，突出不会错过的时间信息，并衔接考前复习重点。',
+    structure: '标题 + 日历主节点 + 报名/笔试提醒贴 + 笔试内容摘要 + 两条节奏建议。只使用已有日期。',
+  },
+  {
+    id: 'question-board', name: '问题拆解答疑风', swatch: 'linear-gradient(135deg,#f5f8fb,#879bb5)',
+    description: '用考生最关心的问题组织封面内容。',
+    visual: '浅灰蓝纸张背景，顶部深蓝灰标题，主体使用三张纵向问答卡，每张以大号问号、短问题和一行答案构成，卡片边框细且留白充足；可配一个小放大镜线稿，整体像清楚的FAQ答疑页',
+    angle: '从考生疑问角度呈现，围绕“什么时候、考什么、怎么准备”三个问题给出明确回答。',
+    structure: '主标题 + 3个问题卡 + 底部一句行动建议。回答严格取自商品信息，未知内容不提。',
+  },
+  {
+    id: 'mindmap-study', name: '知识树思维导图风', swatch: 'linear-gradient(135deg,#fbfbf4,#91aa72)',
+    description: '中心主题向外展开知识分支，范围直观。',
+    visual: '米白纸张背景，中央偏上是主标题卡，向下延伸3—5条清晰分支，每条分支包含一个短标签和一个小型线稿图标，使用低饱和橄榄绿、蓝灰和杏色区分层级；分支间距宽，不做密集脑图',
+    angle: '从知识结构角度呈现，将已明确的笔试内容归纳为若干复习分支，帮助读者快速建立框架。',
+    structure: '标题中心节点 + 3—5个笔试范围分支 + 底部复习顺序。分支名称必须来自已提供的笔试内容。',
+  },
+  {
+    id: 'case-file', name: '备考档案袋风', swatch: 'linear-gradient(135deg,#f2eee5,#8d7458)',
+    description: '档案标签与文件页组合，稳重、有资料感。',
+    visual: '浅卡其桌面背景，一只打开的牛皮纸档案袋承托白色资料页，资料页上有深灰标题、打字机感小标签、细线信息栏和红棕色小印章形状但印章内不写机构名；旁边放回形针与无字索引签，真实、稳重、清晰',
+    angle: '从备考档案角度呈现，把企业信息、考试信息、复习重点分别归档，形成“一页资料包”。',
+    structure: '档案标题 + 企业事实栏 + 考试范围栏 + 重点资料栏 + 两条档案备注式建议。',
+  },
 ]
 
 function buildMultiStyleCoverPrompt(style) {
@@ -2418,10 +2495,13 @@ function buildMultiStyleCoverPrompt(style) {
     examContent ? `【允许出现的笔试内容】${examContent.slice(0, 100)}` : '',
     examContent ? '【必须增加备考建议】根据上述笔试内容提炼2—3条简短、可执行的备考建议，每条不超过18个汉字。建议只能涉及已明确出现的科目或知识范围，不得自行增加行测、申论、面试等未提供内容。' : '',
     `【视觉风格】${style.visual}`,
-    '【整体观感】参考清晰工整的活页笔记或考试讲义：以白色、暖白或极浅色纸张为主，深灰黑文字，最多使用一种低饱和辅助色。信息按标题、章节、小段正文三级排列，一眼能看清重点。',
+    style.angle ? `【本风格内容视角】${style.angle}` : '',
+    style.structure ? `【本风格信息结构】${style.structure}` : '',
+    '【整体观感】画面必须清晰、一目了然，保持明显的信息层级和舒适留白。可以使用纸张、表格、时间轴、路线、卡片、清单、日历、档案或思维导图等与本风格匹配的单一核心视觉语言，不能仅靠换配色制造差异。',
     '【视觉禁用】禁止高饱和纯色满屏背景，禁止荧光黄、纯黑、鲜红的大面积碰撞，禁止粗黑几何块、密集箭头、强烈渐变、霓虹光效、文字挤满画面。除主标题外不要全部使用超粗字体。',
     '【单图硬性要求】只输出一张完整封面，采用一个统一版式并铺满整个画布。严禁拼贴、九宫格、上下分屏、左右分屏、三联画、方案对比图、画中画、样机展示或在一张图里重复多个封面。',
-    '【信息布局】主标题放在画面上部，字号醒目但不超过画面高度的四分之一；基础信息放在标题下方，使用三行清单、三格信息栏或三个简洁标签，必须逐项清晰显示，不得省略、改写或藏入小字；笔试内容放在下方独立区域；最下方设置“备考建议”小节，以2—3条编号清单呈现。四周保留安全边距，正文使用正常字重和舒适行距。',
+    '【信息布局】主标题放在画面上部，字号醒目但不超过画面高度的四分之一。基础信息必须逐项清晰显示，不得省略、改写或藏入小字；其余信息按照本风格指定的内容视角与结构呈现。四周保留安全边距，正文使用正常字重和舒适行距，每个信息块尽量控制在1—3行。',
+    '【多元化要求】本方案必须使用自己的场景、素材和信息组织方式，不要自动回退成通用的“标题+四个方块+大段文字”模板。视觉素材只服务于信息表达，装饰不得遮挡文字；同一画面只保留一个核心场景，避免拼贴和素材堆砌。',
     '内容优先级依次为：单位与主标题、招聘人数/报名时间/笔试时间、笔试内容、备考建议。空间不足时精简装饰和建议文字，不得删除或缩小基础信息。',
     '只呈现商品详情中实际存在的基础信息；某个字段为空时直接不显示，不使用“待定”“另行通知”补位。报名时间、笔试时间和招聘人数必须原样使用，不得推算、缩写或虚构。',
     '只使用简体中文，不添加二维码、品牌Logo、水印、关注私信、置顶评论、点击获取等引流文案。',
@@ -2450,6 +2530,13 @@ async function generateSelectedMultiStyle(item) {
   } finally {
     activeMultiStyleId.value = ''
   }
+}
+
+async function handleMatrixCoverGenerate(plan) {
+  const prompt = String(plan?.prompt || '').trim()
+  if (!prompt) { message.warning('矩阵封面方案缺少图片提示词'); return }
+  coverPromptUsed.value = prompt
+  await generateCoverImage(true, { skipVariation: true })
 }
 
 async function generateCoverImage(useEditedPrompt = false, options = {}) {
