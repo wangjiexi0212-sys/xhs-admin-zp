@@ -72,7 +72,17 @@
                         <span class="analysis-block-no">{{ String(blockIndex + 1).padStart(2, '0') }}</span>
                         <h2>{{ block.heading }}</h2>
                       </div>
-                      <p v-for="(paragraph, pIndex) in block.paragraphs" :key="pIndex">{{ paragraph }}</p>
+                      <p v-if="analysisBlockView(block).lead" class="analysis-lead">{{ analysisBlockView(block).lead }}</p>
+                      <div v-if="analysisBlockView(block).items.length" class="analysis-item-list">
+                        <div v-for="(item, itemIndex) in analysisBlockView(block).items" :key="itemIndex" class="analysis-item">
+                          <span class="analysis-item-no">{{ String(itemIndex + 1).padStart(2, '0') }}</span>
+                          <div class="analysis-item-copy">
+                            <strong>{{ item.title }}</strong>
+                            <span v-if="item.detail">{{ item.detail }}</span>
+                          </div>
+                          <em v-if="item.value">{{ item.value }}</em>
+                        </div>
+                      </div>
                     </section>
                   </div>
                   <div v-if="pageIndex === 0 && analysisFacts.length" class="analysis-facts">
@@ -152,6 +162,38 @@ function analysisKicker(index) {
   return `${['二', '三', '四', '五', '六', '七', '八', '九'][Math.min(index - 1, 7)]} · 攻略拆解`
 }
 
+function analysisBlockView(block) {
+  const raw = (block?.paragraphs || []).map(value => String(value || '').trim()).filter(Boolean).join('\n')
+  if (!raw) return { lead: '', items: [] }
+  const chunks = raw
+    .split(/\n+|(?<=[。！？；])/)
+    .map(value => value.replace(/^[①②③④⑤⑥⑦⑧⑨⑩\d一二三四五六七八九十]+[、.．)）]\s*/, '').trim())
+    .filter(value => value.length >= 6)
+  const lead = chunks.shift() || ''
+  const items = chunks.slice(0, 5).map((sentence) => {
+    const clean = sentence.replace(/[。；]$/, '')
+    const colonIndex = clean.search(/[：:]/)
+    let title = ''
+    let detail = ''
+    if (colonIndex > 1 && colonIndex <= 18) {
+      title = clean.slice(0, colonIndex).trim()
+      detail = clean.slice(colonIndex + 1).trim()
+    } else {
+      const commaIndex = clean.search(/[，,]/)
+      const splitAt = commaIndex >= 5 && commaIndex <= 18 ? commaIndex : Math.min(16, clean.length)
+      title = clean.slice(0, splitAt).trim()
+      detail = clean.slice(splitAt).replace(/^[，,]\s*/, '').trim()
+    }
+    const value = clean.match(/\d+(?:\.\d+)?\s*(?:%|人|名|分|题|天|分钟|小时|个月|年)/)?.[0] || ''
+    return { title, detail: detail.slice(0, 58), value }
+  })
+  if (!items.length && lead.length > 70) {
+    const detail = lead.slice(18)
+    return { lead: '', items: [{ title: lead.slice(0, 18), detail: detail.slice(0, 58), value: lead.match(/\d+(?:\.\d+)?\s*(?:%|人|名|分|题|天|分钟|小时|个月|年)/)?.[0] || '' }] }
+  }
+  return { lead: lead.slice(0, 110), items }
+}
+
 function splitText(value, max = 250) {
   const source = String(value || '').split(/\n+/).map(v => v.trim()).filter(Boolean)
   const result = []
@@ -176,13 +218,13 @@ const pages = computed(() => {
   const output = []
   let page = []
   let used = 0
-  let capacity = theme.value === 'analysis' ? 390 : 540
+  let capacity = theme.value === 'analysis' ? 520 : 540
   for (const block of blocks) {
     let first = true
     for (const paragraph of block.paragraphs) {
       const cost = paragraph.length + (first && block.heading ? 90 : 0)
       if (page.length && used + cost > capacity) {
-        output.push(page); page = []; used = 0; capacity = theme.value === 'analysis' ? 500 : 650
+        output.push(page); page = []; used = 0; capacity = theme.value === 'analysis' ? 620 : 650
       }
       page.push({ kind: block.kind, heading: first ? block.heading : '', paragraphs: [paragraph] })
       used += cost
@@ -432,14 +474,23 @@ h1{font-size:45px;line-height:1.35;margin:0 0 18px;font-weight:800;letter-spacin
 .theme-analysis .analysis-block-title{display:grid;grid-template-columns:70px 1fr;align-items:start;gap:18px;margin-bottom:14px}
 .theme-analysis .analysis-block-no{color:#d8d2c8;font-family:"Songti SC","STSong","SimSun",serif;font-size:47px;line-height:1}
 .theme-analysis .analysis-block h2{margin:0;color:#171717;font-family:"Songti SC","STSong","SimSun",serif;font-size:38px;font-weight:500;line-height:1.32;letter-spacing:2px}
-.theme-analysis .analysis-block p{margin:0 0 13px;color:#484540;font-family:"PingFang SC","Microsoft YaHei",sans-serif;font-size:24px;line-height:1.78;text-align:left;white-space:pre-wrap}
+.theme-analysis .analysis-lead{margin:0 0 20px;color:#484540;font-family:"PingFang SC","Microsoft YaHei",sans-serif;font-size:24px;line-height:1.72;text-align:left}
+.theme-analysis .analysis-item-list{border-top:1px solid #e6e2dc}
+.theme-analysis .analysis-item{display:grid;grid-template-columns:48px minmax(0,1fr) auto;align-items:center;gap:16px;min-height:84px;padding:13px 0;border-bottom:1px solid #e6e2dc}
+.theme-analysis .analysis-item-no{color:#d1cbc1;font-family:"Songti SC","STSong","SimSun",serif;font-size:28px}
+.theme-analysis .analysis-item-copy{display:flex;flex-direction:column;gap:6px;min-width:0;font-family:"PingFang SC","Microsoft YaHei",sans-serif}
+.theme-analysis .analysis-item-copy strong{overflow:hidden;color:#171717;font-size:25px;font-weight:650;line-height:1.3;text-overflow:ellipsis;white-space:nowrap}
+.theme-analysis .analysis-item-copy span{overflow:hidden;color:#807b74;font-size:19px;line-height:1.4;text-overflow:ellipsis;white-space:nowrap}
+.theme-analysis .analysis-item em{color:#b5362d;font-family:"Songti SC","STSong","SimSun",serif;font-size:31px;font-style:normal;white-space:nowrap}
 .theme-analysis .analysis-intro{padding:24px 28px;border:0;background:#f5f1e8}
 .theme-analysis .analysis-intro .analysis-block-no{color:#b5362d}
 .theme-analysis .analysis-intro h2{color:#b5362d;font-family:"PingFang SC","Microsoft YaHei",sans-serif;font-size:28px;font-weight:700;letter-spacing:0}
+.theme-analysis .analysis-intro .analysis-item-list{border-top-color:#dcd4c7}.theme-analysis .analysis-intro .analysis-item{border-bottom-color:#dcd4c7}
 .theme-analysis .analysis-closing{padding:24px 28px;border:0;background:#151515}
 .theme-analysis .analysis-closing .analysis-block-no{color:#e2b643}
-.theme-analysis .analysis-closing h2,.theme-analysis .analysis-closing p{color:#fff}
-.theme-analysis .analysis-facts{display:grid;grid-template-columns:repeat(3,1fr);position:absolute;left:76px;right:76px;bottom:100px;border:2px solid #202020;background:#fff}
+.theme-analysis .analysis-closing h2,.theme-analysis .analysis-closing .analysis-lead,.theme-analysis .analysis-closing .analysis-item-copy strong{color:#fff}
+.theme-analysis .analysis-closing .analysis-item-copy span{color:#c9c5bf}.theme-analysis .analysis-closing .analysis-item-list{border-top-color:#444}.theme-analysis .analysis-closing .analysis-item{border-bottom-color:#444}
+.theme-analysis .analysis-facts{display:grid;grid-template-columns:repeat(3,1fr);margin-top:28px;border:2px solid #202020;background:#fff}
 .theme-analysis .analysis-fact{display:flex;flex-direction:column;justify-content:center;align-items:center;min-height:100px;padding:12px 16px;text-align:center;border-right:1px solid #d8d4cd}
 .theme-analysis .analysis-fact:last-child{border-right:0}
 .theme-analysis .analysis-fact strong{color:#b5362d;font-family:"Songti SC","STSong","SimSun",serif;font-size:25px;font-weight:500;line-height:1.35}
