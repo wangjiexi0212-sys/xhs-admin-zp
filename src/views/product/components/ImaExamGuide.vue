@@ -180,6 +180,48 @@ function parseGuide(text) {
   }
 }
 
+const sensitiveReplacements = [
+  [/习近平新时代中国特色社会主义思想/g, '相关重要理论'],
+  [/(习近平|毛泽东|邓小平|江泽民|胡锦涛|李克强|李强)/g, '相关重要人物'],
+  [/(总书记|国家主席|国务院总理)/g, '相关负责人'],
+  [/时事政治/g, '时事热点'],
+  [/政治理论/g, '公共基础理论'],
+  [/政治常识/g, '公共基础常识'],
+  [/政治素质/g, '综合素质'],
+  [/政治面貌/g, '个人基本信息'],
+  [/政治/g, '公共政策'],
+  [/(马克思主义|中国特色社会主义|社会主义核心价值观)/g, '相关基础理论'],
+  [/(二十大|十九大|十八大|全国两会|全国人民代表大会|中国人民政治协商会议)/g, '重要会议'],
+  [/党建/g, '组织建设'],
+  [/党史/g, '发展历史'],
+  [/党员/g, '工作人员'],
+  [/意识形态/g, '价值观'],
+  [/党的重大会议/g, '重要会议'],
+  [/党的会议/g, '重要会议'],
+  [/中国共产党/g, '相关组织'],
+  [/中共中央/g, '相关部门'],
+]
+
+function sanitizeSensitiveText(value) {
+  let result = String(value || '')
+  for (const [pattern, replacement] of sensitiveReplacements) result = result.replace(pattern, replacement)
+  return result
+}
+
+function sanitizeGuideContent(value) {
+  return {
+    ...value,
+    title: sanitizeSensitiveText(value.title),
+    subtitle: sanitizeSensitiveText(value.subtitle),
+    intro: sanitizeSensitiveText(value.intro),
+    sections: (value.sections || []).map(section => ({
+      title: sanitizeSensitiveText(section.title),
+      content: sanitizeSensitiveText(section.content),
+    })),
+    closing: sanitizeSensitiveText(value.closing),
+  }
+}
+
 function cleanJsonText(text) {
   return String(text || '').replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
 }
@@ -256,11 +298,11 @@ async function generateGuide() {
       provider: active.provider, api_format: active.api_format, api_key: active.api_key,
       base_url: active.base_url || '', model: active.default_model,
       messages: [
-        { role: 'system', content: '你是国企招聘笔试攻略编辑。输出严谨、实用的完整攻略，不写引流话术，不编造企业事实。' },
-        { role: 'user', content: `请为新企业生成一篇可分页制图的完整笔试攻略。\n\n【当前商品真实信息】\n${JSON.stringify(productFacts(), null, 2)}\n\n【IMA母库写作画像】\n${profile.value}\n\n要求：${wordTarget}；包括企业与考试概览、考情分析、模块或题型拆解、备考策略、时间规划、避坑提醒和总结。画像只用于结构和风格。没有明确依据的考试科目、日期、题量、招聘人数必须写成审慎建议或“以官方通知为准”，不得编造。禁止出现关注、私信、置顶评论、点击获取、加群等引流表达。只输出合法 JSON，不输出代码块或解释。正文字符串内如需使用引号，必须转义为 \\"。结构：{"title":"","subtitle":"","intro":"","sections":[{"title":"","paragraphs":[""]}],"closing":""}` },
+        { role: 'system', content: '你是国企招聘笔试攻略编辑。输出严谨、实用的完整攻略，不写引流话术，不编造企业事实。严禁出现政治敏感内容、政治表述、领导人姓名和领导人相关称谓。' },
+        { role: 'user', content: `请为新企业生成一篇可分页制图的完整笔试攻略。\n\n【当前商品真实信息】\n${JSON.stringify(productFacts(), null, 2)}\n\n【IMA母库写作画像】\n${profile.value}\n\n要求：${wordTarget}；包括企业与考试概览、考情分析、模块或题型拆解、备考策略、时间规划、避坑提醒和总结。画像只用于结构和风格。没有明确依据的考试科目、日期、题量、招聘人数必须写成审慎建议或“以官方通知为准”，不得编造。\n【敏感内容硬性限制】不得出现任何领导人姓名、领导人称谓、政治理论、政治口号、党政会议名称或政治评价；“时事政治”统一写成“时事热点”，“政治理论/政治常识”统一写成“公共基础理论/公共基础常识”。不得为了举例重复敏感词。\n禁止出现关注、私信、置顶评论、点击获取、加群等引流表达。只输出合法 JSON，不输出代码块或解释。正文字符串内如需使用引号，必须转义为 \\"。结构：{"title":"","subtitle":"","intro":"","sections":[{"title":"","paragraphs":[""]}],"closing":""}` },
       ], max_tokens: 7000, temperature: 0.55,
     })
-    Object.assign(guide, await parseOrRepairGuide(result.content, active))
+    Object.assign(guide, sanitizeGuideContent(await parseOrRepairGuide(result.content, active)))
     message.success('完整笔试攻略生成成功，可编辑后生成图片')
   } catch (error) { message.error(error.message || '攻略生成失败') }
   finally { generating.value = false }
@@ -272,6 +314,7 @@ async function renderImages() {
   rendering.value = true
   images.value = []
   try {
+    Object.assign(guide, sanitizeGuideContent(guide))
     await nextTick()
     if (document.fonts?.ready) await document.fonts.ready
     const output = []
