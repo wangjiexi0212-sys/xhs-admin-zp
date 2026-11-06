@@ -75,7 +75,37 @@
                   <div v-else class="emerald-page-head">
                     <span>{{ targetCompany }} · 笔试攻略</span><span>{{ pageIndex + 1 }} / {{ pages.length }}</span>
                   </div>
-                  <main :class="['emerald-content', { 'emerald-content-first': pageIndex === 0, 'emerald-content-modules': pageIndex === 1, 'emerald-content-last': pageIndex === pages.length - 1 }]">
+                  <main v-if="pageIndex === 1" class="emerald-content emerald-modules-page">
+                    <div v-if="page[0]?.heading" class="emerald-section-title emerald-modules-title">
+                      <span>{{ emeraldSectionNo(pageIndex, 0) }}</span><h2>{{ page[0].heading }}</h2><i />
+                    </div>
+                    <div class="emerald-module-grid">
+                      <div v-for="(block, blockIndex) in page.slice(0, 2)" :key="blockIndex" class="emerald-module-card">
+                        <b>{{ blockIndex === 0 ? '第一模块' : '第二模块' }}</b>
+                        <h3>{{ analysisBlockView(block).lead || block.heading }}</h3>
+                        <template v-if="analysisBlockView(block).items.length">
+                          <p v-for="(item, itemIndex) in analysisBlockView(block).items" :key="itemIndex">
+                            <strong>{{ item.title }}</strong><span v-if="item.detail">：{{ item.detail }}</span>
+                          </p>
+                        </template>
+                        <template v-else>
+                          <p v-for="(paragraph, pIndex) in block.paragraphs" :key="pIndex">{{ paragraph }}</p>
+                        </template>
+                      </div>
+                    </div>
+                    <section v-for="(block, blockIndex) in page.slice(2)" :key="blockIndex" class="emerald-block emerald-followup">
+                      <div v-if="block.heading" class="emerald-section-title">
+                        <span>{{ emeraldSectionNo(pageIndex, blockIndex + 2) }}</span><h2>{{ block.heading }}</h2><i />
+                      </div>
+                      <p v-if="analysisBlockView(block).lead" class="emerald-lead">{{ analysisBlockView(block).lead }}</p>
+                      <div class="emerald-steps">
+                        <div v-for="(item, itemIndex) in analysisBlockView(block).items" :key="itemIndex" class="emerald-step">
+                          <span>{{ itemIndex + 1 }}</span><div><strong>{{ item.title }}</strong><p>{{ item.detail }}</p></div>
+                        </div>
+                      </div>
+                    </section>
+                  </main>
+                  <main v-else :class="['emerald-content', { 'emerald-content-first': pageIndex === 0, 'emerald-content-last': pageIndex === pages.length - 1 }]">
                     <section
                       v-for="(block, blockIndex) in page"
                       :key="blockIndex"
@@ -84,12 +114,7 @@
                       <div v-if="block.heading" class="emerald-section-title">
                         <span>{{ emeraldSectionNo(pageIndex, blockIndex) }}</span><h2>{{ block.heading }}</h2><i />
                       </div>
-                      <div v-if="pageIndex === 1 && blockIndex < 2" class="emerald-module-card">
-                        <b>{{ blockIndex === 0 ? '第一模块' : '第二模块' }}</b>
-                        <h3>{{ analysisBlockView(block).lead || block.heading }}</h3>
-                        <p v-for="(paragraph, pIndex) in block.paragraphs" :key="pIndex">{{ paragraph }}</p>
-                      </div>
-                      <template v-else-if="pageIndex > 0 && pageIndex < pages.length - 1">
+                      <template v-if="pageIndex > 0 && pageIndex < pages.length - 1">
                         <p v-if="analysisBlockView(block).lead" class="emerald-lead">{{ analysisBlockView(block).lead }}</p>
                         <div class="emerald-steps">
                           <div v-for="(item, itemIndex) in analysisBlockView(block).items" :key="itemIndex" class="emerald-step">
@@ -208,9 +233,9 @@ const emeraldMeta = computed(() => [
 ].filter(Boolean))
 const emeraldFacts = computed(() => [
   { label: '招聘人数', value: props.product?.recruit_count || props.product?.recruitment_count || '' },
-  { label: '报名时间', value: props.product?.apply_time || props.product?.registration_time || '' },
-  { label: '笔试时间', value: props.product?.written_exam_time || '' },
-  { label: '岗位类型', value: props.product?.job_type_name || '' },
+  { label: '笔试科目', value: String(props.product?.written_exam_content || '').match(/《[^》]+》/)?.[0] || '以公告为准' },
+  { label: '攻略模块', value: guide.sections.length ? `${guide.sections.length}个` : '' },
+  { label: '攻略篇幅', value: lengthMode.value === 'detailed' ? '详细版' : '标准版' },
 ].filter(item => String(item.value).trim()))
 function emeraldSectionNo(pageIndex, blockIndex) {
   return String(pageIndex * 2 + blockIndex + 1).padStart(2, '0')
@@ -297,7 +322,7 @@ const pages = computed(() => {
   let used = 0
   for (const block of pageBlocks.value) {
     const cost = block.paragraphs[0].length + (block.heading ? 90 : 0)
-    const capacity = theme.value === 'emerald' ? (output.length ? 620 : 300) : (output.length ? 650 : 540)
+    const capacity = theme.value === 'emerald' ? (output.length ? 620 : 540) : (output.length ? 650 : 540)
     if (page.length && used + cost > capacity) {
       output.push(page)
       page = []
@@ -639,21 +664,24 @@ h1{font-size:45px;line-height:1.35;margin:0 0 18px;font-weight:800;letter-spacin
 .theme-emerald .emerald-fact span{margin-top:12px;color:#696a64;font-size:17px}
 .theme-emerald .emerald-page-head{display:flex;justify-content:space-between;padding:30px 0 16px;border-bottom:2px solid var(--emerald);color:#787970;font-size:16px;letter-spacing:1px}
 .theme-emerald .emerald-content{padding:36px 0 42px}
-.theme-emerald .emerald-content-first{padding-top:68px}
+.theme-emerald .emerald-content-first{padding-top:42px}
 .theme-emerald .emerald-block{margin-bottom:32px}
 .theme-emerald .emerald-section-title{display:grid;grid-template-columns:auto auto 1fr;align-items:center;gap:14px;margin-bottom:24px}
 .theme-emerald .emerald-section-title>span{color:var(--gold);font-family:"Songti SC","STSong","SimSun",serif;font-size:27px;font-weight:700}
 .theme-emerald .emerald-section-title h2{margin:0;color:#20231f;font-family:"Songti SC","STSong","SimSun",serif;font-size:31px;line-height:1.3}
 .theme-emerald .emerald-section-title i{height:1px;background:#d9d0c0}
-.theme-emerald .emerald-block>p,.theme-emerald .emerald-lead{margin:0 0 20px;color:#363933;font-size:22px;line-height:1.82;text-align:justify;white-space:pre-wrap}
+.theme-emerald .emerald-block>p,.theme-emerald .emerald-lead{margin:0 0 16px;color:#363933;font-size:22px;line-height:1.58;text-align:justify;white-space:pre-wrap}
 .theme-emerald .emerald-intro{padding:26px 30px;border:1px solid #bed2cd;border-left:6px solid #277276;border-radius:16px;background:var(--emerald-soft)}
 .theme-emerald .emerald-intro .emerald-section-title{margin-bottom:14px}
-.theme-emerald .emerald-content-modules{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px 26px}
-.theme-emerald .emerald-content-modules .emerald-block:nth-child(n+3){grid-column:1/-1}
-.theme-emerald .emerald-module-card{height:100%;padding:26px 28px;border:1px solid #ddd6c9;border-radius:18px;background:#fff;box-shadow:0 10px 22px rgba(49,52,45,.06)}
+.theme-emerald .emerald-modules-page{display:block}
+.theme-emerald .emerald-modules-title{margin-bottom:22px}
+.theme-emerald .emerald-module-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:stretch;gap:26px;margin-bottom:30px}
+.theme-emerald .emerald-module-card{display:flex;flex-direction:column;min-height:360px;padding:26px 28px;border:1px solid #ddd6c9;border-radius:18px;background:#fff;box-shadow:0 10px 22px rgba(49,52,45,.06)}
 .theme-emerald .emerald-module-card>b{display:inline-block;padding:7px 15px;border-radius:20px;background:#e8f1ef;color:var(--emerald);font-size:16px}
-.theme-emerald .emerald-module-card h3{margin:22px 0 14px;color:var(--emerald);font-family:"Songti SC","STSong","SimSun",serif;font-size:29px}
-.theme-emerald .emerald-module-card p{margin:0;color:#454740;font-size:20px;line-height:1.75}
+.theme-emerald .emerald-module-card h3{min-height:74px;margin:20px 0 12px;color:var(--emerald);font-family:"Songti SC","STSong","SimSun",serif;font-size:27px;line-height:1.38}
+.theme-emerald .emerald-module-card p{margin:0 0 10px;color:#454740;font-size:19px;line-height:1.52}
+.theme-emerald .emerald-module-card p strong{color:#2b2d28;font-weight:700}
+.theme-emerald .emerald-followup{margin-top:18px}
 .theme-emerald .emerald-steps{display:flex;flex-direction:column;gap:0}
 .theme-emerald .emerald-step{display:grid;grid-template-columns:58px 1fr;gap:20px;padding:18px 0;border-bottom:1px dashed #d8d1c5}
 .theme-emerald .emerald-step>span{display:flex;align-items:center;justify-content:center;width:52px;height:52px;border-radius:50%;background:var(--emerald);color:#fff;font-family:"Songti SC","STSong","SimSun",serif;font-size:24px}
