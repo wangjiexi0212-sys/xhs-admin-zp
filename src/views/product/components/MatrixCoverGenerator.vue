@@ -169,6 +169,8 @@ const step = ref(0)
 const result = reactive({ title: '', subtitle: '', prompt: '' })
 const selection = reactive({ categoryId: '', topicId: '', audienceId: 'zero-base', structureId: '', sceneId: '' })
 
+const freshVisualRequirement = '统一采用小清新平面插画风：低饱和浅蓝、薄荷绿、奶油黄、淡粉与暖白配色，使用简洁二维图形、轻微纸张质感和柔和阴影；场景词只作为版式与图形隐喻，不得生成真实摄影、逼真实物、3D渲染、复杂光影、镜头景深、厚重材质或大面积棕黄复古色。画面轻盈明亮、留白适度、信息清晰，标题保持强对比。'
+
 const structureOptions = [
   { id: 'timeline', name: '时间轴', description: '按日期或阶段梳理重点' },
   { id: 'data-cards', name: '数据卡', description: '突出关键事实与数字' },
@@ -455,8 +457,8 @@ async function generatePlan() {
     const response = await chatLlm({
       provider: active.provider, api_format: active.api_format, api_key: active.api_key, base_url: active.base_url || '', model: active.default_model,
       messages: [
-        { role: 'system', content: '你是小红书招聘考试资料封面策划师。封面必须让用户第一眼识别出“具体单位/招聘类型＋笔试备考资料或攻略”，不能像普通学习记录。商品事实不得改写或补充；通用内容只能写成备考建议。禁止政治人物、领导人姓名、旗帜、徽章、政府建筑和政治象征。禁止稳上岸、必过、押题、内部资料等表达。只返回JSON。' },
-        { role: 'user', content: `根据以下选择生成一套3:4竖版封面方案。\n商品事实：${JSON.stringify(facts.value)}\n招聘类型：${analysis.value.recruitment_type.primary}\n内容分类：${selectedCategory.value.name}\n具体选题：${topic.name}\n目标受众：${optionName(audienceOptions, selection.audienceId)}\n信息结构：${optionName(structureOptions, selection.structureId)}\n视觉场景：${optionName(sceneOptions, selection.sceneId)}\n${genericTime ? '时间规则：这是通用复习周期，禁止写成距离当前考试还有对应天数。' : ''}\n标题要求：必须包含单位名称或清晰简称，并明确出现“笔试攻略、备考攻略、备考资料、考情分析”中的一种，使缩略图状态下也能看出这是一篇招聘考试资料笔记；具体选题作为第二层卖点，不能取代单位和资料属性。\n视觉对比要求：主标题文字与标题区背景必须形成明显明暗反差，禁止棕色字配米色背景、浅色字配浅色背景或同色系低对比搭配；优先使用深蓝/近黑文字配白色或浅色独立标题卡，或白色文字配深蓝/墨绿/深红纯色标题区。\n输出JSON：title、subtitle、core_content数组、suggestions数组、prompt。prompt必须要求单张完整封面、文字清晰、缩略图可读、一个核心场景、禁止拼图和多方案合图。` },
+        { role: 'system', content: `你是小红书招聘考试资料封面策划师。封面必须让用户第一眼识别出“具体单位/招聘类型＋笔试备考资料或攻略”，不能像普通学习记录。商品事实不得改写或补充；通用内容只能写成备考建议。禁止政治人物、领导人姓名、旗帜、徽章、政府建筑和政治象征。禁止稳上岸、必过、押题、内部资料等表达。${freshVisualRequirement}只返回JSON。` },
+        { role: 'user', content: `根据以下选择生成一套3:4竖版封面方案。\n商品事实：${JSON.stringify(facts.value)}\n招聘类型：${analysis.value.recruitment_type.primary}\n内容分类：${selectedCategory.value.name}\n具体选题：${topic.name}\n目标受众：${optionName(audienceOptions, selection.audienceId)}\n信息结构：${optionName(structureOptions, selection.structureId)}\n视觉场景：${optionName(sceneOptions, selection.sceneId)}（仅转换为小清新二维插画和版式元素，不生成写实场景）\n${genericTime ? '时间规则：这是通用复习周期，禁止写成距离当前考试还有对应天数。' : ''}\n标题要求：必须包含单位名称或清晰简称，并明确出现“笔试攻略、备考攻略、备考资料、考情分析”中的一种，使缩略图状态下也能看出这是一篇招聘考试资料笔记；具体选题作为第二层卖点，不能取代单位和资料属性。\n视觉风格要求：${freshVisualRequirement}\n视觉对比要求：主标题文字与标题区背景必须形成明显明暗反差，禁止棕色字配米色背景、浅色字配浅色背景或同色系低对比搭配；优先使用深蓝/近黑文字配白色或浅色独立标题卡，或白色文字配深蓝/墨绿/深红纯色标题区。\n输出JSON：title、subtitle、core_content数组、suggestions数组、prompt。prompt必须要求单张完整封面、文字清晰、缩略图可读、一个核心场景、禁止拼图和多方案合图，并明确要求小清新二维插画、禁止摄影和逼真实物。` },
       ], max_tokens: 2200, temperature: .72,
     })
     const parsed = parseJson(response.content)
@@ -478,6 +480,8 @@ function buildFinalPrompt(parsed) {
     `【目标受众】${optionName(audienceOptions, selection.audienceId)}`, `【信息结构】${optionName(structureOptions, selection.structureId)}`, `【视觉场景】${optionName(sceneOptions, selection.sceneId)}`,
     allowedFacts.value.length ? `【可使用的商品事实】${allowedFacts.value.join('；')}` : '', core.length ? `【封面核心内容】${core.join('；')}` : '', suggestions.length ? `【备考建议】${suggestions.join('；')}` : '',
     parsed.prompt ? `【视觉执行】${sanitize(parsed.prompt)}` : '',
+    `【统一视觉风格】${freshVisualRequirement}`,
+    '【场景转译规则】学习桌、试卷、日程本、档案袋、活页本、夹板、日历、报刊、电脑等场景，均只允许转译为扁平二维插画、简洁线稿、色块卡片或纸张版式元素；不得绘制成真实照片、产品摄影或逼真桌面静物。',
     selectedTopicState.value.state === 'generic' ? '【时间约束】这是通用复习周期，不得写成距离当前考试还有对应天数，不得虚构具体考试日期。' : '',
     '【首屏识别目标】用户必须在缩略图状态下第一眼看出“哪个单位/招聘类型＋笔试备考资料或攻略”。单位名称与“笔试攻略/备考攻略/备考资料/考情分析”必须处于最高视觉层级，具体选题处于第二层级。',
     '【标题高对比硬性要求】主标题必须放在独立、干净、无复杂纹理的标题区域。标题文字与背景必须形成强烈明暗反差：使用近黑/深蓝文字配白色或极浅色不透明标题卡，或使用纯白文字配深蓝、墨绿、深红等深色不透明标题区。禁止棕色字配米色背景、浅色字配浅色背景、同色系低对比、半透明文字、纹理穿过文字以及强光覆盖标题。',
@@ -491,7 +495,7 @@ function buildFallbackResult() {
   const company = facts.value.companyName || '本次招聘'
   result.title = ensureCommercialTitle(`${company}${selectedTopic.value.name}`)
   result.subtitle = selectedTopic.value.description
-  result.prompt = buildFinalPrompt({ title: result.title, subtitle: result.subtitle, core_content: analysis.value.content_tags.slice(0, 5), suggestions: ['先确认考试范围', '按模块安排复习', '使用官方信息核对时间'], prompt: `${optionName(sceneOptions, selection.sceneId)}场景，采用${optionName(structureOptions, selection.structureId)}组织信息，低饱和配色，深色文字，层级清楚。` })
+  result.prompt = buildFinalPrompt({ title: result.title, subtitle: result.subtitle, core_content: analysis.value.content_tags.slice(0, 5), suggestions: ['先确认考试范围', '按模块安排复习', '使用官方信息核对时间'], prompt: `${optionName(sceneOptions, selection.sceneId)}仅作为小清新二维插画和版式隐喻，采用${optionName(structureOptions, selection.structureId)}组织信息；低饱和配色、深色文字、层级清楚，禁止摄影、逼真实物和3D渲染。` })
   saveHistory()
 }
 function sanitize(value) {
