@@ -500,9 +500,29 @@ function sanitize(value) {
 function ensureCommercialTitle(value) {
   let title = sanitize(value)
   const company = facts.value.companyName
-  if (company && !title.includes(company)) title = `${company}${title}`
+  const companyAliases = buildCompanyAliases(company)
+  const normalizedTitle = normalizeCompanyText(title)
+  const hasCompanyIdentity = companyAliases.some(alias => {
+    const normalizedAlias = normalizeCompanyText(alias)
+    return normalizedAlias.length >= 4 && normalizedTitle.includes(normalizedAlias)
+  })
+  if (company && !hasCompanyIdentity) title = `${company}${title}`
   if (!/(笔试攻略|备考攻略|备考资料|考情分析)/.test(title)) title = `${title}｜笔试备考攻略`
   return title.replace(/\|{2,}/g, '|').trim()
+}
+function buildCompanyAliases(company) {
+  const full = String(company || '').trim()
+  if (!full) return []
+  const withoutProvince = full.replace(/^[\u4e00-\u9fa5]{2,4}(?:省|自治区)/, '')
+  const withoutCity = full.replace(/^[\u4e00-\u9fa5]{2,5}市/, '')
+  const withoutAdminPrefix = withoutProvince.replace(/^[\u4e00-\u9fa5]{2,5}市/, '')
+  return [...new Set([full, withoutProvince, withoutCity, withoutAdminPrefix])]
+}
+function normalizeCompanyText(value) {
+  return String(value || '')
+    .replace(/[\s·|｜—_（）()]/g, '')
+    .replace(/[省市区县]/g, '')
+    .replace(/有限责任公司|股份有限公司|有限公司/g, '')
 }
 function saveHistory() {
   try {
