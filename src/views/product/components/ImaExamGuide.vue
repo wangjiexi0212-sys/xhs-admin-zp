@@ -170,7 +170,7 @@ function analysisBlockView(block) {
     .map(value => value.replace(/^[①②③④⑤⑥⑦⑧⑨⑩\d一二三四五六七八九十]+[、.．)）]\s*/, '').trim())
     .filter(value => value.length >= 6)
   const lead = chunks.shift() || ''
-  const items = chunks.slice(0, 5).map((sentence) => {
+  const items = chunks.map((sentence) => {
     const clean = sentence.replace(/[。；]$/, '')
     const colonIndex = clean.search(/[：:]/)
     let title = ''
@@ -185,13 +185,25 @@ function analysisBlockView(block) {
       detail = clean.slice(splitAt).replace(/^[，,]\s*/, '').trim()
     }
     const value = clean.match(/\d+(?:\.\d+)?\s*(?:%|人|名|分|题|天|分钟|小时|个月|年)/)?.[0] || ''
-    return { title, detail: detail.slice(0, 58), value }
+    return { title, detail, value }
   })
   if (!items.length && lead.length > 70) {
     const detail = lead.slice(18)
-    return { lead: '', items: [{ title: lead.slice(0, 18), detail: detail.slice(0, 58), value: lead.match(/\d+(?:\.\d+)?\s*(?:%|人|名|分|题|天|分钟|小时|个月|年)/)?.[0] || '' }] }
+    return { lead: '', items: [{ title: lead.slice(0, 18), detail, value: lead.match(/\d+(?:\.\d+)?\s*(?:%|人|名|分|题|天|分钟|小时|个月|年)/)?.[0] || '' }] }
   }
-  return { lead: lead.slice(0, 110), items }
+  return { lead, items }
+}
+
+function estimateAnalysisBlockHeight(block) {
+  const view = analysisBlockView(block)
+  const headingHeight = block.heading ? 82 : 20
+  const leadHeight = view.lead ? Math.max(44, Math.ceil(view.lead.length / 32) * 41) + 20 : 0
+  const itemsHeight = view.items.reduce((total, item) => {
+    const copyLength = String(item.title || '').length + String(item.detail || '').length
+    return total + Math.max(84, Math.ceil(copyLength / 34) * 30 + 38)
+  }, 0)
+  const boxExtra = block.kind === 'intro' || block.kind === 'closing' ? 38 : 0
+  return headingHeight + leadHeight + itemsHeight + boxExtra + 38
 }
 
 function splitText(value, max = 250) {
@@ -212,21 +224,25 @@ function splitText(value, max = 250) {
 
 const pages = computed(() => {
   if (!guide.sections.length) return []
-  const blocks = [{ kind: 'intro', heading: '🎯 先说重点', paragraphs: splitText(guide.intro) }]
-  guide.sections.forEach(section => blocks.push({ kind: 'section', heading: section.title, paragraphs: splitText(section.content) }))
-  blocks.push({ kind: 'closing', heading: '💬 写在最后', paragraphs: splitText(guide.closing) })
+  const paragraphMax = theme.value === 'analysis' ? 150 : 250
+  const blocks = [{ kind: 'intro', heading: '🎯 先说重点', paragraphs: splitText(guide.intro, paragraphMax) }]
+  guide.sections.forEach(section => blocks.push({ kind: 'section', heading: section.title, paragraphs: splitText(section.content, paragraphMax) }))
+  blocks.push({ kind: 'closing', heading: '💬 写在最后', paragraphs: splitText(guide.closing, paragraphMax) })
   const output = []
   let page = []
   let used = 0
-  let capacity = theme.value === 'analysis' ? 520 : 540
+  let capacity = theme.value === 'analysis' ? 670 : 540
   for (const block of blocks) {
     let first = true
     for (const paragraph of block.paragraphs) {
-      const cost = paragraph.length + (first && block.heading ? 90 : 0)
+      const nextBlock = { kind: block.kind, heading: first ? block.heading : '', paragraphs: [paragraph] }
+      const cost = theme.value === 'analysis'
+        ? estimateAnalysisBlockHeight(nextBlock)
+        : paragraph.length + (first && block.heading ? 90 : 0)
       if (page.length && used + cost > capacity) {
-        output.push(page); page = []; used = 0; capacity = theme.value === 'analysis' ? 620 : 650
+        output.push(page); page = []; used = 0; capacity = theme.value === 'analysis' ? 970 : 650
       }
-      page.push({ kind: block.kind, heading: first ? block.heading : '', paragraphs: [paragraph] })
+      page.push(nextBlock)
       used += cost
       first = false
     }
@@ -479,8 +495,8 @@ h1{font-size:45px;line-height:1.35;margin:0 0 18px;font-weight:800;letter-spacin
 .theme-analysis .analysis-item{display:grid;grid-template-columns:48px minmax(0,1fr) auto;align-items:center;gap:16px;min-height:84px;padding:13px 0;border-bottom:1px solid #e6e2dc}
 .theme-analysis .analysis-item-no{color:#d1cbc1;font-family:"Songti SC","STSong","SimSun",serif;font-size:28px}
 .theme-analysis .analysis-item-copy{display:flex;flex-direction:column;gap:6px;min-width:0;font-family:"PingFang SC","Microsoft YaHei",sans-serif}
-.theme-analysis .analysis-item-copy strong{overflow:hidden;color:#171717;font-size:25px;font-weight:650;line-height:1.3;text-overflow:ellipsis;white-space:nowrap}
-.theme-analysis .analysis-item-copy span{overflow:hidden;color:#807b74;font-size:19px;line-height:1.4;text-overflow:ellipsis;white-space:nowrap}
+.theme-analysis .analysis-item-copy strong{color:#171717;font-size:25px;font-weight:650;line-height:1.35;white-space:normal}
+.theme-analysis .analysis-item-copy span{color:#807b74;font-size:19px;line-height:1.5;white-space:normal}
 .theme-analysis .analysis-item em{color:#b5362d;font-family:"Songti SC","STSong","SimSun",serif;font-size:31px;font-style:normal;white-space:nowrap}
 .theme-analysis .analysis-intro{padding:24px 28px;border:0;background:#f5f1e8}
 .theme-analysis .analysis-intro .analysis-block-no{color:#b5362d}
@@ -495,6 +511,6 @@ h1{font-size:45px;line-height:1.35;margin:0 0 18px;font-weight:800;letter-spacin
 .theme-analysis .analysis-fact:last-child{border-right:0}
 .theme-analysis .analysis-fact strong{color:#b5362d;font-family:"Songti SC","STSong","SimSun",serif;font-size:25px;font-weight:500;line-height:1.35}
 .theme-analysis .analysis-fact span{margin-top:7px;color:#77736d;font-family:"PingFang SC","Microsoft YaHei",sans-serif;font-size:17px}
-.theme-analysis .analysis-footer{display:block;position:absolute;left:76px;right:76px;bottom:32px;padding-top:12px;border-top:1px solid #d8d4cd;color:#77736d;font-family:"PingFang SC","Microsoft YaHei",sans-serif;font-size:18px}
-.theme-analysis .page-number{right:76px;bottom:32px;color:#77736d;font-family:"PingFang SC","Microsoft YaHei",sans-serif;font-size:18px}
+.theme-analysis .analysis-footer{display:block;position:absolute;z-index:2;left:76px;right:76px;bottom:0;padding:14px 0 32px;border-top:1px solid #d8d4cd;background:#fff;color:#77736d;font-family:"PingFang SC","Microsoft YaHei",sans-serif;font-size:18px}
+.theme-analysis .page-number{z-index:3;right:76px;bottom:32px;color:#77736d;font-family:"PingFang SC","Microsoft YaHei",sans-serif;font-size:18px}
 </style>
