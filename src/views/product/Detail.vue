@@ -870,6 +870,9 @@
                 :loading="coverPromptOptionsLoading"
                 @click="loadCoverCardPrompts"
               >刷新</a-button>
+              <a-button type="primary" ghost size="small" @click="openMultiStyleCoverPicker">
+                生成多风格封面
+              </a-button>
             </div>
             <div v-if="coverPromptMode === 'specified'" class="cover-prompt-options">
               <a-spin v-if="coverPromptOptionsLoading" />
@@ -928,6 +931,48 @@
         </a-form-item>
       </a-form>
     </a-drawer>
+
+    <a-modal
+      v-model:open="multiStyleCoverVisible"
+      title="选择多风格封面方案"
+      width="1180px"
+      :footer="null"
+      :destroy-on-close="false"
+    >
+      <a-alert
+        type="info"
+        show-icon
+        message="已根据当前企业与封面标题生成 8 个风格提示词。可直接编辑，选择其中一个生成封面。"
+        style="margin-bottom:16px"
+      />
+      <div class="multi-cover-grid">
+        <a-card
+          v-for="(item, index) in multiStyleCoverPlans"
+          :key="item.id"
+          size="small"
+          class="multi-cover-card"
+        >
+          <template #title>
+            <div class="multi-cover-card__title">
+              <span class="multi-cover-card__swatch" :style="{ background: item.swatch }" />
+              <span>{{ index + 1 }}. {{ item.name }}</span>
+            </div>
+          </template>
+          <div class="multi-cover-card__desc">{{ item.description }}</div>
+          <a-textarea v-model:value="item.prompt" :auto-size="{ minRows: 7, maxRows: 12 }" />
+          <a-button
+            type="primary"
+            block
+            style="margin-top:10px"
+            :loading="coverGenerating && activeMultiStyleId === item.id"
+            :disabled="coverGenerating && activeMultiStyleId !== item.id"
+            @click="generateSelectedMultiStyle(item)"
+          >
+            选择此风格生成
+          </a-button>
+        </a-card>
+      </div>
+    </a-modal>
 
     <a-modal
       v-model:open="cardTemplatePickerVisible"
@@ -1663,6 +1708,9 @@ const selectedCoverPromptId = ref(null)
 const selectedCoverPrompt = computed(() =>
   coverPromptOptions.value.find(item => item.id === selectedCoverPromptId.value) || null
 )
+const multiStyleCoverVisible = ref(false)
+const multiStyleCoverPlans = ref([])
+const activeMultiStyleId = ref('')
 const templateModalVisible = ref(false)
 const communityImageDrawer = reactive({
   visible: false,
@@ -2307,7 +2355,104 @@ async function downloadExamCard() {
   }
 }
 
-async function generateCoverImage(useEditedPrompt = false) {
+const MULTI_COVER_STYLES = [
+  {
+    id: 'professional-blue', name: '蓝白笔记纸风', swatch: 'linear-gradient(135deg,#f8fbff,#68b9e8)',
+    description: '浅蓝边框与白色纸张，清晰、专业、耐看。',
+    visual: '浅天蓝色外边框，中央是一张铺满主体区域的白色方格笔记纸，深灰黑标题，浅蓝色细下划线，正文用常规字重，少量书本线稿图标；排版规整、留白充足、像清晰的课堂笔记',
+  },
+  {
+    id: 'red-gold', name: '暖白重点标注风', swatch: 'linear-gradient(135deg,#fffdf7,#e8b8a8)',
+    description: '暖白纸张配低饱和重点色，柔和但有层级。',
+    visual: '暖白纸张背景，深灰黑标题，低饱和砖红色用于细下划线和小标签，浅米色章节标题底纹，正文采用常规字重；像整理干净的备考讲义，柔和克制，不使用大面积红色或金色',
+  },
+  {
+    id: 'black-yellow', name: '米黄讲义风', swatch: 'linear-gradient(135deg,#fffef8,#f4e7ad)',
+    description: '浅米黄章节标注，像重点清楚的纸质讲义。',
+    visual: '白色或极浅米白方格纸背景，深灰黑标题，仅在章节标题后使用低饱和浅米黄色小色块，细线表格或清单辅助信息，正文清晰规整；禁止亮黄色满底、黑色大色块、粗重箭头和大字报效果',
+  },
+  {
+    id: 'mint-card', name: '薄荷信息卡片风', swatch: 'linear-gradient(135deg,#eafff7,#2ca77b)',
+    description: '清新卡片、留白充足，适合社区岗位。',
+    visual: '象牙白纸张背景，极浅薄荷绿细边框和小型章节标签，深灰黑标题，正文采用常规字重，少量绿色书本与清单线稿图标；卡片不超过两块，留白充足，清新但不花哨',
+  },
+  {
+    id: 'cream-study', name: '奶油学习桌风', swatch: 'linear-gradient(135deg,#fff3d7,#bc7a42)',
+    description: '温暖教辅质感，书桌与文具营造学习氛围。',
+    visual: '奶油米白纸张背景，深灰蓝标题，低饱和暖橙色只用于小标签和细下划线，底部保留一个很小的书本或铅笔线稿；主体仍以文字信息为主，像简洁的精品教辅内页',
+  },
+  {
+    id: 'marker-note', name: '清爽手写笔记风', swatch: 'linear-gradient(135deg,#ffffff,#9ed8f3)',
+    description: '接近参考图的方格笔记纸，重点一目了然。',
+    visual: '浅蓝色外框与白色方格活页纸，顶部深灰黑手写感标题，标题下只有一条浅蓝色细横线；章节标题使用极浅奶黄色小底纹，正文整齐排列，可用细线表格或编号清单，右上角一个小书本线稿，整体接近清晰工整的课堂笔记',
+  },
+  {
+    id: 'navy-tech', name: '浅蓝数据表格风', swatch: 'linear-gradient(135deg,#f7fbff,#b8d9ec)',
+    description: '用浅蓝细表格组织信息，理性清楚。',
+    visual: '白色纸张背景，深灰蓝标题，浅蓝灰细线表格组织考试信息，浅蓝色小标签和极少量数据图标，正文常规字重；整体明亮、理性、易读，不使用深色背景、霓虹光效或科技大屏效果',
+  },
+  {
+    id: 'editorial-minimal', name: '极简教辅出版风', swatch: 'linear-gradient(135deg,#f6f2e9,#26384c)',
+    description: '出版物式排版，克制、稳重、耐看。',
+    visual: '暖白纸张背景，深灰蓝大标题但不顶满画面，细线分隔，单一低饱和橙色小标签，大面积留白，少量页码或书页线稿元素，像专业考试教辅书内页，极简、清晰、稳重',
+  },
+]
+
+function buildMultiStyleCoverPrompt(style) {
+  const companyName = String(data.value.company_name || '').trim()
+  const title = sanitizeCoverPromptText(
+    (cardText.value || generatedTitle.value || (companyName ? `${companyName}笔试备考攻略` : data.value.title || '笔试备考攻略')).trim()
+  )
+  const examContent = String(data.value.written_exam_content || '').trim()
+  const basicInfo = [
+    data.value.recruit_count ? `招聘人数：${String(data.value.recruit_count).trim()}` : '',
+    data.value.apply_time ? `报名时间：${String(data.value.apply_time).trim()}` : '',
+    data.value.written_exam_time ? `笔试时间：${String(data.value.written_exam_time).trim()}` : '',
+  ].filter(Boolean)
+  return [
+    '生成一张小红书备考资料主封面，竖版3:4比例，文字清晰、缩略图下仍可辨认。',
+    `【封面主标题】${title}`,
+    companyName ? `【必须突出单位名称】${companyName}` : '',
+    data.value.job_type_name ? `【岗位类型】${data.value.job_type_name}` : '',
+    basicInfo.length ? `【必须完整呈现的基础信息】${basicInfo.join('；')}` : '',
+    examContent ? `【允许出现的笔试内容】${examContent.slice(0, 100)}` : '',
+    examContent ? '【必须增加备考建议】根据上述笔试内容提炼2—3条简短、可执行的备考建议，每条不超过18个汉字。建议只能涉及已明确出现的科目或知识范围，不得自行增加行测、申论、面试等未提供内容。' : '',
+    `【视觉风格】${style.visual}`,
+    '【整体观感】参考清晰工整的活页笔记或考试讲义：以白色、暖白或极浅色纸张为主，深灰黑文字，最多使用一种低饱和辅助色。信息按标题、章节、小段正文三级排列，一眼能看清重点。',
+    '【视觉禁用】禁止高饱和纯色满屏背景，禁止荧光黄、纯黑、鲜红的大面积碰撞，禁止粗黑几何块、密集箭头、强烈渐变、霓虹光效、文字挤满画面。除主标题外不要全部使用超粗字体。',
+    '【单图硬性要求】只输出一张完整封面，采用一个统一版式并铺满整个画布。严禁拼贴、九宫格、上下分屏、左右分屏、三联画、方案对比图、画中画、样机展示或在一张图里重复多个封面。',
+    '【信息布局】主标题放在画面上部，字号醒目但不超过画面高度的四分之一；基础信息放在标题下方，使用三行清单、三格信息栏或三个简洁标签，必须逐项清晰显示，不得省略、改写或藏入小字；笔试内容放在下方独立区域；最下方设置“备考建议”小节，以2—3条编号清单呈现。四周保留安全边距，正文使用正常字重和舒适行距。',
+    '内容优先级依次为：单位与主标题、招聘人数/报名时间/笔试时间、笔试内容、备考建议。空间不足时精简装饰和建议文字，不得删除或缩小基础信息。',
+    '只呈现商品详情中实际存在的基础信息；某个字段为空时直接不显示，不使用“待定”“另行通知”补位。报名时间、笔试时间和招聘人数必须原样使用，不得推算、缩写或虚构。',
+    '只使用简体中文，不添加二维码、品牌Logo、水印、关注私信、置顶评论、点击获取等引流文案。',
+    '不得出现政治人物、领导人姓名、旗帜、徽章、政府建筑或政治象征元素。',
+    '除当前商品明确提供的信息外，不得虚构考试科目、日期、人数、题量或分值。',
+  ].filter(Boolean).join('\n')
+}
+
+function openMultiStyleCoverPicker() {
+  multiStyleCoverPlans.value = MULTI_COVER_STYLES.map(style => ({
+    ...style,
+    prompt: buildMultiStyleCoverPrompt(style),
+  }))
+  activeMultiStyleId.value = ''
+  multiStyleCoverVisible.value = true
+}
+
+async function generateSelectedMultiStyle(item) {
+  const prompt = String(item?.prompt || '').trim()
+  if (!prompt) { message.warning('请先填写该风格的提示词'); return }
+  activeMultiStyleId.value = item.id
+  coverPromptUsed.value = prompt
+  multiStyleCoverVisible.value = false
+  try {
+    await generateCoverImage(true, { skipVariation: true })
+  } finally {
+    activeMultiStyleId.value = ''
+  }
+}
+
+async function generateCoverImage(useEditedPrompt = false, options = {}) {
   const companyName = String(data.value.company_name || '').trim()
   const rawText = (cardText.value || generatedTitle.value || (companyName ? `${companyName}笔试` : data.value.title || '笔试封面图')).trim()
   const text = sanitizeCoverPromptText(rawText)
@@ -2355,7 +2500,7 @@ async function generateCoverImage(useEditedPrompt = false) {
     }
   }
 
-  if (params.prompt) {
+  if (params.prompt && !options.skipVariation) {
     params.prompt = varyCoverDecoration(params.prompt, coverVariationLevel.value)
     coverPromptUsed.value = params.prompt
   }
@@ -7915,6 +8060,39 @@ async function openCustomDir(item, idx) {
   right: 10px;
   bottom: 28px;
   color: #1677ff;
+}
+
+.multi-cover-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  max-height: 72vh;
+  padding-right: 4px;
+  overflow-y: auto;
+}
+
+.multi-cover-card {
+  border-color: #e5e7eb;
+}
+
+.multi-cover-card__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.multi-cover-card__swatch {
+  width: 26px;
+  height: 18px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 4px;
+}
+
+.multi-cover-card__desc {
+  margin-bottom: 8px;
+  color: #777;
+  font-size: 12px;
 }
 
 .cover-result {

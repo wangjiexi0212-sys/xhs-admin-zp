@@ -56,6 +56,10 @@
           <div class="preview-scale">
             <div :ref="el => setPageRef(el, pageIndex)" class="guide-page" :class="`theme-${theme}`">
               <div class="page-inner">
+                <div v-if="theme === 'analysis'" class="analysis-masthead">
+                  <span>{{ targetCompany }} · 笔试攻略</span>
+                  <span>考点拆解</span>
+                </div>
                 <template v-if="pageIndex === 0">
                   <h1>{{ guide.title }}</h1>
                   <div v-if="guide.subtitle" class="subtitle">{{ guide.subtitle }}</div>
@@ -66,6 +70,7 @@
                   <p v-for="(paragraph, pIndex) in block.paragraphs" :key="pIndex">{{ paragraph }}</p>
                 </div>
                 <div class="watermark">{{ targetCompany }} · 笔试攻略</div>
+                <div v-if="theme === 'analysis'" class="analysis-footer">{{ targetCompany }} · 完整笔试攻略</div>
                 <div class="page-number">{{ pageIndex + 1 }} / {{ pages.length }}</div>
               </div>
             </div>
@@ -106,6 +111,7 @@ const themeOptions = [
   { value: 'blue', label: '蓝色攻略风' },
   { value: 'navy', label: '深蓝简洁风' },
   { value: 'green', label: '绿色备考风' },
+  { value: 'analysis', label: '考点拆解杂志风' },
 ]
 
 function splitText(value, max = 250) {
@@ -164,7 +170,7 @@ function productFacts() {
   return {
     企业名称: targetCompany.value.trim(), 公告名称: p.title || p.announcement_name || '',
     商品类型: p.job_type_name || '', 招聘人数: p.recruit_count || p.recruitment_count || '',
-    报名时间: p.registration_time || '', 笔试时间: p.written_exam_time || '',
+    报名时间: p.apply_time || p.registration_time || '', 笔试时间: p.written_exam_time || '',
     笔试内容: p.written_exam_content || '', 公告原文: p.original_text || p.announcement_content || '',
   }
 }
@@ -323,7 +329,7 @@ async function renderImages() {
       const previousTransform = node.style.transform
       node.style.transform = 'none'
       try {
-        output.push(await toPng(node, { width: 1080, height: 1440, pixelRatio: 1, cacheBust: true, backgroundColor: '#eef1f5' }))
+        output.push(await toPng(node, { width: 1080, height: 1440, pixelRatio: 1, cacheBust: true, backgroundColor: theme.value === 'analysis' ? '#ffffff' : '#eef1f5' }))
       } finally {
         node.style.transform = previousTransform
       }
@@ -363,4 +369,23 @@ h1{font-size:45px;line-height:1.35;margin:0 0 18px;font-weight:800;letter-spacin
 .block-intro{background:var(--soft);border-left:7px solid var(--accent);border-radius:16px;padding:26px 30px}.block-intro h2{border:0;padding:0}.block-closing{background:#f7f9fb;border:1px solid #e1e7ee;border-radius:18px;padding:26px 30px}
 .watermark{position:absolute;left:180px;top:620px;transform:rotate(-48deg);font-size:48px;color:rgba(90,105,120,.10);white-space:nowrap}.page-number{position:absolute;right:45px;bottom:26px;color:#9aa7b4;font-size:19px}
 .theme-blue{--accent:#3788ed;--soft:#edf6ff}.theme-navy{--accent:#193c68;--soft:#f0f4f8}.theme-green{--accent:#24956b;--soft:#edf9f4}
+.analysis-masthead,.analysis-footer{display:none}
+.theme-analysis{--accent:#b5362d;--soft:#f5f1e8;background:#fff;padding:0;color:#151515;font-family:"Songti SC","STSong","SimSun",serif}
+.theme-analysis .page-inner{height:1440px;border-radius:0;padding:62px 76px 78px;background:#fff}
+.theme-analysis .analysis-masthead{display:flex;justify-content:space-between;align-items:center;padding-bottom:14px;margin-bottom:42px;border-bottom:3px solid #171717;color:#6f6b65;font-family:"PingFang SC","Microsoft YaHei",sans-serif;font-size:20px;letter-spacing:.5px}
+.theme-analysis h1{max-width:880px;margin:0 0 24px;color:#111;font-family:"Songti SC","STSong","SimSun",serif;font-size:58px;font-weight:500;line-height:1.25;letter-spacing:4px}
+.theme-analysis .subtitle{text-align:left;margin:0 0 28px;color:#b5362d;font-family:"PingFang SC","Microsoft YaHei",sans-serif;font-size:27px;font-weight:700;line-height:1.55}
+.theme-analysis .divider{height:1px;margin:22px 0 34px;background:#d9d5ce}
+.theme-analysis .content-block{margin-bottom:29px}
+.theme-analysis .content-block h2{margin:0 0 17px;padding:0;border:0;color:#171717;font-family:"Songti SC","STSong","SimSun",serif;font-size:39px;font-weight:500;line-height:1.35;letter-spacing:2px}
+.theme-analysis .content-block p{margin:0 0 18px;color:#393735;font-family:"PingFang SC","Microsoft YaHei",sans-serif;font-size:25px;line-height:1.82;text-align:left}
+.theme-analysis .block-intro{padding:25px 28px;border:0;border-radius:0;background:#f5f1e8}
+.theme-analysis .block-intro h2{color:#b5362d;font-family:"PingFang SC","Microsoft YaHei",sans-serif;font-size:27px;font-weight:700;letter-spacing:0}
+.theme-analysis .block-section{padding-bottom:21px;border-bottom:1px solid #e6e2dc}
+.theme-analysis .block-closing{padding:25px 30px;border:0;border-radius:0;background:#151515}
+.theme-analysis .block-closing h2,.theme-analysis .block-closing p{color:#fff}
+.theme-analysis .block-closing h2{font-family:"PingFang SC","Microsoft YaHei",sans-serif;font-size:28px;font-weight:700;letter-spacing:0}
+.theme-analysis .watermark{display:none}
+.theme-analysis .analysis-footer{display:block;position:absolute;left:76px;right:76px;bottom:32px;padding-top:12px;border-top:1px solid #d8d4cd;color:#77736d;font-family:"PingFang SC","Microsoft YaHei",sans-serif;font-size:18px}
+.theme-analysis .page-number{right:76px;bottom:32px;color:#77736d;font-family:"PingFang SC","Microsoft YaHei",sans-serif;font-size:18px}
 </style>
