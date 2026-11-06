@@ -168,7 +168,7 @@ function analysisBlockView(block) {
   const chunks = raw
     .split(/\n+|(?<=[。！？；])/)
     .map(value => value.replace(/^[①②③④⑤⑥⑦⑧⑨⑩\d一二三四五六七八九十]+[、.．)）]\s*/, '').trim())
-    .filter(value => value.length >= 6)
+    .filter(Boolean)
   const lead = chunks.shift() || ''
   const items = chunks.map((sentence) => {
     const clean = sentence.replace(/[。；]$/, '')
@@ -194,18 +194,6 @@ function analysisBlockView(block) {
   return { lead, items }
 }
 
-function estimateAnalysisBlockHeight(block) {
-  const view = analysisBlockView(block)
-  const headingHeight = block.heading ? 82 : 20
-  const leadHeight = view.lead ? Math.max(44, Math.ceil(view.lead.length / 32) * 41) + 20 : 0
-  const itemsHeight = view.items.reduce((total, item) => {
-    const copyLength = String(item.title || '').length + String(item.detail || '').length
-    return total + Math.max(84, Math.ceil(copyLength / 34) * 30 + 38)
-  }, 0)
-  const boxExtra = block.kind === 'intro' || block.kind === 'closing' ? 38 : 0
-  return headingHeight + leadHeight + itemsHeight + boxExtra + 38
-}
-
 function splitText(value, max = 250) {
   const source = String(value || '').split(/\n+/).map(v => v.trim()).filter(Boolean)
   const result = []
@@ -222,34 +210,87 @@ function splitText(value, max = 250) {
   return result
 }
 
-const pages = computed(() => {
+const pageBlocks = computed(() => {
   if (!guide.sections.length) return []
   const paragraphMax = theme.value === 'analysis' ? 150 : 250
   const blocks = [{ kind: 'intro', heading: '🎯 先说重点', paragraphs: splitText(guide.intro, paragraphMax) }]
   guide.sections.forEach(section => blocks.push({ kind: 'section', heading: section.title, paragraphs: splitText(section.content, paragraphMax) }))
   blocks.push({ kind: 'closing', heading: '💬 写在最后', paragraphs: splitText(guide.closing, paragraphMax) })
+  return blocks.flatMap(block => block.paragraphs.map((paragraph, index) => ({
+    kind: block.kind, heading: index === 0 ? block.heading : '', paragraphs: [paragraph],
+  })))
+})
+
+const analysisPages = ref([])
+const pages = computed(() => {
+  if (theme.value === 'analysis') return analysisPages.value
   const output = []
   let page = []
   let used = 0
-  let capacity = theme.value === 'analysis' ? 670 : 540
-  for (const block of blocks) {
-    let first = true
-    for (const paragraph of block.paragraphs) {
-      const nextBlock = { kind: block.kind, heading: first ? block.heading : '', paragraphs: [paragraph] }
-      const cost = theme.value === 'analysis'
-        ? estimateAnalysisBlockHeight(nextBlock)
-        : paragraph.length + (first && block.heading ? 90 : 0)
-      if (page.length && used + cost > capacity) {
-        output.push(page); page = []; used = 0; capacity = theme.value === 'analysis' ? 970 : 650
-      }
-      page.push(nextBlock)
-      used += cost
-      first = false
+  for (const block of pageBlocks.value) {
+    const cost = block.paragraphs[0].length + (block.heading ? 90 : 0)
+    if (page.length && used + cost > (output.length ? 650 : 540)) {
+      output.push(page)
+      page = []
+      used = 0
     }
+    page.push(block)
+    used += cost
   }
   if (page.length) output.push(page)
   return output
 })
+
+let paginationRun = 0
+async function paginateAnalysis() {
+  const run = ++paginationRun
+  if (theme.value !== 'analysis') return
+  let remaining = pageBlocks.value
+  const fitted = []
+  if (!remaining.length) {
+    analysisPages.value = []
+    return
+  }
+  if (document.fonts?.ready) await document.fonts.ready
+  while (remaining.length && run === paginationRun && theme.value === 'analysis') {
+    const index = fitted.length
+    analysisPages.value = [...fitted, remaining]
+    await nextTick()
+    if (run !== paginationRun || theme.value !== 'analysis') return
+    const node = pageRefs.value[index]
+    const footer = node?.querySelector('.analysis-footer')
+    if (!footer?.getBoundingClientRect().height) return
+    const facts = node.querySelector('.analysis-facts')
+    const sections = [...node.querySelectorAll('.analysis-block')]
+    const lastBottom = sections.at(-1)?.getBoundingClientRect().bottom
+    const factsSpace = facts && lastBottom != null
+      ? facts.getBoundingClientRect().bottom - lastBottom
+      : 0
+    // Preview geometry is scaled by half. Reserve 16px above the export footer.
+    const limit = footer.getBoundingClientRect().top - 8 - factsSpace
+    const overflow = sections.findIndex(section => section.getBoundingClientRect().bottom > limit)
+    if (index > 0 && overflow === 0) {
+      const [block, ...rest] = remaining
+      const chars = Array.from(block.paragraphs[0])
+      if (chars.length > 1) {
+        const middle = Math.ceil(chars.length / 2)
+        remaining = [
+          { ...block, paragraphs: [chars.slice(0, middle).join('')] },
+          { ...block, heading: '', paragraphs: [chars.slice(middle).join('')] },
+          ...rest,
+        ]
+        continue
+      }
+    }
+    const count = overflow < 0 ? remaining.length : Math.max(index === 0 ? 0 : 1, overflow)
+    fitted.push(remaining.slice(0, count))
+    remaining = remaining.slice(count)
+  }
+  if (run === paginationRun && theme.value === 'analysis') {
+    analysisPages.value = fitted
+    await nextTick()
+  }
+}
 
 async function loadProfile() {
   try {
@@ -432,6 +473,7 @@ async function renderImages() {
     Object.assign(guide, sanitizeGuideContent(guide))
     await nextTick()
     if (document.fonts?.ready) await document.fonts.ready
+    if (theme.value === 'analysis') await paginateAnalysis()
     const output = []
     for (let i = 0; i < pages.value.length; i++) {
       const node = pageRefs.value[i]
@@ -465,6 +507,7 @@ async function downloadAll() {
 
 watch(() => props.product?.company_name, value => { if (value) targetCompany.value = value }, { immediate: true })
 watch(guide, sanitizeGuideInPlace, { deep: true, flush: 'sync' })
+watch([pageBlocks, theme, () => guide.title, () => guide.subtitle, analysisHeader, analysisFacts], paginateAnalysis)
 watch([() => guide.title, () => guide.subtitle, () => guide.intro, () => guide.closing, () => guide.sections.map(item => `${item.title}:${item.content}`).join('|'), theme], () => { images.value = [] })
 onMounted(loadProfile)
 </script>
