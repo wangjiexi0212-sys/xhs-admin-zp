@@ -66,6 +66,7 @@
           <a-menu-item key="/system/xhs-cookie">小红书Cookie</a-menu-item>
           <a-menu-item key="/system/baidu">百度网盘</a-menu-item>
           <a-menu-item key="/system/feishu">飞书配置</a-menu-item>
+          <a-menu-item key="/system/ima">IMA配置</a-menu-item>
         </a-sub-menu>
         <a-sub-menu key="passly">
           <template #icon>

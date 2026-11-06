@@ -39,6 +39,7 @@
           </template>
           生成笔记
         </a-button>
+        <a-button type="default" @click="imaGuideVisible = true">IMA生成笔试攻略</a-button>
         <a-button type="default" @click="openInterview">
           <template #icon>
             <SyncOutlined v-if="interviewJob?.status === 'pending' || interviewJob?.status === 'running'" :spin="true" />
@@ -629,6 +630,7 @@
           </template>
           生成笔记
         </a-button>
+        <a-button type="default" @click="imaGuideVisible = true">IMA生成笔试攻略</a-button>
         <a-button type="default" @click="openInterview">
           <template #icon>
             <SyncOutlined v-if="interviewJob?.status === 'pending' || interviewJob?.status === 'running'" :spin="true" />
@@ -655,6 +657,16 @@
         </a-button>
       </div>
     </a-spin>
+
+    <a-drawer
+      v-model:open="imaGuideVisible"
+      title="IMA 完整笔试攻略"
+      placement="right"
+      width="88%"
+      :destroy-on-close="false"
+    >
+      <ImaExamGuide :product="data" />
+    </a-drawer>
 
     <!-- 生成笔记 抽屉 -->
     <a-drawer v-model:open="generateVisible" title="生成笔记" placement="right" width="80%" :destroy-on-close="false">
@@ -1584,6 +1596,7 @@ import { message, Modal } from 'ant-design-vue'
 import { LeftOutlined, EditOutlined, FileTextOutlined, DownloadOutlined, BulbOutlined, FileWordOutlined, SyncOutlined, CheckCircleOutlined, CloseCircleOutlined, ClockCircleOutlined, FormOutlined, StopOutlined, CopyOutlined, PictureOutlined, DownOutlined } from '@ant-design/icons-vue'
 import HtmlCardImages from './components/HtmlCardImages.vue'
 import NoteImageSetDrawer from './components/NoteImageSetDrawer.vue'
+import ImaExamGuide from './components/ImaExamGuide.vue'
 import { getProductDetail } from '@/api/products'
 import { getContentTemplateList } from '@/api/contentTemplates'
 import { getPromptList } from '@/api/prompts'
@@ -1618,6 +1631,7 @@ const id = computed(() => Number(route.params.id))
 const loading = ref(false)
 const data = ref({})
 const generateVisible = ref(false)
+const imaGuideVisible = ref(false)
 const generatedTitle = ref('')
 const cardText = ref('')
 const cardImgGenerating = ref(false)

@@ -48,6 +48,21 @@
       style="margin-bottom: 12px"
     />
 
+    <a-card size="small" :bordered="false" class="obsidian-option">
+      <a-space wrap>
+        <a-switch v-model:checked="useObsidian" />
+        <span>快速 AI 创作时参考腾讯 IMA 知识库</span>
+        <a-input
+          v-if="useObsidian"
+          v-model:value="targetCompany"
+          placeholder="输入新企业名称"
+          style="width:260px"
+          allow-clear
+        />
+        <span v-if="useObsidian" class="muted">使用系统设置中保存的默认母库画像；读取失败会按原流程继续</span>
+      </a-space>
+    </a-card>
+
     <div class="summary-row">
       <div class="summary-item">
         <span class="summary-label">素材</span>
@@ -383,6 +398,8 @@ import {
   getAiContentQuestions,
   updateAiContentOutput,
   generateAiTopics,
+  getImaConfig,
+  getImaWritingProfile,
 } from '@/api/aiContentCenter'
 import { getBaiduFiles } from '@/api/baidu'
 import { getToken } from '@/api/request'
@@ -414,6 +431,8 @@ const steps = ref([])
 const outputs = ref([])
 const stats = reactive({ assets: 0, questions: 0 })
 const activeTab = ref('sources')
+const useObsidian = ref(false)
+const targetCompany = ref('')
 let pollTimer = null
 let setupWarned = false
 
@@ -814,6 +833,19 @@ async function doQuickCreate(topicType) {
   }
   quickCreating.value = true
   try {
+    let obsidianContext = ''
+    if (useObsidian.value && targetCompany.value.trim()) {
+      try {
+        const config = await getImaConfig()
+        const knowledgeBaseId = String(config?.default_knowledge_base_id || '').trim()
+        if (!knowledgeBaseId) throw new Error('请先在系统设置中选择默认 IMA 写作母库')
+        const matched = await getImaWritingProfile(knowledgeBaseId)
+        obsidianContext = String(matched.profile || '').trim()
+        if (!obsidianContext) message.info('IMA 母库尚未生成写作画像，将按原流程生成')
+      } catch (e) {
+        message.warning('IMA 写作画像读取失败，已自动按原流程继续')
+      }
+    }
     await generateAiTopics(resolvedProductId.value, {
       topic_types: [topicType],
       count: 3,
@@ -822,6 +854,8 @@ async function doQuickCreate(topicType) {
       api_key: active.api_key,
       base_url: active.base_url || '',
       model: active.default_model,
+      target_company: useObsidian.value ? targetCompany.value.trim() : '',
+      knowledge_context: obsidianContext,
     })
     activeTab.value = 'ai-topics'
     await topicCenterRef.value?.loadTopics()
@@ -1054,6 +1088,11 @@ onBeforeUnmount(stopPolling)
   border: 1px solid #f0f0f0;
   border-radius: 8px;
   padding: 16px;
+}
+
+.obsidian-option {
+  margin-bottom: 12px;
+  background: #fafafa;
 }
 
 .center-header {

@@ -63,6 +63,64 @@ export const getAiContentKnowledge = (productId, params = {}) => {
 export const getAiContentKnowledgeSources = (id) =>
   request(`/api/ai-content/knowledge/${ensureId(id)}/sources`)
 
+// Obsidian 知识库独立接口；不改变现有 AI 内容中心请求。
+export const getObsidianKnowledgeStatus = () =>
+  request('/api/obsidian-knowledge/status')
+
+export const getObsidianDocuments = (params = {}) => {
+  const qs = new URLSearchParams()
+  if (params.keyword) qs.set('keyword', params.keyword)
+  if (params.page) qs.set('page', params.page)
+  if (params.pageSize) qs.set('pageSize', params.pageSize)
+  const query = qs.toString()
+  return request(`/api/obsidian-knowledge/documents${query ? '?' + query : ''}`)
+}
+
+export const searchObsidianKnowledge = (body) =>
+  request('/api/obsidian-knowledge/search', { method: 'POST', body })
+
+export const syncObsidianKnowledge = (body) =>
+  request('/api/obsidian-knowledge/sync', { method: 'POST', body })
+
+export const getImaStatus = () =>
+  request('/api/ima-knowledge/status')
+
+export const getImaConfig = () =>
+  request('/api/ima-knowledge/config')
+
+export const saveImaConfig = (body) =>
+  request('/api/ima-knowledge/config', { method: 'POST', body })
+
+export const testImaConfig = (body) =>
+  request('/api/ima-knowledge/config/test', { method: 'POST', body })
+
+export const testImaConnection = () =>
+  request('/api/ima-knowledge/test', { method: 'POST', body: {} })
+
+export const getImaKnowledgeBases = (query = '') => {
+  const qs = new URLSearchParams()
+  if (query) qs.set('query', query)
+  const suffix = qs.toString()
+  return request(`/api/ima-knowledge/knowledge-bases${suffix ? '?' + suffix : ''}`)
+}
+
+export const searchImaKnowledge = (body) =>
+  request('/api/ima-knowledge/search', { method: 'POST', body })
+
+export const searchImaSimilarCases = (body) =>
+  request('/api/ima-knowledge/similar-cases', { method: 'POST', body })
+
+export const getImaCorpus = (body) =>
+  request('/api/ima-knowledge/corpus', { method: 'POST', body })
+
+export const getImaWritingProfile = (knowledgeBaseId) => {
+  const qs = new URLSearchParams({ knowledge_base_id: knowledgeBaseId })
+  return request(`/api/ima-knowledge/profile?${qs}`)
+}
+
+export const saveImaWritingProfile = (body) =>
+  request('/api/ima-knowledge/profile', { method: 'POST', body })
+
 // Phase 2 — 选题
 export const generateAiTopics = (productId, body) =>
   request(`/api/regular-products/${ensureId(productId, 'product_id')}/ai-content/topics/generate`, { method: 'POST', body })

@@ -176,6 +176,11 @@ const router = createRouter({
           component: () => import('../views/system/FeishuConfig.vue'),
         },
         {
+          path: 'system/ima',
+          name: 'system-ima',
+          component: () => import('../views/system/ImaConfig.vue'),
+        },
+        {
           path: 'passly/dashboard',
           name: 'passly-dashboard',
           component: () => import('../views/passly/Dashboard.vue'),
