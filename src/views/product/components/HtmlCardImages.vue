@@ -32,6 +32,8 @@
         <template #icon><SyncOutlined /></template>
         重新生成
       </a-button>
+      <a-tag v-if="isProfileReady" color="green">IMA 写作画像已参与</a-tag>
+      <a-tag v-else-if="profileLoading" color="blue">正在加载 IMA 画像</a-tag>
       <a-button
         type="primary"
         size="small"
@@ -227,6 +229,7 @@ import { message, Modal } from 'ant-design-vue'
 import { SyncOutlined, DownloadOutlined } from '@ant-design/icons-vue'
 import { toPng } from 'html-to-image'
 import { chatLlm } from '@/api/llm'
+import { getImaConfig, getImaWritingProfile } from '@/api/aiContentCenter'
 import { useLlmStore } from '@/stores/llm'
 import { useRouter } from 'vue-router'
 
@@ -257,6 +260,10 @@ const statusMsg   = ref('')
 const content     = ref(null)
 const capturedUrl = ref('')
 const templateRef = ref(null)
+const imaProfile = ref('')
+const profileLoading = ref(false)
+const profileLoaded = ref(false)
+const isProfileReady = computed(() => Boolean(imaProfile.value.trim()))
 
 // ─── 主题圆点颜色 ──────────────────────────────────────────
 const THEME_COLORS = {
@@ -315,10 +322,12 @@ async function generateContent() {
   }
 
   generating.value = true
-  statusMsg.value  = '正在分析内容，生成卡片文字…'
+  statusMsg.value  = '正在加载商品信息与写作画像…'
   try {
     const d = props.data
-    const userPrompt = buildPrompt(activeType.value, d)
+    await loadImaWritingProfile()
+    statusMsg.value = isProfileReady.value ? '正在结合 IMA 写作画像生成卡片文字…' : '正在根据商品信息生成卡片文字…'
+    const userPrompt = buildPrompt(activeType.value, d, imaProfile.value)
 
     const res = await chatLlm({
       provider:   active.provider,
@@ -329,7 +338,7 @@ async function generateContent() {
       messages: [
         {
           role: 'system',
-          content: '你是一个JSON生成助手。只输出有效的JSON对象，不要任何解释说明，不要用markdown代码块包裹，直接输出原始JSON。严禁涉及政治人物、党政文件等敏感内容。',
+          content: '你是招聘考试内容卡片生成助手。只输出有效的JSON对象，不要任何解释说明，不要用markdown代码块包裹，直接输出原始JSON。商品事实是唯一可写成确定信息的来源；IMA写作画像只用于借鉴信息组织、复习策略和表达方式，不能作为事实来源，不能迁移历史样本的企业、日期、题量、分值、考试时长或录取信息。严禁涉及政治人物、党政文件等敏感内容。',
         },
         { role: 'user', content: userPrompt },
       ],
@@ -350,6 +359,24 @@ async function generateContent() {
   }
 }
 
+// IMA 画像由系统设置中的“分析母库并生成画像”维护。读取失败不阻塞原有商品生图。
+async function loadImaWritingProfile() {
+  if (profileLoaded.value || profileLoading.value) return
+  profileLoading.value = true
+  try {
+    const config = await getImaConfig()
+    const knowledgeBaseId = String(config?.default_knowledge_base_id || '').trim()
+    if (!knowledgeBaseId) return
+    const profile = await getImaWritingProfile(knowledgeBaseId)
+    if (profile?.configured && profile?.profile) imaProfile.value = String(profile.profile).trim().slice(0, 12000)
+  } catch {
+    imaProfile.value = ''
+  } finally {
+    profileLoaded.value = true
+    profileLoading.value = false
+  }
+}
+
 // ─── Prompt 构建 ───────────────────────────────────────────
 function buildWrittenExamConstraint(d) {
   const content = String(d?.written_exam_content || '').trim()
@@ -367,7 +394,7 @@ function buildWrittenExamConstraint(d) {
   ].join('\n')
 }
 
-function buildPrompt(type, d) {
+function buildPrompt(type, d, profile = '') {
   const base = [
     d.company_name         ? `单位名称：${d.company_name}` : '',
     d.written_exam_time    ? `笔试时间：${d.written_exam_time}` : '',
@@ -375,6 +402,13 @@ function buildPrompt(type, d) {
     d.recruit_count        ? `招聘人数：${d.recruit_count}` : '',
   ].filter(Boolean).join('\n')
   const examConstraint = buildWrittenExamConstraint(d)
+  const profileContext = profile
+    ? [
+        '【IMA 写作画像（只用于策略与表达）】',
+        profile,
+        '只能借鉴其中的内容结构、复习方法、语气和信息组织；不得把画像或历史样本中的企业、时间、题量、分值、考试时长、录取数据当作当前商品事实。',
+      ].join('\n')
+    : '【IMA 写作画像】当前未配置或不可用。仅根据商品事实生成，不得补充未经公告明确的信息。'
 
   if (type === 'exam_info') {
     return [
@@ -383,6 +417,8 @@ function buildPrompt(type, d) {
       base,
       '',
       examConstraint,
+      '',
+      profileContext,
       '',
       '输出格式（sections必须恰好3项）：',
       '{"sections":[{"title":"笔试相关","bullets":["时间/形式/地点等，1-2条"]},{"title":"笔试内容","bullets":["主要考察科目/内容，2-4条"]},{"title":"笔试题型","bullets":["题目类型和数量分布，2-3条"]}],"note":"每年笔试内容略有变化，仅供参考"}',
@@ -399,23 +435,27 @@ function buildPrompt(type, d) {
       '',
       examConstraint,
       '',
+      profileContext,
+      '',
       '输出格式（sections必须恰好3项）：',
       '{"intro":"激励短句，不超过30字","sections":[{"label":"重点科目","content":"..."},{"label":"答题技巧","content":"..."},{"label":"备考提醒","content":"..."}]}',
       '',
-      '要求：针对该单位笔试内容，每个content不超过80字，语气激励实用。',
+      '要求：针对该单位笔试内容，优先按画像中可迁移的复习框架组织；每个content不超过80字，语气激励实用。若笔试时间不明确，不得写真实倒计时或“还剩X天”。',
     ].filter(Boolean).join('\n')
   }
 
   if (type === 'advice') {
     return [
-      '根据以下招聘信息，模拟已上岸考生的备考分享帖，生成备考建议卡片内容。',
+      '根据以下招聘信息，生成贴近考生阅读习惯的备考建议卡片内容，不虚构个人上岸经历。',
       '',
       base,
       '',
       examConstraint,
       '',
+      profileContext,
+      '',
       '输出格式（**词**标记的内容将渲染为红色高亮）：',
-      '{"intro":"考生交流情况开场，50字以内，模拟上岸考生讲自己的备考经历","advice":"备考建议正文，150-200字，包含具体科目建议和刷题方向，至少用**词**标记3-5个关键词，关键词必须来自笔试内容或招聘信息"}',
+      '{"intro":"针对当前商品的备考提醒开场，50字以内，不虚构个人上岸经历","advice":"备考建议正文，150-200字，结合画像中的可迁移方法和当前明确科目，至少用**词**标记3-5个关键词，关键词必须来自笔试内容或招聘信息"}',
       '',
       '要求：语言亲切自然，严禁引流内容（加微信/关注等）。',
     ].filter(Boolean).join('\n')
@@ -429,10 +469,12 @@ function buildPrompt(type, d) {
     '',
     examConstraint,
     '',
-    '输出格式（**词**标记的内容将渲染为红色高亮）：',
-    '{"intro":"80字以内，讲述一位考生的备考经历和强度感受","content":"150-200字，描述考试特点和备考建议，至少用**词**标记3-5个关键词"}',
+    profileContext,
     '',
-    '要求：真实感强，聚焦该单位考试特点，严禁引流内容。',
+    '输出格式（**词**标记的内容将渲染为红色高亮）：',
+    '{"intro":"80字以内，给出当前商品的建议备考强度及依据，不虚构个人经历","content":"150-200字，结合明确考试范围与画像中的复习框架，描述备考重点和建议；至少用**词**标记3-5个关键词"}',
+    '',
+    '要求：强度只能描述建议投入程度，不得断言考试难度、录取概率或未公布信息；聚焦当前单位已明确的考试特点，严禁引流内容。',
   ].filter(Boolean).join('\n')
 }
 
