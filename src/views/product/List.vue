@@ -339,11 +339,6 @@ import { drawCoverStream } from '@/api/draw'
 import { proxyImageForDownload } from '@/api/xhsRewrite'
 import {
   DIVERSITY_LEVEL_OPTIONS,
-  appendDiversityHistory,
-  assessProductValueRisk,
-  assessDiversityRisk,
-  buildDiversityPrompt,
-  ensureBodyCompany,
   createDiversityPlans,
   formatPlanSummary,
   loadDiversityHistory,
@@ -363,6 +358,7 @@ import { saveAs } from 'file-saver'
 import { writeFeishuBitableRecords, uploadFeishuBitableImage } from '@/api/feishuConfig'
 import { getBgImageList } from '@/api/bgImages'
 import { EXTRA_TITLE_TEMPLATES } from '@/utils/extraTitleTemplates'
+import { BODY_TEMPLATES } from '@/utils/bodyTemplates'
 
 const router = useRouter()
 const llmStore = useLlmStore()
@@ -1285,60 +1281,52 @@ function buildProductCardText(detail, useTemplatePool = false) {
  * @param {string} [presetTitle] 预设标题（批量生成时由 Worker 传入，与卡片图文案保持一致）
  *                               不传时从 TITLE_POOL 随机生成
  */
-async function generateNoteForProduct(detail, presetTitle = null, contentPlan = null, comparisonEntries = [], diversityLevel = 'extreme') {
+async function generateNoteForProduct(detail, presetTitle = null) {
   const active = llmStore.active
   if (!active) throw new Error('未配置使用中的模型')
 
-  const plan = contentPlan || createDiversityPlans([{ detail }], diversityLevel, comparisonEntries)[0]
-  const title = plan?.noteTitle || presetTitle || buildProductCardText(detail)
+  const title = presetTitle || buildProductCardText(detail)
+  const tpl = BODY_TEMPLATES[Math.floor(Math.random() * BODY_TEMPLATES.length)]
 
   const bodyPromptRes = await getPromptList({ scene: 'content', page: 1, pageSize: 1 })
   const bodyPrompt = bodyPromptRes.list?.[0]
   if (!bodyPrompt) throw new Error('未找到「生成正文」场景的提示词')
 
-  let previousDraft = ''
-  let lastRisk = null
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    const bodyRes = await chatLlm({
-      provider: active.provider,
-      api_format: active.api_format,
-      api_key: active.api_key,
-      base_url: active.base_url || '',
-      model: active.default_model,
-      messages: [
-        {
-          role: 'system',
-          content: `${bodyPrompt.content}\n\n本次任务必须优先遵守用户消息中的差异化规划、事实边界、篇幅和禁止套用成品模板要求。`,
-        },
-        { role: 'user', content: buildDiversityPrompt(plan, detail, previousDraft) },
-      ],
-      max_tokens: 3000,
-      temperature: Math.min(0.82 + attempt * 0.05, 0.96),
-    })
-    const body = ensureBodyCompany(bodyRes.content, detail.company_name)
-    if (!body) throw new Error('正文生成：模型未返回内容')
-    // 篇幅是生成建议，不作为失败条件；正文偏长或偏短仍继续价值与相似度检查并正常入库。
-    const productValueRisk = assessProductValueRisk(body)
-    if (productValueRisk.rejected) {
-      if (attempt < 3) {
-        previousDraft = body
-        continue
-      }
-      throw new Error('正文包含弱化学习资料、回忆题或模拟题价值的表述，已自动重写 3 次')
-    }
-    const risk = assessDiversityRisk({
-      title,
-      body,
-      companyName: detail?.company_name || '',
-      plan,
-    }, comparisonEntries, diversityLevel)
-    lastRisk = risk
-    if (!risk.rejected || diversityLevel === 'standard') {
-      return { title, body, risk, plan, attempts: attempt }
-    }
-    previousDraft = body
-  }
-  throw new Error(`正文与近期内容相似度仍然偏高（风险 ${lastRisk?.score || 0}%），已自动重写 3 次`)
+  const bodyUserContent = [
+    '以下是一段小红书正文模版，请严格保留其结构、分段方式和写作风格，',
+    '将模版中的企业名称和考试内容替换为下方商品信息，重新创作一条全新的小红书正文。',
+    '',
+    '【参考模版】',
+    tpl.content,
+    '',
+    '【商品信息】',
+    `企业名称：${detail.company_name || ''}`,
+    `商品类型：${detail.job_type_name || ''}`,
+    buildWrittenExamConstraintForDetail(detail),
+    `笔记标题：${title}`,
+    '',
+    '要求：只输出正文，不重复标题，不含任何引流内容（关注我、加微信、私信等），数字和表情符号的使用风格与模版保持一致。',
+    '禁止使用网络口头禅或夸张感叹句，例如"谁懂啊家人们"、"后台被问麻了"、"救命"、"真的绷不住"等，语气保持实用、亲切即可。',
+    '【硬性字数要求】正文总字数必须严格控制在200字以内，内容简洁精炼，宁可删减也不超字数，超过200字即视为不合格。',
+  ].join('\n')
+
+  const bodyRes = await chatLlm({
+    provider: active.provider,
+    api_format: active.api_format,
+    api_key: active.api_key,
+    base_url: active.base_url || '',
+    model: active.default_model,
+    messages: [
+      { role: 'system', content: bodyPrompt.content },
+      { role: 'user', content: bodyUserContent },
+    ],
+    max_tokens: 800,
+    temperature: 0.8,
+  })
+  const body = (bodyRes.content || '').trim()
+  if (!body) throw new Error('正文生成：模型未返回内容')
+
+  return { title, body, template: tpl }
 }
 
 function buildNoteDocx(title, body, tags) {
@@ -2103,7 +2091,11 @@ async function runBatchDirImages(generationMode = 'complete', useBgImage = false
   }
   const diversityHistory = loadDiversityHistory()
   const diversityPlans = createDiversityPlans(productDetails, dirBatchDiversityLevel.value, diversityHistory)
-  productDetails.forEach((item, index) => { item.contentPlan = diversityPlans[index] })
+  productDetails.forEach((item, index) => {
+    item.contentPlan = diversityPlans[index]
+    // Word 标题保持旧版标题池逻辑，不使用内容规划或卡片文案。
+    item.wordTitle = buildProductCardText(item.detail)
+  })
   dirBatchLogs.value.push({
     text: `内容差异化规划完成（${dirBatchDiversityLevel.value === 'extreme' ? '极高' : dirBatchDiversityLevel.value === 'high' ? '高' : '标准'}）`,
     type: 'success',
@@ -2151,7 +2143,6 @@ async function runBatchDirImages(generationMode = 'complete', useBgImage = false
   const nextFeishuScheduleTime = createFeishuScheduleTimeGenerator(firstScheduleTime)
   // 收集 worker 发回的每个商品图片，用于后续 note 生成 + feishu
   const productImageMap = {}  // company → { detail, folder, images: [{label, base64}] }
-  const generatedContentEntries = []
 
   await new Promise((resolve, reject) => {
     const worker = new Worker(
@@ -2176,13 +2167,15 @@ async function runBatchDirImages(generationMode = 'complete', useBgImage = false
         const productItem = productDetails.find(p => p.id === id)
         const detail = productItem?.detail
         const contentPlan = productItem?.contentPlan
-        // cardText：Worker 生成卡片图时使用的文案，存入 map 供后续笔记标题复用
+        const wordTitle = productItem?.wordTitle
+        // cardText 仅用于卡片/封面文案；Word 标题由主线程标题池单独生成。
         productImageMap[company] = {
           detail,
           folder,
           images,
           cardText,
           contentPlan,
+          wordTitle,
           coverAssignment: coverAssignmentByProductId.get(Number(id)) || null,
         }
       } else if (data.type === 'done') {
@@ -2219,11 +2212,11 @@ async function runBatchDirImages(generationMode = 'complete', useBgImage = false
 
   // ── 5. Worker 完成后：生成笔记内容 + docx + 飞书（主线程处理）──
   const processProduct = async (company, scheduleTime, recordIndex) => {
-    const { detail, folder, images, cardText, contentPlan, coverAssignment } = productImageMap[company]
+    const { detail, folder, images, cardText, contentPlan, wordTitle, coverAssignment } = productImageMap[company]
     if (!detail) return
     const shuffledTags = shuffleTags(detail.xhs_tags)
-    const noteTitle = contentPlan?.noteTitle || cardText || buildProductCardText(detail, useCardTitleTemplates)
-    const coverText = contentPlan?.cardText || cardText || noteTitle
+    const noteTitle = wordTitle || buildProductCardText(detail) || contentPlan?.noteTitle
+    const coverText = wordTitle || cardText || noteTitle
 
     if (useCoverImage) {
       dirBatchLogs.value.push({ text: `${company} - 生成封面图中...`, type: 'info' })
@@ -2286,37 +2279,18 @@ async function runBatchDirImages(generationMode = 'complete', useBgImage = false
     let noteResult = null
     try {
       let title, body
-        // 标题与卡片文案由差异化计划分别确定，主题相关但不再强制使用同一句话。
       if (genBody) {
-        const comparisonEntries = [...diversityHistory, ...generatedContentEntries]
-        const res = await generateNoteForProduct(detail, noteTitle, contentPlan, comparisonEntries, dirBatchDiversityLevel.value)
+        const res = await generateNoteForProduct(detail, noteTitle)
         title = res.title
         body = res.body
-        const historyEntry = {
-          productId: detail.id,
-          companyName: detail.company_name || company,
-          title,
-          body,
-          plan: res.plan || contentPlan,
-          risk: res.risk,
-        }
-        generatedContentEntries.push(historyEntry)
-        appendDiversityHistory(historyEntry)
         dirBatchLogs.value.push({
-          text: `  └ 差异化检查：${res.risk?.level === 'low' ? '低风险' : '中风险'}（${res.risk?.score || 0}%）${res.attempts > 1 ? `，自动重写 ${res.attempts - 1} 次` : ''}`,
-          type: res.risk?.level === 'low' ? 'success' : 'warn',
+          text: `  └ 正文模板：${res.template?.title || '随机模板'}`,
+          type: 'success',
         })
       } else {
         // 仅生成标题，跳过正文 LLM 调用
         title = noteTitle
         body = null
-        appendDiversityHistory({
-          productId: detail.id,
-          companyName: detail.company_name || company,
-          title,
-          body: '',
-          plan: contentPlan,
-        })
       }
       noteResult = { title, body }
       const doc = buildNoteDocx(title, body, shuffledTags)
