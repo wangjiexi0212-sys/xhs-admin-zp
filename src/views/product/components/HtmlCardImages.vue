@@ -32,7 +32,8 @@
         <template #icon><SyncOutlined /></template>
         重新生成
       </a-button>
-      <a-tag v-if="isProfileReady" color="green">IMA 写作画像已参与</a-tag>
+      <a-tag v-if="usesImaCases" color="green">IMA 画像 + 同类案例已参与</a-tag>
+      <a-tag v-else-if="isProfileReady" color="green">IMA 写作画像已参与</a-tag>
       <a-tag v-else-if="profileLoading" color="blue">正在加载 IMA 画像</a-tag>
       <a-button
         type="primary"
@@ -41,7 +42,7 @@
         :disabled="!content"
         @click="captureImage"
       >
-        📷 截图
+        📷 {{ hasDetailPages ? '生成全部图片' : '截图' }}
       </a-button>
       <a-button
         v-if="capturedUrl"
@@ -52,7 +53,7 @@
         @click="downloadImage"
       >
         <template #icon><DownloadOutlined /></template>
-        下载图片
+        {{ hasDetailPages ? '下载全部图片' : '下载图片' }}
       </a-button>
     </div>
 
@@ -67,7 +68,8 @@
         <div v-else-if="!content" class="hci-center">
           <a-empty description="暂无内容，点击「重新生成」开始" />
         </div>
-        <div v-else ref="templateRef" style="display:inline-block;line-height:0">
+        <div v-else ref="templateRef" class="hci-pages">
+          <div class="hci-capture-page">
 
           <!-- ① 考情模板 -->
           <div v-if="activeType === 'exam_info'" :class="`tpl-base tpl-exam-info theme-${activeTheme}`">
@@ -201,13 +203,40 @@
             </div>
           </div>
 
+          </div>
+
+          <div
+            v-for="(page, pageIndex) in detailPages"
+            :key="`${activeType}-${pageIndex}`"
+            :class="['hci-capture-page', 'tpl-base', 'tpl-detail-page', activeType === 'sprint' ? 'tpl-sprint' : 'tpl-advice', `tpl-detail-${activeType}`, `theme-${activeTheme}`]"
+          >
+            <div class="tpl-detail-head">
+              <span>{{ data.company_name || '招聘考试' }}</span>
+              <b>{{ activeType === 'sprint' ? '冲刺攻略' : '备考建议' }}</b>
+            </div>
+            <div class="tpl-detail-kicker">{{ String(pageIndex + 2).padStart(2, '0') }} / {{ String(detailPages.length + 1).padStart(2, '0') }}</div>
+            <h2>{{ page.title }}</h2>
+            <p v-if="page.summary" class="tpl-detail-summary">{{ page.summary }}</p>
+            <div class="tpl-detail-list">
+              <section v-for="(item, itemIndex) in page.items" :key="itemIndex" class="tpl-detail-item">
+                <span>{{ String(itemIndex + 1).padStart(2, '0') }}</span>
+                <div>
+                  <strong>{{ item.label }}</strong>
+                  <p>{{ item.content }}</p>
+                </div>
+              </section>
+            </div>
+            <div v-if="page.tip" class="tpl-detail-tip">{{ page.tip }}</div>
+            <div class="tpl-detail-footer">以当前公告信息为准 · 同类案例仅作复习方法参考</div>
+          </div>
+
         </div>
       </div>
 
       <!-- 右侧：截图预览 -->
-      <div v-if="capturedUrl" class="hci-preview-area">
-        <div class="hci-preview-title">截图预览</div>
-        <img :src="capturedUrl" class="hci-preview-img" />
+      <div v-if="capturedUrls.length" class="hci-preview-area">
+        <div class="hci-preview-title">图片预览（{{ capturedUrls.length }} 张）</div>
+        <img v-for="(url, index) in capturedUrls" :key="url" :src="url" class="hci-preview-img" :alt="`第${index + 1}页`" />
         <a-button
           type="primary"
           ghost
@@ -229,7 +258,7 @@ import { message, Modal } from 'ant-design-vue'
 import { SyncOutlined, DownloadOutlined } from '@ant-design/icons-vue'
 import { toPng } from 'html-to-image'
 import { chatLlm } from '@/api/llm'
-import { getImaConfig, getImaWritingProfile } from '@/api/aiContentCenter'
+import { getImaConfig, getImaWritingProfile, searchImaSimilarCases } from '@/api/aiContentCenter'
 import { useLlmStore } from '@/stores/llm'
 import { useRouter } from 'vue-router'
 
@@ -259,11 +288,34 @@ const downloading = ref(false)
 const statusMsg   = ref('')
 const content     = ref(null)
 const capturedUrl = ref('')
+const capturedUrls = ref([])
 const templateRef = ref(null)
 const imaProfile = ref('')
+const imaKnowledgeBaseId = ref('')
+const imaSimilarContext = ref('')
+const imaSimilarCount = ref(0)
 const profileLoading = ref(false)
 const profileLoaded = ref(false)
 const isProfileReady = computed(() => Boolean(imaProfile.value.trim()))
+const usesImaCases = computed(() => imaSimilarCount.value > 0)
+const detailPages = computed(() => {
+  if (!['sprint', 'advice'].includes(activeType.value)) return []
+  return normalizeDetailPages(content.value?.pages)
+})
+const hasDetailPages = computed(() => detailPages.value.length > 0)
+
+function normalizeDetailPages(rawPages) {
+  if (!Array.isArray(rawPages)) return []
+  return rawPages.slice(0, 3).map((page, pageIndex) => ({
+    title: String(page?.title || `备考重点 ${pageIndex + 1}`).trim(),
+    summary: String(page?.summary || '').trim().slice(0, 70),
+    items: (Array.isArray(page?.items) ? page.items : []).slice(0, 3).map((item, itemIndex) => ({
+      label: String(item?.label || `重点 ${itemIndex + 1}`).trim().slice(0, 28),
+      content: String(item?.content || '').trim().slice(0, 100),
+    })).filter(item => item.content),
+    tip: String(page?.tip || '').trim().slice(0, 70),
+  })).filter(page => page.items.length)
+}
 
 // ─── 主题圆点颜色 ──────────────────────────────────────────
 const THEME_COLORS = {
@@ -280,6 +332,7 @@ function onTypeChange() {
   activeTheme.value = 1
   content.value = null
   capturedUrl.value = ''
+  capturedUrls.value = []
   generateContent()
 }
 
@@ -289,6 +342,7 @@ watch(() => props.visible, (v) => {
     activeTheme.value = 1
     content.value     = null
     capturedUrl.value = ''
+    capturedUrls.value = []
     generateContent()
   }
 })
@@ -325,9 +379,13 @@ async function generateContent() {
   statusMsg.value  = '正在加载商品信息与写作画像…'
   try {
     const d = props.data
-    await loadImaWritingProfile()
-    statusMsg.value = isProfileReady.value ? '正在结合 IMA 写作画像生成卡片文字…' : '正在根据商品信息生成卡片文字…'
-    const userPrompt = buildPrompt(activeType.value, d, imaProfile.value)
+    await loadImaContext(d, activeType.value)
+    statusMsg.value = usesImaCases.value
+      ? '正在结合 IMA 画像与同类案例生成多页内容…'
+      : isProfileReady.value
+        ? '正在结合 IMA 写作画像生成多页内容…'
+        : '正在根据商品信息生成内容…'
+    const userPrompt = buildPrompt(activeType.value, d, imaProfile.value, imaSimilarContext.value)
 
     const res = await chatLlm({
       provider:   active.provider,
@@ -342,7 +400,7 @@ async function generateContent() {
         },
         { role: 'user', content: userPrompt },
       ],
-      max_tokens:  1200,
+      max_tokens:  ['sprint', 'advice'].includes(activeType.value) ? 2600 : 1200,
       temperature: 0.7,
     })
 
@@ -359,20 +417,43 @@ async function generateContent() {
   }
 }
 
-// IMA 画像由系统设置中的“分析母库并生成画像”维护。读取失败不阻塞原有商品生图。
-async function loadImaWritingProfile() {
-  if (profileLoaded.value || profileLoading.value) return
+// IMA 画像由系统设置维护；冲刺/备考建议额外召回同类案例。任一环节失败均不阻塞原有生图。
+async function loadImaContext(d, type) {
+  imaSimilarContext.value = ''
+  imaSimilarCount.value = 0
+  if (profileLoading.value) return
   profileLoading.value = true
   try {
-    const config = await getImaConfig()
-    const knowledgeBaseId = String(config?.default_knowledge_base_id || '').trim()
-    if (!knowledgeBaseId) return
-    const profile = await getImaWritingProfile(knowledgeBaseId)
-    if (profile?.configured && profile?.profile) imaProfile.value = String(profile.profile).trim().slice(0, 12000)
+    if (!profileLoaded.value) {
+      const config = await getImaConfig()
+      imaKnowledgeBaseId.value = String(config?.default_knowledge_base_id || '').trim()
+      if (imaKnowledgeBaseId.value) {
+        const profile = await getImaWritingProfile(imaKnowledgeBaseId.value)
+        if (profile?.configured && profile?.profile) imaProfile.value = String(profile.profile).trim().slice(0, 12000)
+      }
+      profileLoaded.value = true
+    }
+    if (['sprint', 'advice'].includes(type) && imaKnowledgeBaseId.value) {
+      statusMsg.value = '正在从 IMA 召回同类备考案例…'
+      try {
+        const similar = await searchImaSimilarCases({
+          knowledge_base_id: imaKnowledgeBaseId.value,
+          target_company: d?.company_name || '',
+          job_type: d?.job_type_name || '',
+          exam_content: d?.written_exam_content || '',
+          product_title: d?.title || '',
+          limit: 8,
+        })
+        const results = Array.isArray(similar?.results) ? similar.results : []
+        imaSimilarCount.value = results.length
+        imaSimilarContext.value = String(similar?.context || '').trim().slice(0, 8000)
+      } catch {
+        // 相似案例不可用时仅降级使用画像与商品事实。
+      }
+    }
   } catch {
     imaProfile.value = ''
   } finally {
-    profileLoaded.value = true
     profileLoading.value = false
   }
 }
@@ -394,7 +475,7 @@ function buildWrittenExamConstraint(d) {
   ].join('\n')
 }
 
-function buildPrompt(type, d, profile = '') {
+function buildPrompt(type, d, profile = '', similarContext = '') {
   const base = [
     d.company_name         ? `单位名称：${d.company_name}` : '',
     d.written_exam_time    ? `笔试时间：${d.written_exam_time}` : '',
@@ -409,6 +490,13 @@ function buildPrompt(type, d, profile = '') {
         '只能借鉴其中的内容结构、复习方法、语气和信息组织；不得把画像或历史样本中的企业、时间、题量、分值、考试时长、录取数据当作当前商品事实。',
       ].join('\n')
     : '【IMA 写作画像】当前未配置或不可用。仅根据商品事实生成，不得补充未经公告明确的信息。'
+  const similarCaseContext = similarContext
+    ? [
+        '【IMA 同类案例（仅作方法参考）】',
+        similarContext,
+        '这些是与当前招聘类型、笔试范围相近的历史内容，不代表当前企业已公布的考情。只能提炼复习顺序、资料整理方法、答题动作和提醒；不得迁移案例中的企业名称、日期、题量、分值、时长、录取信息或未在商品中出现的考试科目。',
+      ].join('\n')
+    : '【IMA 同类案例】未召回到可用内容。仅根据商品事实与写作画像生成。'
 
   if (type === 'exam_info') {
     return [
@@ -419,6 +507,8 @@ function buildPrompt(type, d, profile = '') {
       examConstraint,
       '',
       profileContext,
+      '',
+      similarCaseContext,
       '',
       '输出格式（sections必须恰好3项）：',
       '{"sections":[{"title":"笔试相关","bullets":["时间/形式/地点等，1-2条"]},{"title":"笔试内容","bullets":["主要考察科目/内容，2-4条"]},{"title":"笔试题型","bullets":["题目类型和数量分布，2-3条"]}],"note":"每年笔试内容略有变化，仅供参考"}',
@@ -437,10 +527,12 @@ function buildPrompt(type, d, profile = '') {
       '',
       profileContext,
       '',
-      '输出格式（sections必须恰好3项）：',
-      '{"intro":"激励短句，不超过30字","sections":[{"label":"重点科目","content":"..."},{"label":"答题技巧","content":"..."},{"label":"备考提醒","content":"..."}]}',
+      similarCaseContext,
       '',
-      '要求：针对该单位笔试内容，优先按画像中可迁移的复习框架组织；每个content不超过80字，语气激励实用。若笔试时间不明确，不得写真实倒计时或“还剩X天”。',
+      '输出格式：首页sections必须恰好3项；pages必须恰好3页，每页items为2-3项。',
+      '{"intro":"激励短句，不超过30字","sections":[{"label":"重点科目","content":"..."},{"label":"答题技巧","content":"..."},{"label":"备考提醒","content":"..."}],"pages":[{"title":"第一阶段：搭建复习框架","summary":"不超过45字","items":[{"label":"动作标题","content":"40-65字"}],"tip":"一句提醒，40字以内"}]}',
+      '',
+      '三页顺序固定为：①模块优先级与资料整理；②做题与复盘动作；③考前执行与避坑提醒。针对该单位笔试内容，优先按画像和同类案例中可迁移的复习框架组织；首页每个content不超过80字，后续每个item content不超过65字。若笔试时间不明确，不得写真实倒计时或“还剩X天”。',
     ].filter(Boolean).join('\n')
   }
 
@@ -454,10 +546,12 @@ function buildPrompt(type, d, profile = '') {
       '',
       profileContext,
       '',
-      '输出格式（**词**标记的内容将渲染为红色高亮）：',
-      '{"intro":"针对当前商品的备考提醒开场，50字以内，不虚构个人上岸经历","advice":"备考建议正文，150-200字，结合画像中的可迁移方法和当前明确科目，至少用**词**标记3-5个关键词，关键词必须来自笔试内容或招聘信息"}',
+      similarCaseContext,
       '',
-      '要求：语言亲切自然，严禁引流内容（加微信/关注等）。',
+      '输出格式：首页保留高亮写法；pages必须恰好3页，每页items为2-3项。',
+      '{"intro":"针对当前商品的备考提醒开场，50字以内，不虚构个人上岸经历","advice":"备考建议正文，150-200字，结合画像中的可迁移方法和当前明确科目，至少用**词**标记3-5个关键词，关键词必须来自笔试内容或招聘信息","pages":[{"title":"先弄清楚复习什么","summary":"不超过45字","items":[{"label":"建议标题","content":"40-65字"}],"tip":"一句提醒，40字以内"}]}',
+      '',
+      '三页顺序固定为：①复习范围与资料整理；②模块学习方法；③不同基础的执行建议。只输出可迁移的方法，不把同类案例写成当前企业事实；语言亲切自然，严禁引流内容（加微信/关注等）。',
     ].filter(Boolean).join('\n')
   }
 
@@ -880,18 +974,23 @@ function buildSubjectScope(subject, rawContent) {
 
 // ─── 截图 ──────────────────────────────────────────────────
 async function captureImage() {
-  const el = templateRef.value
-  if (!el) { message.warning('模板未就绪，请稍后重试'); return }
+  const root = templateRef.value
+  const pages = root ? [...root.querySelectorAll(':scope > .hci-capture-page')] : []
+  if (!pages.length) { message.warning('模板未就绪，请稍后重试'); return }
 
   capturing.value = true
   try {
-    const dataUrl = await toPng(el, {
-      pixelRatio: 2,
-      cacheBust: true,
-      skipFonts: false,
-    })
-    capturedUrl.value = dataUrl
-    message.success('截图成功')
+    const urls = []
+    for (const page of pages) {
+      urls.push(await toPng(page, {
+        pixelRatio: 2,
+        cacheBust: true,
+        skipFonts: false,
+      }))
+    }
+    capturedUrls.value = urls
+    capturedUrl.value = urls[0] || ''
+    message.success(`已生成 ${urls.length} 张图片`)
   } catch (e) {
     console.error('截图失败', e)
     message.error('截图失败：' + (e.message || '未知错误'))
@@ -910,15 +1009,17 @@ const TYPE_LABEL_MAP = {
 }
 
 async function downloadImage() {
-  if (!capturedUrl.value) return
+  if (!capturedUrls.value.length) return
   downloading.value = true
   try {
     const company = props.data.company_name || 'product'
     const label   = TYPE_LABEL_MAP[activeType.value] || activeType.value
-    const a = document.createElement('a')
-    a.href     = capturedUrl.value
-    a.download = `${company}-${label}-主题${activeTheme.value}.png`
-    a.click()
+    capturedUrls.value.forEach((url, index) => {
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${company}-${label}-主题${activeTheme.value}-${String(index + 1).padStart(2, '0')}.png`
+      a.click()
+    })
   } finally {
     downloading.value = false
   }
@@ -977,6 +1078,16 @@ async function downloadImage() {
   justify-content: center;
   align-items: flex-start;
 }
+.hci-pages {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  line-height: 0;
+}
+.hci-capture-page {
+  flex: 0 0 auto;
+  line-height: normal;
+}
 .hci-center {
   display: flex;
   flex-direction: column;
@@ -1010,6 +1121,94 @@ async function downloadImage() {
   font-family: 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
   position: relative;
   overflow: hidden;
+}
+
+/* 冲刺 / 备考建议的续页：首页保留原模板，续页采用同主题的清晰行动清单布局。 */
+.tpl-detail-page {
+  min-height: 720px;
+  padding: 34px 42px 42px;
+  color: var(--sp-text, var(--adv-text, #333));
+  background: var(--sp-body-bg, var(--adv-bg, #fff));
+  box-shadow: 0 2px 12px rgba(0, 0, 0, .12);
+}
+.tpl-detail-sprint {
+  border-top: 12px solid var(--sp-label-bg);
+}
+.tpl-detail-advice {
+  border: 1px solid rgba(26, 58, 92, .12);
+}
+.tpl-detail-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--sp-label-bg, var(--adv-badge-bg, #1a3a5c)) 28%, transparent);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--sp-label-bg, var(--adv-badge-bg, #1a3a5c));
+}
+.tpl-detail-head span { max-width: 65%; font-weight: 700; }
+.tpl-detail-head b { white-space: nowrap; }
+.tpl-detail-kicker {
+  margin-top: 26px;
+  color: var(--sp-label-bg, var(--adv-badge-bg, #1a3a5c));
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+.tpl-detail-page h2 {
+  margin: 8px 0 12px;
+  color: var(--sp-label-bg, var(--adv-hero, #1a2a40));
+  font-size: 32px;
+  line-height: 1.28;
+}
+.tpl-detail-summary {
+  margin: 0 0 22px;
+  font-size: 16px;
+  line-height: 1.75;
+  color: var(--sp-text, var(--adv-text, #444));
+}
+.tpl-detail-list { display: flex; flex-direction: column; gap: 14px; }
+.tpl-detail-item {
+  display: grid;
+  grid-template-columns: 38px 1fr;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--sp-label-bg, var(--adv-badge-bg, #1a3a5c)) 8%, #fff);
+}
+.tpl-detail-item > span {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--sp-label-bg, var(--adv-badge-bg, #1a3a5c));
+  color: #fff;
+  font-weight: 800;
+  font-size: 13px;
+}
+.tpl-detail-item strong { display: block; font-size: 18px; line-height: 1.45; }
+.tpl-detail-item p { margin: 5px 0 0; font-size: 15px; line-height: 1.75; }
+.tpl-detail-tip {
+  margin-top: 20px;
+  padding: 12px 14px;
+  border-left: 4px solid var(--sp-label-bg, var(--adv-badge-bg, #1a3a5c));
+  background: color-mix(in srgb, var(--sp-label-bg, var(--adv-badge-bg, #1a3a5c)) 7%, #fff);
+  font-size: 14px;
+  line-height: 1.7;
+}
+.tpl-detail-footer {
+  position: absolute;
+  right: 42px;
+  bottom: 20px;
+  left: 42px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(0, 0, 0, .1);
+  color: #888;
+  font-size: 12px;
+  line-height: 1.5;
 }
 /* 关键词高亮，颜色由各主题变量控制 */
 .tpl-highlight {
