@@ -3120,9 +3120,11 @@ function ensureDrawerContentPlan(refresh = false) {
 }
 
 function generateTitle() {
-  const plan = ensureDrawerContentPlan(true)
-  generatedTitle.value = plan.noteTitle
-  cardText.value = plan.cardText
+  const companyName = data.value.company_name || ''
+  const randomTitle = takeTitleTemplate()
+  const out = `${companyName}笔试，${randomTitle}`
+  generatedTitle.value = out
+  cardText.value = out
   message.success('标题生成成功')
 }
 
@@ -3365,8 +3367,7 @@ async function generateLegacyBody() {
 }
 
 async function generateBodyFromTemplate(tpl) {
-  templateModalVisible.value = false
-  return generateBody(tpl)
+  return generateLegacyBodyFromTemplate(tpl)
 }
 
 async function generateLegacyBodyFromTemplate(tpl) {

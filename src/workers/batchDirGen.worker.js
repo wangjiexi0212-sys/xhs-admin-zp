@@ -3627,7 +3627,7 @@ async function runBatch({ productDetails, onlyDirImages, generationMode = 'compl
   const total = productDetails.length
   let done = 0
 
-  for (const { id, company, detail, contentPlan } of productDetails) {
+  for (const { id, company, detail, contentPlan, wordTitle } of productDetails) {
     log(`处理：${company}`)
 
     // 本商品所有任务使用同一张背景图（crypto 真随机）
@@ -3691,8 +3691,8 @@ async function runBatch({ productDetails, onlyDirImages, generationMode = 'compl
       }
     }
 
-    // 生成卡片文案：卡片图或封面图都会复用它作为笔记标题
-    let cardText = String(contentPlan?.cardText || '').trim()
+    // 卡片图、封面图和 Word 使用同一条旧版随机标题模板。
+    let cardText = String(wordTitle || '').trim()
     if (!cardText) {
       try { cardText = buildCardText(detail) } catch (_) { cardText = '' }
     }
