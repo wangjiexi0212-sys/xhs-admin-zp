@@ -110,6 +110,7 @@
           <a-radio value="complete">完整生成（目录图 + 笔记内容 + 卡片图）</a-radio>
           <a-radio value="examGrid">资料目录 + 试题拼图 + 笔记内容 + 卡片图</a-radio>
           <a-radio value="examSingle">资料目录 + 试题单图 + 笔记内容 + 卡片图</a-radio>
+          <a-radio value="sprintAdvice">冲刺 / 备考建议随机图 + 试题单图 + 笔记内容</a-radio>
           <a-radio value="dirOnly">只生成目录图（仅真题 / 模拟题目录图）</a-radio>
         </a-radio-group>
       </div>
@@ -140,8 +141,8 @@
       </template>
       <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px">
         <span style="font-size: 13px; font-weight: 500; color: #555">封面图替换卡片图</span>
-        <a-switch v-model:checked="dirBatchUseCoverImage" size="small" />
-        <span style="font-size: 12px; color: #999">{{ dirBatchUseCoverImage ? '开启，不生成卡片图，改为生成封面图' : '关闭，继续生成卡片图' }}</span>
+        <a-switch v-model:checked="dirBatchUseCoverImage" size="small" :disabled="dirBatchMode === 'sprintAdvice'" />
+        <span style="font-size: 12px; color: #999">{{ dirBatchMode === 'sprintAdvice' ? '当前方式固定生成冲刺或备考建议图，不再生成普通卡片图/封面图' : dirBatchUseCoverImage ? '开启，不生成卡片图，改为生成封面图' : '关闭，继续生成卡片图' }}</span>
       </div>
       <div v-if="dirBatchUseCoverImage" style="padding: 8px 12px; margin-bottom: 12px; background: #f0f9ff; border: 1px solid #bae0ff; border-radius: 6px; font-size: 12px; color: #31506f; line-height: 1.7">
         封面图会参考商品详情页「生成笔记」抽屉里的生成封面图逻辑；写入 ZIP 和上传飞书前会先做下载同款去重与去 AI 标记处理。
@@ -319,11 +320,19 @@
         </template>
       </a-table>
     </a-drawer>
+    <div v-if="batchHtmlCardMounted" class="batch-html-card-host" aria-hidden="true">
+      <HtmlCardImages
+        ref="batchHtmlCardRef"
+        :data="batchHtmlCardDetail"
+        :visible="false"
+        batch-mode
+      />
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import { getProductList, deleteProduct, getProductDetail } from '@/api/products'
@@ -359,6 +368,7 @@ import { writeFeishuBitableRecords, uploadFeishuBitableImage } from '@/api/feish
 import { getBgImageList } from '@/api/bgImages'
 import { EXTRA_TITLE_TEMPLATES } from '@/utils/extraTitleTemplates'
 import { BODY_TEMPLATES } from '@/utils/bodyTemplates'
+import HtmlCardImages from './components/HtmlCardImages.vue'
 
 const router = useRouter()
 const llmStore = useLlmStore()
@@ -1645,7 +1655,7 @@ function renderCardBasicImage(text, scheme) {
 
 // --- 批量生成目录图状态 ---
 const dirBatchSettingsVisible = ref(false)  // 设置弹窗
-const dirBatchMode = ref('complete')        // complete | dirOnly | examGrid | examSingle
+const dirBatchMode = ref('complete')        // complete | dirOnly | examGrid | examSingle | sprintAdvice
 const dirBatchUseBgImage = ref(false)       // 是否使用背景图（默认关闭 = 边框+颜色模式）
 const dirBatchBorderColor = ref('#F9863B')  // 边框颜色（背景图关闭时生效）
 const dirBatchGenBody = ref(true)           // 是否生成正文（默认开启）
@@ -1660,6 +1670,9 @@ const dirBatchLogs = ref([])
 const dirBatchDone = ref(0)
 const dirBatchTotal = ref(0)
 const dirBatchOnlyDir = computed(() => dirBatchMode.value === 'dirOnly')
+const batchHtmlCardRef = ref(null)
+const batchHtmlCardDetail = ref(null)
+const batchHtmlCardMounted = ref(false)
 const CARD_TEMPLATE_PREVIEW_TEXT = '示例企业笔试，资料怎么分步使用'
 const cardTemplatePreviewVisible = ref(false)
 const cardTemplatePreviewLoading = ref(false)
@@ -2010,6 +2023,18 @@ async function generateBatchCoverImage(detail, cardText, onProgress, contentPlan
   throw new Error(`已尝试 ${BATCH_COVER_MAX_ATTEMPTS} 次：${lastError?.message || String(lastError)}`)
 }
 
+function randomSprintAdviceType() {
+  return Math.random() < 0.5 ? 'sprint' : 'advice'
+}
+
+function htmlCardUrlToBase64(url) {
+  const value = String(url || '')
+  const marker = 'base64,'
+  const index = value.indexOf(marker)
+  if (index < 0) throw new Error('冲刺/备考建议图片数据无效')
+  return value.slice(index + marker.length)
+}
+
 function shuffleTags(tags) {
   if (!Array.isArray(tags)) return tags
   const shuffled = [...tags]
@@ -2026,7 +2051,8 @@ async function runBatchDirImages(generationMode = 'complete', useBgImage = false
     return
   }
 
-  if (useCoverImage) {
+  const useBatchCoverImage = useCoverImage && generationMode !== 'sprintAdvice'
+  if (useBatchCoverImage) {
     try {
       await aiImageStore.ensureLoaded()
     } catch (e) {
@@ -2105,7 +2131,7 @@ async function runBatchDirImages(generationMode = 'complete', useBgImage = false
   })
 
   const coverAssignmentByProductId = new Map()
-  if (useCoverImage && aiImageStore.activeProvider !== 'md2card') {
+  if (useBatchCoverImage && aiImageStore.activeProvider !== 'md2card') {
     const promptPools = new Map()
     try {
       const res = await getCardPromptList({ page: 1, pageSize: 100 })
@@ -2204,13 +2230,30 @@ async function runBatchDirImages(generationMode = 'complete', useBgImage = false
       historyTitlePool: HISTORY_TITLE_POOL,
       mockTitlePool: MOCK_TITLE_POOL,
       cardSchemes: CARD_STYLE_SCHEMES,
-      replaceCardWithCover: useCoverImage,
+      replaceCardWithCover: useBatchCoverImage,
     })
   }).catch((err) => {
     dirBatchLogs.value.push({ text: `Worker 异常退出：${err.message}`, type: 'error' })
   })
 
-  // ── 5. Worker 完成后：生成笔记内容 + docx + 飞书（主线程处理）──
+  // 同一份离屏模板只能串行截图；外层批任务仍可并行处理试题图、Word 与飞书。
+  let htmlCardQueue = Promise.resolve()
+  const generateSprintAdviceImages = (detail, company) => {
+    const selectedType = randomSprintAdviceType()
+    const task = htmlCardQueue.then(async () => {
+      batchHtmlCardDetail.value = detail
+      batchHtmlCardMounted.value = true
+      await nextTick()
+      const renderer = batchHtmlCardRef.value
+      if (!renderer?.generateBatchImages) throw new Error('冲刺/备考建议渲染器未就绪')
+      const result = await renderer.generateBatchImages(selectedType)
+      return { selectedType, urls: result.urls || [] }
+    })
+    htmlCardQueue = task.catch(() => {})
+    return task
+  }
+
+  // ── 5. Worker 完成后：生成冲刺建议图 + 笔记内容 + docx + 飞书（主线程处理）──
   const processProduct = async (company, scheduleTime, recordIndex) => {
     const { detail, folder, images, cardText, contentPlan, wordTitle, coverAssignment } = productImageMap[company]
     if (!detail) return
@@ -2218,7 +2261,26 @@ async function runBatchDirImages(generationMode = 'complete', useBgImage = false
     const noteTitle = wordTitle || buildProductCardText(detail) || contentPlan?.noteTitle
     const coverText = wordTitle || cardText || noteTitle
 
-    if (useCoverImage) {
+    if (generationMode === 'sprintAdvice') {
+      dirBatchLogs.value.push({ text: `${company} - 随机生成冲刺/备考建议图中...`, type: 'info' })
+      try {
+        const generated = await generateSprintAdviceImages(detail, company)
+        const typeLabel = generated.selectedType === 'sprint' ? '冲刺攻略' : '备考建议'
+        generated.urls.forEach((url, index) => {
+          const label = `${typeLabel}-${String(index + 1).padStart(2, '0')}`
+          const base64 = htmlCardUrlToBase64(url)
+          folder.file(`${label}.png`, base64, { base64: true })
+          images.push({ label, base64 })
+          totalImages++
+        })
+        if (!generated.urls.length) throw new Error('未生成图片')
+        dirBatchLogs.value.push({ text: `  └ ${typeLabel}图 ✓（${generated.urls.length} 张）`, type: 'success' })
+      } catch (e) {
+        dirBatchLogs.value.push({ text: `  └ 冲刺/备考建议图失败：${e.message}`, type: 'error' })
+      }
+    }
+
+    if (useBatchCoverImage) {
       dirBatchLogs.value.push({ text: `${company} - 生成封面图中...`, type: 'info' })
       try {
         const candidates = coverAssignment
@@ -2349,6 +2411,8 @@ async function runBatchDirImages(generationMode = 'complete', useBgImage = false
     activeProducts.add(task)
   }
   await Promise.all(activeProducts)
+  batchHtmlCardMounted.value = false
+  batchHtmlCardDetail.value = null
 
   // ── 6. 下载 ZIP ─────────────────────────────────────────────────
   if (totalImages > 0 || totalNotes > 0) {
@@ -2815,5 +2879,12 @@ onMounted(() => {
   font-size: 11px;
   line-height: 1.35;
   text-align: center;
+}
+.batch-html-card-host {
+  position: fixed;
+  top: 0;
+  left: -10000px;
+  width: 720px;
+  pointer-events: none;
 }
 </style>

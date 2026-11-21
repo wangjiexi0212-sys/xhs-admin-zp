@@ -1,13 +1,16 @@
 <template>
-  <a-drawer
-    v-model:open="localVisible"
-    title="生图 — AI图片生成"
-    placement="right"
-    width="90%"
-    :body-style="{ padding: '20px', display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }"
+  <component
+    :is="batchMode ? 'div' : 'a-drawer'"
+    :open="batchMode ? undefined : localVisible"
+    :title="batchMode ? undefined : '生图 — AI图片生成'"
+    :placement="batchMode ? undefined : 'right'"
+    :width="batchMode ? undefined : '90%'"
+    :body-style="batchMode ? undefined : { padding: '20px', display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }"
+    :class="{ 'hci-batch-root': batchMode }"
+    @update:open="localVisible = $event"
   >
     <!-- ─── 工具栏 ─── -->
-    <div class="hci-toolbar">
+    <div v-if="!batchMode" class="hci-toolbar">
       <span class="hci-label">类型：</span>
       <a-radio-group v-model:value="activeType" button-style="solid" size="small" @change="onTypeChange">
         <a-radio-button value="exam_info">📋 考情</a-radio-button>
@@ -234,7 +237,7 @@
       </div>
 
       <!-- 右侧：截图预览 -->
-      <div v-if="capturedUrls.length" class="hci-preview-area">
+      <div v-if="!batchMode && capturedUrls.length" class="hci-preview-area">
         <div class="hci-preview-title">图片预览（{{ capturedUrls.length }} 张）</div>
         <img v-for="(url, index) in capturedUrls" :key="url" :src="url" class="hci-preview-img" :alt="`第${index + 1}页`" />
         <a-button
@@ -249,11 +252,11 @@
         </a-button>
       </div>
     </div>
-  </a-drawer>
+  </component>
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import { SyncOutlined, DownloadOutlined } from '@ant-design/icons-vue'
 import { toPng } from 'html-to-image'
@@ -267,6 +270,8 @@ const props = defineProps({
   data: { type: Object, default: () => ({}) },
   visible: { type: Boolean, default: false },
   initType: { type: String, default: 'exam_info' },
+  // 列表批处理专用：不展示抽屉，只离屏渲染并截图，复用本组件的内容与版式逻辑。
+  batchMode: { type: Boolean, default: false },
 })
 const emit = defineEmits(['update:visible'])
 
@@ -1068,6 +1073,23 @@ async function captureImage() {
   }
 }
 
+async function generateBatchImages(type) {
+  if (!['sprint', 'advice'].includes(type)) throw new Error('批处理仅支持冲刺或备考建议')
+  activeType.value = type
+  activeTheme.value = Math.floor(Math.random() * 5) + 1
+  content.value = null
+  capturedUrl.value = ''
+  capturedUrls.value = []
+  await generateContent()
+  if (!content.value) throw new Error('冲刺/备考建议内容生成失败')
+  await nextTick()
+  await captureImage()
+  if (!capturedUrls.value.length) throw new Error('冲刺/备考建议图片生成失败')
+  return { type, urls: [...capturedUrls.value] }
+}
+
+defineExpose({ generateBatchImages })
+
 // ─── 下载 ──────────────────────────────────────────────────
 const TYPE_LABEL_MAP = {
   exam_info: '考情',
@@ -1136,6 +1158,19 @@ async function downloadImage() {
   gap: 16px;
   min-height: 0;
   overflow: hidden;
+}
+.hci-batch-root {
+  width: 720px;
+}
+.hci-batch-root .hci-main {
+  display: block;
+  overflow: visible;
+}
+.hci-batch-root .hci-template-area {
+  display: block;
+  overflow: visible;
+  padding: 0;
+  background: transparent;
 }
 .hci-template-area {
   flex: 1;

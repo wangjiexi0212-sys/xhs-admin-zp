@@ -3644,8 +3644,9 @@ async function runBatch({ productDetails, onlyDirImages, generationMode = 'compl
     if (generationMode === 'dirOnly') {
       if (detail.baidu_path_history) tasks.push({ path: detail.baidu_path_history, type: 'history', label: '真题目录', title: rndPick(_HISTORY_TITLE_POOL) || '真题目录' })
       if (detail.baidu_path_mock) tasks.push({ path: detail.baidu_path_mock, type: 'mock', label: '模拟题目录', title: rndPick(_MOCK_TITLE_POOL) || '模拟题目录' })
-    } else if (generationMode === 'examGrid' || generationMode === 'examSingle') {
-      if (detail.baidu_path_exam) tasks.push({ path: detail.baidu_path_exam, type: 'exam', label: '笔试资料目录', title: '笔试资料完整目录' })
+    } else if (generationMode === 'examGrid' || generationMode === 'examSingle' || generationMode === 'sprintAdvice') {
+      // “冲刺 / 备考建议”方式只配试题单图和笔记内容，不再附加常规资料目录图。
+      if (generationMode !== 'sprintAdvice' && detail.baidu_path_exam) tasks.push({ path: detail.baidu_path_exam, type: 'exam', label: '笔试资料目录', title: '笔试资料完整目录' })
       if (detail.baidu_path_history) tasks.push({ path: detail.baidu_path_history, type: 'historyPaper', sourceType: 'history', label: generationMode === 'examGrid' ? '真题拼图' : '真题单图', title: rndPick(_HISTORY_TITLE_POOL) || '真题目录' })
       if (detail.baidu_path_mock) tasks.push({ path: detail.baidu_path_mock, type: 'mockPaper', sourceType: 'mock', label: generationMode === 'examGrid' ? '模拟题拼图' : '模拟题单图', title: rndPick(_MOCK_TITLE_POOL) || '模拟题目录' })
     } else {
@@ -3661,8 +3662,12 @@ async function runBatch({ productDetails, onlyDirImages, generationMode = 'compl
     }
 
     if (!tasks.length) {
-      log(`  └ 未配置百度网盘目录，跳过`, 'warn')
-      done++; prog(done, total); continue
+      if (generationMode === 'sprintAdvice') {
+        log(`  └ 未配置真题/模拟题目录，将仅生成冲刺或备考建议图与笔记内容`, 'warn')
+      } else {
+        log(`  └ 未配置百度网盘目录，跳过`, 'warn')
+        done++; prog(done, total); continue
+      }
     }
 
     const images = []  // { label, base64 }
@@ -3672,7 +3677,8 @@ async function runBatch({ productDetails, onlyDirImages, generationMode = 'compl
       try {
         let dataUrl
         if (task.type === 'historyPaper' || task.type === 'mockPaper') {
-          dataUrl = await buildPaperImageForBatch(task.path, task.sourceType, generationMode, pdfGridStyle, pdfSingleStyle, task.title, pdfGridTitleStyle)
+          const paperMode = generationMode === 'sprintAdvice' ? 'examSingle' : generationMode
+          dataUrl = await buildPaperImageForBatch(task.path, task.sourceType, paperMode, pdfGridStyle, pdfSingleStyle, task.title, pdfGridTitleStyle)
         } else if (task.type === 'culture') {
           const res = await getBaiduFilesWithRetry(task.path)
           const files = (res.files || []).sort((a, b) => b.isdir - a.isdir)
@@ -3697,7 +3703,9 @@ async function runBatch({ productDetails, onlyDirImages, generationMode = 'compl
       try { cardText = buildCardText(detail) } catch (_) { cardText = '' }
     }
 
-    if (replaceCardWithCover) {
+    if (generationMode === 'sprintAdvice') {
+      log(`  └ 使用详情页「冲刺 / 备考建议」随机图，跳过普通卡片图`, 'info')
+    } else if (replaceCardWithCover) {
       log(`  └ 已开启封面图替换卡片图，跳过卡片图生成`, 'info')
     } else {
       log(`  └ 生成卡片图中...`, 'info')
