@@ -426,10 +426,21 @@ async function generateContent() {
       res = await requestContent(buildPrompt(activeType.value, d, '', ''), 1800)
     }
 
-    const raw = (res.content || '').trim()
-    const match = raw.match(/\{[\s\S]*\}/)
-    if (!match) throw new Error('模型未返回有效JSON，请重试')
-    content.value = JSON.parse(match[0])
+    try {
+      content.value = parseCardJson(res.content)
+    } catch (parseError) {
+      // 部分模型会在 JSON 字符串中直接输出换行或遗漏转义符。先做本地容错，仍失败时只重试一次，
+      // 要求它以单行字符串字段返回，避免把格式错误直接暴露给用户。
+      statusMsg.value = '正在修复内容格式…'
+      const retryPrompt = [
+        userPrompt,
+        '',
+        '【格式重试】刚才的输出无法被 JSON 解析。请重新输出完整、严格有效的 JSON 对象，不要解释、不要 Markdown。',
+        '所有字符串字段必须使用英文双引号；字段文本不要直接换行，如需分隔请使用中文分号；不要在字符串中使用未转义的英文双引号；最后一个字段后不要添加逗号。',
+      ].join('\n')
+      const retry = await requestContent(retryPrompt, maxTokens)
+      content.value = parseCardJson(retry.content)
+    }
   } catch (e) {
     message.error(e.message || '生成失败，请重试')
     content.value = null
@@ -437,6 +448,40 @@ async function generateContent() {
     generating.value = false
     statusMsg.value  = ''
   }
+}
+
+function parseCardJson(raw) {
+  const text = String(raw || '').replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim()
+  const match = text.match(/\{[\s\S]*\}/)
+  if (!match) throw new Error('模型未返回有效 JSON')
+  const source = match[0]
+  try {
+    return JSON.parse(source)
+  } catch {
+    // 仅修复 JSON 字符串中的未转义换行与末尾多余逗号，不猜测或改写模型内容。
+    const normalized = repairJsonStringNewlines(source).replace(/,\s*([}\]])/g, '$1')
+    return JSON.parse(normalized)
+  }
+}
+
+function repairJsonStringNewlines(source) {
+  let output = ''
+  let inString = false
+  let escaped = false
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index]
+    if (inString && (char === '\n' || char === '\r')) {
+      if (char === '\r' && source[index + 1] === '\n') index += 1
+      output += '\\n'
+      escaped = false
+      continue
+    }
+    output += char
+    if (char === '"' && !escaped) inString = !inString
+    escaped = char === '\\' && !escaped
+    if (char !== '\\') escaped = false
+  }
+  return output
 }
 
 // IMA 画像由系统设置维护；冲刺/备考建议/强度额外召回同类案例。任一环节失败均不阻塞原有生图。
