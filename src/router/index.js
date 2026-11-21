@@ -96,6 +96,11 @@ const router = createRouter({
           component: () => import('../views/note/Images.vue'),
         },
         {
+          path: 'note/product-images',
+          name: 'note-product-images',
+          component: () => import('../views/note/ProductImages.vue'),
+        },
+        {
           path: 'note/title-formula',
           name: 'note-title-formula',
           component: () => import('../views/note/TitleFormula.vue'),

@@ -1,6 +1,6 @@
 <template>
   <component
-    :is="batchMode ? 'div' : 'a-drawer'"
+    :is="batchMode ? 'div' : ADrawer"
     :open="batchMode ? undefined : localVisible"
     :title="batchMode ? undefined : '生图 — AI图片生成'"
     :placement="batchMode ? undefined : 'right'"
@@ -257,7 +257,7 @@
 
 <script setup>
 import { ref, computed, watch, nextTick } from 'vue'
-import { message, Modal } from 'ant-design-vue'
+import { message, Modal, Drawer as ADrawer } from 'ant-design-vue'
 import { SyncOutlined, DownloadOutlined } from '@ant-design/icons-vue'
 import { toPng } from 'html-to-image'
 import { chatLlm } from '@/api/llm'
@@ -1172,6 +1172,11 @@ async function downloadImage() {
   padding: 0;
   background: transparent;
 }
+/* 批处理截图直接截取该容器。模板本身固定为 540px，不能继承批处理根节点的
+   720px 宽度，否则会在右侧生成一段无内容的空白画布。 */
+.hci-batch-root .hci-capture-page {
+  width: 540px;
+}
 .hci-template-area {
   flex: 1;
   overflow: auto;
@@ -1231,6 +1236,9 @@ async function downloadImage() {
 .tpl-detail-page {
   min-height: 720px;
   padding: 34px 42px 42px;
+  --detail-card-text: #1f2937;
+  --detail-footer: #6b7280;
+  --detail-footer-line: rgba(0, 0, 0, .14);
   color: var(--sp-text, var(--adv-text, var(--int-card-text, #333)));
   background: var(--sp-body-bg, var(--adv-bg, var(--int-bg, #fff)));
   box-shadow: 0 2px 12px rgba(0, 0, 0, .12);
@@ -1249,23 +1257,23 @@ async function downloadImage() {
   justify-content: space-between;
   gap: 16px;
   padding-bottom: 12px;
-  border-bottom: 1px solid color-mix(in srgb, var(--sp-label-bg, var(--adv-badge-bg, var(--int-line, #1a3a5c))) 28%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--detail-accent, var(--sp-label-bg, var(--adv-badge-bg, var(--int-line, #1a3a5c)))) 28%, transparent);
   font-size: 14px;
   line-height: 1.5;
-  color: var(--sp-label-bg, var(--adv-badge-bg, var(--int-line, #1a3a5c)));
+  color: var(--detail-accent, var(--sp-label-bg, var(--adv-badge-bg, var(--int-line, #1a3a5c))));
 }
 .tpl-detail-head span { max-width: 65%; font-weight: 700; }
 .tpl-detail-head b { white-space: nowrap; }
 .tpl-detail-kicker {
   margin-top: 26px;
-  color: var(--sp-label-bg, var(--adv-badge-bg, var(--int-line, #1a3a5c)));
+  color: var(--detail-accent, var(--sp-label-bg, var(--adv-badge-bg, var(--int-line, #1a3a5c))));
   font-size: 14px;
   font-weight: 800;
   letter-spacing: 1px;
 }
 .tpl-detail-page h2 {
   margin: 8px 0 12px;
-  color: var(--sp-label-bg, var(--adv-hero, var(--int-title, #1a2a40)));
+  color: var(--detail-title, var(--sp-label-bg, var(--adv-hero, var(--int-title, #1a2a40))));
   font-size: 32px;
   line-height: 1.28;
 }
@@ -1282,7 +1290,8 @@ async function downloadImage() {
   gap: 12px;
   padding: 14px;
   border-radius: 10px;
-  background: color-mix(in srgb, var(--sp-label-bg, var(--adv-badge-bg, var(--int-line, #1a3a5c))) 8%, #fff);
+  background: var(--detail-card-bg, color-mix(in srgb, var(--detail-accent, var(--sp-label-bg, var(--adv-badge-bg, var(--int-line, #1a3a5c)))) 8%, #fff));
+  color: var(--detail-card-text);
 }
 .tpl-detail-item > span {
   width: 32px;
@@ -1291,18 +1300,19 @@ async function downloadImage() {
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: var(--sp-label-bg, var(--adv-badge-bg, var(--int-line, #1a3a5c)));
-  color: #fff;
+  background: var(--detail-number-bg, var(--detail-accent, var(--sp-label-bg, var(--adv-badge-bg, var(--int-line, #1a3a5c)))));
+  color: var(--detail-number-text, #fff);
   font-weight: 800;
   font-size: 13px;
 }
-.tpl-detail-item strong { display: block; font-size: 18px; line-height: 1.45; }
-.tpl-detail-item p { margin: 5px 0 0; font-size: 15px; line-height: 1.75; }
+.tpl-detail-item strong { display: block; color: var(--detail-card-text); font-size: 18px; line-height: 1.45; }
+.tpl-detail-item p { margin: 5px 0 0; color: var(--detail-card-text); font-size: 15px; line-height: 1.75; }
 .tpl-detail-tip {
   margin-top: 20px;
   padding: 12px 14px;
-  border-left: 4px solid var(--sp-label-bg, var(--adv-badge-bg, var(--int-line, #1a3a5c)));
-  background: color-mix(in srgb, var(--sp-label-bg, var(--adv-badge-bg, var(--int-line, #1a3a5c))) 7%, #fff);
+  border-left: 4px solid var(--detail-accent, var(--sp-label-bg, var(--adv-badge-bg, var(--int-line, #1a3a5c))));
+  background: var(--detail-tip-bg, color-mix(in srgb, var(--detail-accent, var(--sp-label-bg, var(--adv-badge-bg, var(--int-line, #1a3a5c)))) 7%, #fff));
+  color: var(--detail-card-text);
   font-size: 14px;
   line-height: 1.7;
 }
@@ -1312,8 +1322,8 @@ async function downloadImage() {
   bottom: 20px;
   left: 42px;
   padding-top: 10px;
-  border-top: 1px solid rgba(0, 0, 0, .1);
-  color: #888;
+  border-top: 1px solid var(--detail-footer-line);
+  color: var(--detail-footer);
   font-size: 12px;
   line-height: 1.5;
 }
@@ -1860,13 +1870,22 @@ async function downloadImage() {
 .tpl-advice.theme-5 {
   --adv-bg:         #1a1a2e;
   --adv-badge-bg:   rgba(255,255,255,0.15);
-  --adv-badge-text: #e0e0e0;
+  --adv-badge-text: #ffffff;
   --adv-card-bg:    #16213e;
-  --adv-hero:       #e0e0e0;
+  --adv-hero:       #f8fafc;
   --adv-tag-border: rgba(255,255,255,0.35);
-  --adv-tag-color:  #b0b8d0;
-  --adv-text:       #b0b8d0;
+  --adv-tag-color:  #e2e8f0;
+  --adv-text:       #e2e8f0;
   --highlight:      #ff6b6b;
+  --detail-accent:  #dbeafe;
+  --detail-title:   #f8fafc;
+  --detail-card-bg: #263657;
+  --detail-card-text: #f8fafc;
+  --detail-tip-bg:  #202d4a;
+  --detail-number-bg: #64748b;
+  --detail-number-text: #ffffff;
+  --detail-footer:  #dbeafe;
+  --detail-footer-line: rgba(255,255,255,.22);
 }
 
 /* 备考建议 — 元素样式 */
@@ -1947,12 +1966,17 @@ async function downloadImage() {
   --int-bg:         #111111;
   --int-line:       #ff6d00;
   --int-title:      #ffffff;
-  --int-intro:      #cccccc;
+  --int-intro:      #f0f0f0;
   --int-card-bg:    #1e1e1e;
   --int-card-title: #ff6d00;
-  --int-card-text:  #cccccc;
-  --int-footer:     #555555;
+  --int-card-text:  #f0f0f0;
+  --int-footer:     #c8c8c8;
   --highlight:      #ff9a40;
+  --detail-card-bg: #fff5ed;
+  --detail-card-text: #241a15;
+  --detail-tip-bg:  #fff0e4;
+  --detail-footer:  #d8d8d8;
+  --detail-footer-line: rgba(255,255,255,.24);
 }
 /* 主题3: 热血红 */
 .tpl-intensity.theme-3 {

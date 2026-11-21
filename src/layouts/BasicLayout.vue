@@ -38,6 +38,7 @@
           </template>
           <template #title>笔记配置</template>
           <a-menu-item key="/note/images">图片管理</a-menu-item>
+          <a-menu-item key="/note/product-images">商品图管理</a-menu-item>
           <a-menu-item key="/note/title-formula">标题公式</a-menu-item>
           <a-menu-item key="/note/content-template">内容模版</a-menu-item>
           <a-menu-item key="/note/prompt">提示词管理</a-menu-item>
