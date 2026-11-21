@@ -208,11 +208,11 @@
           <div
             v-for="(page, pageIndex) in detailPages"
             :key="`${activeType}-${pageIndex}`"
-            :class="['hci-capture-page', 'tpl-base', 'tpl-detail-page', activeType === 'sprint' ? 'tpl-sprint' : 'tpl-advice', `tpl-detail-${activeType}`, `theme-${activeTheme}`]"
+            :class="['hci-capture-page', 'tpl-base', 'tpl-detail-page', detailPageBaseClass, `tpl-detail-${activeType}`, `theme-${activeTheme}`]"
           >
             <div class="tpl-detail-head">
               <span>{{ data.company_name || '招聘考试' }}</span>
-              <b>{{ activeType === 'sprint' ? '冲刺攻略' : '备考建议' }}</b>
+              <b>{{ detailPageLabel }}</b>
             </div>
             <div class="tpl-detail-kicker">{{ String(pageIndex + 2).padStart(2, '0') }} / {{ String(detailPages.length + 1).padStart(2, '0') }}</div>
             <h2>{{ page.title }}</h2>
@@ -299,10 +299,20 @@ const profileLoaded = ref(false)
 const isProfileReady = computed(() => Boolean(imaProfile.value.trim()))
 const usesImaCases = computed(() => imaSimilarCount.value > 0)
 const detailPages = computed(() => {
-  if (!['sprint', 'advice'].includes(activeType.value)) return []
+  if (!['sprint', 'advice', 'intensity'].includes(activeType.value)) return []
   return normalizeDetailPages(content.value?.pages)
 })
 const hasDetailPages = computed(() => detailPages.value.length > 0)
+const detailPageBaseClass = computed(() => ({
+  sprint: 'tpl-sprint',
+  advice: 'tpl-advice',
+  intensity: 'tpl-intensity',
+}[activeType.value] || 'tpl-advice'))
+const detailPageLabel = computed(() => ({
+  sprint: '冲刺攻略',
+  advice: '备考建议',
+  intensity: '强度计划',
+}[activeType.value] || '备考计划'))
 
 function normalizeDetailPages(rawPages) {
   if (!Array.isArray(rawPages)) return []
@@ -385,24 +395,36 @@ async function generateContent() {
       : isProfileReady.value
         ? '正在结合 IMA 写作画像生成多页内容…'
         : '正在根据商品信息生成内容…'
-    const userPrompt = buildPrompt(activeType.value, d, imaProfile.value, imaSimilarContext.value)
-
-    const res = await chatLlm({
+    const cardSystemPrompt = '你是招聘考试内容卡片生成助手。只输出有效的JSON对象，不要任何解释说明，不要用markdown代码块包裹，直接输出原始JSON。商品事实是唯一可写成确定信息的来源；IMA写作画像只用于借鉴信息组织、复习策略和表达方式，不能作为事实来源，不能迁移历史样本的企业、日期、题量、分值、考试时长或录取信息。严禁涉及政治人物、党政文件等敏感内容。'
+    const maxTokens = ['sprint', 'advice', 'intensity'].includes(activeType.value) ? 2600 : 1200
+    // 强度需要生成首页与三页计划；先携带精简后的 IMA 上下文，避免部分模型因上下文窗口较小直接返回 400。
+    const intensityProfile = activeType.value === 'intensity' ? imaProfile.value.slice(0, 6000) : imaProfile.value
+    const intensityCases = activeType.value === 'intensity' ? imaSimilarContext.value.slice(0, 4000) : imaSimilarContext.value
+    const userPrompt = buildPrompt(activeType.value, d, intensityProfile, intensityCases)
+    const requestContent = (prompt, tokenLimit = maxTokens) => chatLlm({
       provider:   active.provider,
       api_format: active.api_format,
       api_key:    active.api_key,
       base_url:   active.base_url || '',
       model:      active.default_model,
       messages: [
-        {
-          role: 'system',
-          content: '你是招聘考试内容卡片生成助手。只输出有效的JSON对象，不要任何解释说明，不要用markdown代码块包裹，直接输出原始JSON。商品事实是唯一可写成确定信息的来源；IMA写作画像只用于借鉴信息组织、复习策略和表达方式，不能作为事实来源，不能迁移历史样本的企业、日期、题量、分值、考试时长或录取信息。严禁涉及政治人物、党政文件等敏感内容。',
-        },
-        { role: 'user', content: userPrompt },
+        { role: 'system', content: cardSystemPrompt },
+        { role: 'user', content: prompt },
       ],
-      max_tokens:  ['sprint', 'advice'].includes(activeType.value) ? 2600 : 1200,
+      max_tokens: tokenLimit,
       temperature: 0.7,
     })
+
+    let res
+    try {
+      res = await requestContent(userPrompt)
+    } catch (firstError) {
+      // 画像库内容较长时，少数供应商会以 400 拒绝请求。仅强度卡在此自动回退到商品事实，
+      // 保留原有版式和多页计划能力，其他模块的既有行为不变。
+      if (activeType.value !== 'intensity' || (!intensityProfile && !intensityCases)) throw firstError
+      statusMsg.value = 'IMA 上下文较长，正在根据商品信息生成强度计划…'
+      res = await requestContent(buildPrompt(activeType.value, d, '', ''), 1800)
+    }
 
     const raw = (res.content || '').trim()
     const match = raw.match(/\{[\s\S]*\}/)
@@ -417,7 +439,7 @@ async function generateContent() {
   }
 }
 
-// IMA 画像由系统设置维护；冲刺/备考建议额外召回同类案例。任一环节失败均不阻塞原有生图。
+// IMA 画像由系统设置维护；冲刺/备考建议/强度额外召回同类案例。任一环节失败均不阻塞原有生图。
 async function loadImaContext(d, type) {
   imaSimilarContext.value = ''
   imaSimilarCount.value = 0
@@ -433,7 +455,7 @@ async function loadImaContext(d, type) {
       }
       profileLoaded.value = true
     }
-    if (['sprint', 'advice'].includes(type) && imaKnowledgeBaseId.value) {
+    if (['sprint', 'advice', 'intensity'].includes(type) && imaKnowledgeBaseId.value) {
       statusMsg.value = '正在从 IMA 召回同类备考案例…'
       try {
         const similar = await searchImaSimilarCases({
@@ -557,7 +579,7 @@ function buildPrompt(type, d, profile = '', similarContext = '') {
 
   // intensity
   return [
-    '根据以下招聘信息，描述备考该单位笔试的学习强度和备考建议。',
+    '根据以下招聘信息，生成该单位笔试的建议学习强度首页，以及可执行的多页强度备考计划。',
     '',
     base,
     '',
@@ -565,10 +587,12 @@ function buildPrompt(type, d, profile = '', similarContext = '') {
     '',
     profileContext,
     '',
-    '输出格式（**词**标记的内容将渲染为红色高亮）：',
-    '{"intro":"80字以内，给出当前商品的建议备考强度及依据，不虚构个人经历","content":"150-200字，结合明确考试范围与画像中的复习框架，描述备考重点和建议；至少用**词**标记3-5个关键词"}',
+    similarCaseContext,
     '',
-    '要求：强度只能描述建议投入程度，不得断言考试难度、录取概率或未公布信息；聚焦当前单位已明确的考试特点，严禁引流内容。',
+    '输出格式：首页保留高亮写法；pages必须恰好3页，每页items为2-3项。',
+    '{"intro":"80字以内，给出当前商品的建议备考强度及依据，不虚构个人经历","content":"150-200字，结合明确考试范围与画像中的复习框架，描述备考重点和建议；至少用**词**标记3-5个关键词","pages":[{"title":"强度拆分：先投入在哪里","summary":"不超过45字","items":[{"label":"动作标题","content":"40-65字"}],"tip":"一句提醒，40字以内"}]}',
+    '',
+    '三页顺序固定为：①建议投入强度与模块优先级；②每日或每周复习节奏与限时训练；③临近考试的减负、复盘与作息安排。强度只能描述建议投入程度，不得断言考试难度、录取概率、题量、分值或其他未公布信息；IMA同类案例只可借鉴方法，不能写成当前企业事实；聚焦当前单位已明确的考试特点，严禁引流内容。',
   ].filter(Boolean).join('\n')
 }
 
@@ -1127,8 +1151,8 @@ async function downloadImage() {
 .tpl-detail-page {
   min-height: 720px;
   padding: 34px 42px 42px;
-  color: var(--sp-text, var(--adv-text, #333));
-  background: var(--sp-body-bg, var(--adv-bg, #fff));
+  color: var(--sp-text, var(--adv-text, var(--int-card-text, #333)));
+  background: var(--sp-body-bg, var(--adv-bg, var(--int-bg, #fff)));
   box-shadow: 0 2px 12px rgba(0, 0, 0, .12);
 }
 .tpl-detail-sprint {
@@ -1137,28 +1161,31 @@ async function downloadImage() {
 .tpl-detail-advice {
   border: 1px solid rgba(26, 58, 92, .12);
 }
+.tpl-detail-intensity {
+  border-top: 8px solid var(--int-line, #111);
+}
 .tpl-detail-head {
   display: flex;
   justify-content: space-between;
   gap: 16px;
   padding-bottom: 12px;
-  border-bottom: 1px solid color-mix(in srgb, var(--sp-label-bg, var(--adv-badge-bg, #1a3a5c)) 28%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--sp-label-bg, var(--adv-badge-bg, var(--int-line, #1a3a5c))) 28%, transparent);
   font-size: 14px;
   line-height: 1.5;
-  color: var(--sp-label-bg, var(--adv-badge-bg, #1a3a5c));
+  color: var(--sp-label-bg, var(--adv-badge-bg, var(--int-line, #1a3a5c)));
 }
 .tpl-detail-head span { max-width: 65%; font-weight: 700; }
 .tpl-detail-head b { white-space: nowrap; }
 .tpl-detail-kicker {
   margin-top: 26px;
-  color: var(--sp-label-bg, var(--adv-badge-bg, #1a3a5c));
+  color: var(--sp-label-bg, var(--adv-badge-bg, var(--int-line, #1a3a5c)));
   font-size: 14px;
   font-weight: 800;
   letter-spacing: 1px;
 }
 .tpl-detail-page h2 {
   margin: 8px 0 12px;
-  color: var(--sp-label-bg, var(--adv-hero, #1a2a40));
+  color: var(--sp-label-bg, var(--adv-hero, var(--int-title, #1a2a40)));
   font-size: 32px;
   line-height: 1.28;
 }
@@ -1166,7 +1193,7 @@ async function downloadImage() {
   margin: 0 0 22px;
   font-size: 16px;
   line-height: 1.75;
-  color: var(--sp-text, var(--adv-text, #444));
+  color: var(--sp-text, var(--adv-text, var(--int-card-text, #444)));
 }
 .tpl-detail-list { display: flex; flex-direction: column; gap: 14px; }
 .tpl-detail-item {
@@ -1175,7 +1202,7 @@ async function downloadImage() {
   gap: 12px;
   padding: 14px;
   border-radius: 10px;
-  background: color-mix(in srgb, var(--sp-label-bg, var(--adv-badge-bg, #1a3a5c)) 8%, #fff);
+  background: color-mix(in srgb, var(--sp-label-bg, var(--adv-badge-bg, var(--int-line, #1a3a5c))) 8%, #fff);
 }
 .tpl-detail-item > span {
   width: 32px;
@@ -1184,7 +1211,7 @@ async function downloadImage() {
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: var(--sp-label-bg, var(--adv-badge-bg, #1a3a5c));
+  background: var(--sp-label-bg, var(--adv-badge-bg, var(--int-line, #1a3a5c)));
   color: #fff;
   font-weight: 800;
   font-size: 13px;
@@ -1194,8 +1221,8 @@ async function downloadImage() {
 .tpl-detail-tip {
   margin-top: 20px;
   padding: 12px 14px;
-  border-left: 4px solid var(--sp-label-bg, var(--adv-badge-bg, #1a3a5c));
-  background: color-mix(in srgb, var(--sp-label-bg, var(--adv-badge-bg, #1a3a5c)) 7%, #fff);
+  border-left: 4px solid var(--sp-label-bg, var(--adv-badge-bg, var(--int-line, #1a3a5c)));
+  background: color-mix(in srgb, var(--sp-label-bg, var(--adv-badge-bg, var(--int-line, #1a3a5c))) 7%, #fff);
   font-size: 14px;
   line-height: 1.7;
 }
