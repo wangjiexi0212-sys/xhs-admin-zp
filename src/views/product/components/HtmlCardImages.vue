@@ -264,6 +264,7 @@ import { chatLlm } from '@/api/llm'
 import { getImaConfig, getImaWritingProfile, searchImaSimilarCases } from '@/api/aiContentCenter'
 import { useLlmStore } from '@/stores/llm'
 import { useRouter } from 'vue-router'
+import { buildExamStudyWindowPrompt } from '@/utils/examStudyWindow'
 
 // ─── Props / Emits ─────────────────────────────────────────
 const props = defineProps({
@@ -555,6 +556,7 @@ function buildPrompt(type, d, profile = '', similarContext = '') {
     d.recruit_count        ? `招聘人数：${d.recruit_count}` : '',
   ].filter(Boolean).join('\n')
   const examConstraint = buildWrittenExamConstraint(d)
+  const studyWindow = ['sprint', 'advice', 'intensity'].includes(type) ? buildExamStudyWindowPrompt(d.written_exam_time) : ''
   const profileContext = profile
     ? [
         '【IMA 写作画像（只用于策略与表达）】',
@@ -578,6 +580,8 @@ function buildPrompt(type, d, profile = '', similarContext = '') {
       '',
       examConstraint,
       '',
+      studyWindow,
+      '',
       profileContext,
       '',
       similarCaseContext,
@@ -596,6 +600,8 @@ function buildPrompt(type, d, profile = '', similarContext = '') {
       base,
       '',
       examConstraint,
+      '',
+      studyWindow,
       '',
       profileContext,
       '',
@@ -616,6 +622,8 @@ function buildPrompt(type, d, profile = '', similarContext = '') {
       '',
       examConstraint,
       '',
+      studyWindow,
+      '',
       profileContext,
       '',
       similarCaseContext,
@@ -634,6 +642,8 @@ function buildPrompt(type, d, profile = '', similarContext = '') {
     base,
     '',
     examConstraint,
+    '',
+    studyWindow,
     '',
     profileContext,
     '',
