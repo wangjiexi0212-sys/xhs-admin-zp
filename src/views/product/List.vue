@@ -110,7 +110,7 @@
           <a-radio value="complete">完整生成（目录图 + 笔记内容 + 卡片图）</a-radio>
           <a-radio value="examGrid">资料目录 + 试题拼图 + 笔记内容 + 卡片图</a-radio>
           <a-radio value="examSingle">资料目录 + 试题单图 + 笔记内容 + 卡片图</a-radio>
-          <a-radio value="sprintAdvice">冲刺 / 备考建议随机图 + 试题单图 + 笔记内容</a-radio>
+          <a-radio value="sprintAdvice">冲刺 / 备考建议 / 强度随机图 + 商品详情图 + 试题单图 + 笔记内容</a-radio>
           <a-radio value="dirOnly">只生成目录图（仅真题 / 模拟题目录图）</a-radio>
         </a-radio-group>
       </div>
@@ -142,7 +142,7 @@
       <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px">
         <span style="font-size: 13px; font-weight: 500; color: #555">封面图替换卡片图</span>
         <a-switch v-model:checked="dirBatchUseCoverImage" size="small" :disabled="dirBatchMode === 'sprintAdvice'" />
-        <span style="font-size: 12px; color: #999">{{ dirBatchMode === 'sprintAdvice' ? '当前方式固定生成冲刺或备考建议图，不再生成普通卡片图/封面图' : dirBatchUseCoverImage ? '开启，不生成卡片图，改为生成封面图' : '关闭，继续生成卡片图' }}</span>
+        <span style="font-size: 12px; color: #999">{{ dirBatchMode === 'sprintAdvice' ? '当前方式随机生成冲刺、备考建议或强度图，不再生成普通卡片图/封面图' : dirBatchUseCoverImage ? '开启，不生成卡片图，改为生成封面图' : '关闭，继续生成卡片图' }}</span>
       </div>
       <div v-if="dirBatchUseCoverImage" style="padding: 8px 12px; margin-bottom: 12px; background: #f0f9ff; border: 1px solid #bae0ff; border-radius: 6px; font-size: 12px; color: #31506f; line-height: 1.7">
         封面图会参考商品详情页「生成笔记」抽屉里的生成封面图逻辑；写入 ZIP 和上传飞书前会先做下载同款去重与去 AI 标记处理。
@@ -339,6 +339,7 @@ import { getProductList, deleteProduct, getProductDetail } from '@/api/products'
 import { getJobTypeList } from '@/api/jobTypes'
 import { buildRandomGradient, processImageForDownload, triggerBlobDownload } from '@/utils/imageProcess'
 import { getBaiduFiles } from '@/api/baidu'
+import { PRODUCT_DETAIL_IMAGE_CONFIG, drawProductDetailDirectoryImage, drawInterviewProductDetailImage } from '@/utils/productDetailImages'
 import { getToken } from '@/api/request'
 import { BellOutlined } from '@ant-design/icons-vue'
 import { chatLlm } from '@/api/llm'
@@ -2024,14 +2025,14 @@ async function generateBatchCoverImage(detail, cardText, onProgress, contentPlan
 }
 
 function randomSprintAdviceType() {
-  return Math.random() < 0.5 ? 'sprint' : 'advice'
+  return ['sprint', 'advice', 'intensity'][Math.floor(Math.random() * 3)]
 }
 
 function htmlCardUrlToBase64(url) {
   const value = String(url || '')
   const marker = 'base64,'
   const index = value.indexOf(marker)
-  if (index < 0) throw new Error('冲刺/备考建议图片数据无效')
+  if (index < 0) throw new Error('冲刺/备考建议/强度图片数据无效')
   return value.slice(index + marker.length)
 }
 
@@ -2245,7 +2246,7 @@ async function runBatchDirImages(generationMode = 'complete', useBgImage = false
       batchHtmlCardMounted.value = true
       await nextTick()
       const renderer = batchHtmlCardRef.value
-      if (!renderer?.generateBatchImages) throw new Error('冲刺/备考建议渲染器未就绪')
+      if (!renderer?.generateBatchImages) throw new Error('冲刺/备考建议/强度渲染器未就绪')
       const result = await renderer.generateBatchImages(selectedType)
       return { selectedType, urls: result.urls || [] }
     })
@@ -2262,10 +2263,39 @@ async function runBatchDirImages(generationMode = 'complete', useBgImage = false
     const coverText = wordTitle || cardText || noteTitle
 
     if (generationMode === 'sprintAdvice') {
-      dirBatchLogs.value.push({ text: `${company} - 随机生成冲刺/备考建议图中...`, type: 'info' })
+      const detailTargets = [
+        { type: 'exam', path: detail.baidu_path_exam },
+        { type: 'history', path: detail.baidu_path_history },
+        { type: 'mock', path: detail.baidu_path_mock },
+        { type: 'interview', path: detail.baidu_path_interview },
+      ].filter(target => target.path)
+      for (const target of detailTargets) {
+        const config = PRODUCT_DETAIL_IMAGE_CONFIG[target.type]
+        try {
+          const result = await getBaiduFilesWithRetry(target.path)
+          const files = filterDirFilesByType(result?.files || [], target.type).slice()
+            .sort((a, b) => Number(b?.isdir || 0) - Number(a?.isdir || 0))
+          if (!files.length) throw new Error('目录为空')
+          let canvas
+          if (target.type === 'interview') {
+            const pdf = files.find(file => Number(file?.isdir) !== 1 && /50\s*道高频题/.test(String(file?.name || '')))
+            if (!pdf) throw new Error('未找到文件名包含“50道高频题”的面试题 PDF')
+            canvas = await drawInterviewProductDetailImage(files, pdf, ensurePdfjs)
+          } else {
+            canvas = drawProductDetailDirectoryImage(target.type, files)
+          }
+          const base64 = htmlCardUrlToBase64(canvas.toDataURL('image/png'))
+          folder.file(`商品详情图/${config.filename}.png`, base64, { base64: true })
+          totalImages++
+          dirBatchLogs.value.push({ text: `  └ 商品详情图：${config.title} ✓`, type: 'success' })
+        } catch (e) {
+          dirBatchLogs.value.push({ text: `  └ 商品详情图：${config.title}失败：${e.message}`, type: 'error' })
+        }
+      }
+      dirBatchLogs.value.push({ text: `${company} - 随机生成冲刺/备考建议/强度图中...`, type: 'info' })
       try {
         const generated = await generateSprintAdviceImages(detail, company)
-        const typeLabel = generated.selectedType === 'sprint' ? '冲刺攻略' : '备考建议'
+        const typeLabel = { sprint: '冲刺攻略', advice: '备考建议', intensity: '强度计划' }[generated.selectedType]
         generated.urls.forEach((url, index) => {
           const label = `${typeLabel}-${String(index + 1).padStart(2, '0')}`
           const base64 = htmlCardUrlToBase64(url)
@@ -2276,7 +2306,7 @@ async function runBatchDirImages(generationMode = 'complete', useBgImage = false
         if (!generated.urls.length) throw new Error('未生成图片')
         dirBatchLogs.value.push({ text: `  └ ${typeLabel}图 ✓（${generated.urls.length} 张）`, type: 'success' })
       } catch (e) {
-        dirBatchLogs.value.push({ text: `  └ 冲刺/备考建议图失败：${e.message}`, type: 'error' })
+        dirBatchLogs.value.push({ text: `  └ 冲刺/备考建议/强度图失败：${e.message}`, type: 'error' })
       }
     }
 

@@ -1074,17 +1074,17 @@ async function captureImage() {
 }
 
 async function generateBatchImages(type) {
-  if (!['sprint', 'advice'].includes(type)) throw new Error('批处理仅支持冲刺或备考建议')
+  if (!['sprint', 'advice', 'intensity'].includes(type)) throw new Error('批处理仅支持冲刺、备考建议或强度')
   activeType.value = type
   activeTheme.value = Math.floor(Math.random() * 5) + 1
   content.value = null
   capturedUrl.value = ''
   capturedUrls.value = []
   await generateContent()
-  if (!content.value) throw new Error('冲刺/备考建议内容生成失败')
+  if (!content.value) throw new Error('备考图片内容生成失败')
   await nextTick()
   await captureImage()
-  if (!capturedUrls.value.length) throw new Error('冲刺/备考建议图片生成失败')
+  if (!capturedUrls.value.length) throw new Error('备考图片生成失败')
   return { type, urls: [...capturedUrls.value] }
 }
 
